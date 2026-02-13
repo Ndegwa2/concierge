@@ -1,0 +1,52 @@
+# Render Blueprint Configuration
+# This file defines the services for automated deployment to Render
+# Learn more: https://render.com/docs/blueprint-spec
+
+services:
+  # Backend API Service
+  - type: web
+    name: auto-concierge-backend
+    env: node
+    region: oregon
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DB_PATH
+        value: /opt/render/project/src/auto-concierge.db
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        # Update this with your frontend URL after deployment
+        value: https://auto-concierge-frontend.onrender.com
+
+  # Frontend Static Site
+  - type: web
+    name: auto-concierge-frontend
+    env: static
+    region: oregon
+    buildCommand: npm run build
+    publishDir: dist
+    envVars:
+      - key: VITE_API_URL
+        # Update this after backend is deployed
+        value: https://auto-concierge-backend.onrender.com
+      - key: VITE_APP_ENV
+        value: production
+
+# Notes:
+# 1. For the backend, ensure you add a persistent disk in Render dashboard
+#    - Mount path: /opt/render/project/src
+#    - Size: 1GB (minimum for SQLite)
+#
+# 2. After deploying backend:
+#    - Copy the backend URL (e.g., https://auto-concierge-backend.onrender.com)
+#    - Update CORS_ORIGIN in backend env vars
+#    - Update VITE_API_URL in frontend env vars
+#    - Redeploy frontend
+#
+# 3. Database file will persist on the persistent disk
+#    - Path: /opt/render/project/src/auto-concierge.db
