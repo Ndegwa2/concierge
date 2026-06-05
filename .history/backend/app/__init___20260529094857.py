@@ -22,21 +22,6 @@ def create_app(config_class=None):
             )
     else:
         app.config.from_object(config_class)
-
-    # Connection pooling options
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        'pool_size': 20,
-        'max_overflow': 0,
-        'pool_timeout': 30,
-        'pool_recycle': 1800,
-    }
-
-    # Read replica configuration
-    read_replica_url = os.environ.get('DATABASE_READ_URL')
-    if read_replica_url:
-        app.config['SQLALCHEMY_BINDS'] = {
-            'read_replica': read_replica_url
-        }
     
     # Initialize extensions
     db.init_app(app)

@@ -222,7 +222,7 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold mb-2">My Assignments</h1>
-        <p className="text-slate-600">Manage your service appointments</p>
+        <p className="text-slate-600">Welcome back, {employeeData.name}! Manage your service appointments</p>
       </div>
 
       {/* Search and Filter */}

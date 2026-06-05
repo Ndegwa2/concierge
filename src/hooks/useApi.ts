@@ -5,7 +5,7 @@
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
-import type { User, Service, Vehicle, Appointment, Assignment, ServicePartner, Employee } from '../services/api';
+import type { User, Vehicle, Appointment, ServicePartner, Employee } from '../services/api';
 
 // Query Keys
 export const queryKeys = {
@@ -76,7 +76,7 @@ export function useUpdateProfile() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: api.updateProfile.bind(api),
+    mutationFn: (data: Partial<User>) => api.updateProfile(data),
     onSuccess: (data) => {
       if (data.success && data.data) {
         queryClient.setQueryData(queryKeys.profile, data.data.user);
@@ -299,7 +299,7 @@ export function useUpdateEmployeeProfile() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: api.updateEmployeeProfile.bind(api),
+    mutationFn: (data: Partial<User>) => api.updateEmployeeProfile(data),
     onSuccess: (data) => {
       if (data.success && data.data) {
         queryClient.setQueryData(queryKeys.profile, data.data.user);

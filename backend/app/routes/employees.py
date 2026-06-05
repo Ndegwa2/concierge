@@ -57,7 +57,6 @@ def register_employee():
         # Create employee profile
         employee = Employee()
         employee.user_id = user.id
-        employee.employee_id = Employee.generate_employee_id()
         employee.location = data['location']
         employee.specialties = data.get('specialties', [])
         employee.status = data.get('status', 'active')

@@ -1,7 +1,7 @@
 # Ndegwa Auto Concierge Platform - Database Schema Design
 
 ## Overview
-This document outlines the PostgreSQL database schema for the  Auto Concierge platform. The schema is designed to support the four core modules: Client Management, Vehicle & Service Tracking, Notification & Status, and Analytics & Reporting. It incorporates relationships, constraints, indexes, and optimizations for performance, security, and scalability.
+This document outlines the PostgreSQL database schema for the Ndegwa Auto Concierge platform. The schema is designed to support the four core modules: Client Management, Vehicle & Service Tracking, Notification & Status, and Analytics & Reporting. It incorporates relationships, constraints, indexes, and optimizations for performance, security, and scalability.
 
 Key considerations:
 - **Data Types**: Uses appropriate PostgreSQL types for efficiency and validation.

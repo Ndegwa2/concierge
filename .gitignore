@@ -32,3 +32,6 @@ npm-debug.log*
 # Cache
 .cache/
 .turbo/
+
+#documentations
+/home/ndegwa/DREAM!/ARCHITECTURE_PLAN.md
