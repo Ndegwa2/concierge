@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react';
-import { 
-  Droplets, 
-  Wrench, 
-  Settings, 
-  Shield, 
-  Disc, 
-  Sparkles,
+import {
+  Droplets,
+  Wrench,
+  Settings,
+  Shield,
   ArrowRight,
   Clock,
   CheckCircle2,
@@ -13,19 +11,17 @@ import {
   Car,
   ClipboardCheck,
   MapPin,
-  Users,
   Headphones,
   Fuel,
-  Package,
-  AlertCircle
+  Package
 } from 'lucide-react';
-import { ServiceCard } from '@/app/components/ServiceCard';
 import { DetailedServiceCard } from '@/app/components/DetailedServiceCard';
 import { BookingForm } from '@/app/components/BookingForm';
 import { AppointmentList } from '@/app/components/AppointmentList';
 import { HowItWorks } from '@/app/components/HowItWorks';
 import { Header } from '@/app/components/Header';
 import { LoginModal } from '@/app/components/LoginModal';
+import { SignUpModal } from '@/app/components/SignUpModal';
 import { AdminDashboard } from '@/app/components/admin/AdminDashboard';
 import { EmployeeDashboard } from '@/app/components/employee/EmployeeDashboard';
 import { VehicleReturnConfirmation, ConfirmationData } from '@/app/components/VehicleReturnConfirmation';
@@ -39,6 +35,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState<'home' | 'booking' | 'appointments' | 'how-it-works'>('home');
   const [selectedService, setSelectedService] = useState<string>();
   const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const [signupModalOpen, setSignupModalOpen] = useState(false);
   const [userType, setUserType] = useState<'customer' | 'admin' | 'employee' | null>(null);
   const [confirmationModalOpen, setConfirmationModalOpen] = useState(false);
   const [successModalOpen, setSuccessModalOpen] = useState(false);
@@ -177,18 +174,37 @@ export default function App() {
 
   const handleLogin = (type: 'customer' | 'admin' | 'employee') => {
     setIsLoading(true);
-    // Simulate API delay
-    setTimeout(() => {
-      setUserType(type);
-      setIsLoading(false);
-      toast.success(`Logged in as ${type}`);
-    }, 800);
+    // The actual login is handled by the LoginModal component
+    // This callback is called after successful login
+    setUserType(type);
+    setIsLoading(false);
+    toast.success(`Logged in as ${type}`);
+  };
+
+  const handleSignUp = (user: any) => {
+    // Called after successful registration
+    setUserType('customer');
+    toast.success('Account created successfully!');
   };
 
   const handleLogout = () => {
+    // Clear tokens from localStorage
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user');
     setUserType(null);
     setCurrentView('home');
     toast.info('Logged out successfully');
+  };
+
+  const handleSwitchToSignUp = () => {
+    setLoginModalOpen(false);
+    setSignupModalOpen(true);
+  };
+
+  const handleSwitchToLogin = () => {
+    setSignupModalOpen(false);
+    setLoginModalOpen(true);
   };
 
   const handleConfirmReturn = (appointment: any) => {
@@ -284,10 +300,18 @@ export default function App() {
         isLoggedIn={userType === 'customer'}
       />
 
-      <LoginModal 
-        open={loginModalOpen} 
+      <LoginModal
+        open={loginModalOpen}
         onClose={() => setLoginModalOpen(false)}
         onLogin={handleLogin}
+        onSwitchToSignUp={handleSwitchToSignUp}
+      />
+
+      <SignUpModal
+        open={signupModalOpen}
+        onClose={() => setSignupModalOpen(false)}
+        onSignUp={handleSignUp}
+        onSwitchToLogin={handleSwitchToLogin}
       />
 
       {/* Home View */}

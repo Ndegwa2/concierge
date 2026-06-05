@@ -1,6 +1,8 @@
 from app import db
 from datetime import datetime
 import bcrypt
+import uuid
+from sqlalchemy import CheckConstraint
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -11,7 +13,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(128), nullable=False)  # Increased for bcrypt
     phone = db.Column(db.String(20))
     address = db.Column(db.String(255))
-    role = db.Column(db.String(20), default='customer')
+    role = db.Column(db.String(20), default='client')  # 'client' or 'admin'
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -21,8 +23,9 @@ class User(db.Model):
     payment_methods = db.relationship('PaymentMethod', backref='user', lazy=True)
     notifications = db.relationship('Notification', backref='user', lazy=True)
     service_history = db.relationship('ServiceHistory', backref='customer', lazy=True)
-    employee_profile = db.relationship('Employee', backref='user', lazy=True, uselist=False)
-    
+    # Relationship to Employee (for users who are employees)
+    employee_profile = db.relationship('Employee', backref='user', uselist=False)
+     
     def set_password(self, password):
         """Hash password using bcrypt"""
         salt = bcrypt.gensalt()
@@ -33,7 +36,7 @@ class User(db.Model):
         return bcrypt.checkpw(password.encode('utf-8'), self.password_hash.encode('utf-8'))
     
     def to_dict(self, include_employee=False):
-        data = {
+        result = {
             'id': self.id,
             'name': self.name,
             'email': self.email,
@@ -44,9 +47,11 @@ class User(db.Model):
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }
+        
         if include_employee and self.employee_profile:
-            data['employee'] = self.employee_profile.to_dict()
-        return data
+            result['employee'] = self.employee_profile.to_dict()
+        
+        return result
 
 class Service(db.Model):
     __tablename__ = 'services'
@@ -89,6 +94,12 @@ class Vehicle(db.Model):
     license_plate = db.Column(db.String(20))
     vin = db.Column(db.String(17))
     odometer = db.Column(db.Integer)
+    current_mileage = db.Column(db.Integer)
+    last_service_mileage = db.Column(db.Integer)
+    next_service_mileage = db.Column(db.Integer)
+    insurance_expiry_date = db.Column(db.Date)
+    estimated_monthly_maintenance = db.Column(db.Numeric(10, 2))
+    total_maintenance_ytd = db.Column(db.Numeric(10, 2), default=0.0)
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -107,6 +118,12 @@ class Vehicle(db.Model):
             'license_plate': self.license_plate,
             'vin': self.vin,
             'odometer': self.odometer,
+            'current_mileage': self.current_mileage,
+            'last_service_mileage': self.last_service_mileage,
+            'next_service_mileage': self.next_service_mileage,
+            'insurance_expiry_date': self.insurance_expiry_date.isoformat() if self.insurance_expiry_date else None,
+            'estimated_monthly_maintenance': float(self.estimated_monthly_maintenance) if self.estimated_monthly_maintenance else None,
+            'total_maintenance_ytd': float(self.total_maintenance_ytd) if self.total_maintenance_ytd else 0.0,
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
@@ -114,6 +131,7 @@ class Vehicle(db.Model):
 
 class Appointment(db.Model):
     __tablename__ = 'appointments'
+    __table_args__ = (CheckConstraint("status IN ('scheduled', 'completed', 'cancelled', 'rescheduled')"),)
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
@@ -149,6 +167,7 @@ class Appointment(db.Model):
 
 class ServiceHistory(db.Model):
     __tablename__ = 'service_history'
+    __table_args__ = (CheckConstraint("rating >= 0 AND rating <= 5"),)
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
@@ -228,21 +247,27 @@ class Admin(db.Model):
         }
 
 
-class Employee(db.Model):
+class TimestampMixin:
+    """Mixin for timestamp fields"""
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Employee(TimestampMixin, db.Model):
     """Employee model for concierge staff"""
     __tablename__ = 'employees'
+    __table_args__ = (CheckConstraint("status IN ('active', 'off-duty', 'suspended', 'terminated')"),
+                      CheckConstraint("rating >= 0.00 AND rating <= 5.00"))
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
-    employee_id = db.Column(db.String(20), unique=True, nullable=False)  # C-001, C-002, etc.
+    employee_id = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     location = db.Column(db.String(100))  # Nairobi CBD, Westlands, etc.
     specialties = db.Column(db.JSON)  # ['Luxury Vehicles', 'Detailing']
     rating = db.Column(db.Numeric(3, 2), default=0.0)
     total_services = db.Column(db.Integer, default=0)
     status = db.Column(db.String(20), default='active')  # active, off-duty, suspended
     hired_at = db.Column(db.DateTime, default=datetime.utcnow)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     assignments = db.relationship('Assignment', backref='assigned_employee', lazy=True)
@@ -262,19 +287,44 @@ class Employee(db.Model):
             'updated_at': self.updated_at.isoformat()
         }
     
-    @staticmethod
-    def generate_employee_id():
-        """Generate next employee ID (C-001, C-002, etc.)"""
-        last_employee = Employee.query.order_by(Employee.id.desc()).first()
-        if last_employee:
-            last_num = int(last_employee.employee_id.split('-')[1])
-            return f"C-{last_num + 1:03d}"
-        return "C-001"
+    @property
+    def specialty_list(self):
+        """Return specialties as a list, handling None case"""
+        return self.specialties if isinstance(self.specialties, list) else []
+    
+    @specialty_list.setter
+    def specialty_list(self, value):
+        """Set specialties ensuring it's a list"""
+        if value is None:
+            self.specialties = []
+        elif isinstance(value, list):
+            self.specialties = value
+        else:
+            raise ValueError("Specialties must be a list or None")
+    
+    def update_rating(self, new_rating):
+        """Update rating with bounds checking"""
+        rating_val = float(new_rating)
+        if not 0 <= rating_val <= 5:
+            raise ValueError("Rating must be between 0 and 5")
+        self.rating = round(rating_val, 2)
+    
+    def increment_services(self):
+        """Atomically increment service count"""
+        self.total_services += 1
+    
+    def set_status(self, new_status):
+        """Set employee status with validation"""
+        valid_statuses = ['active', 'off-duty', 'suspended', 'terminated']
+        if new_status not in valid_statuses:
+            raise ValueError(f"Status must be one of {valid_statuses}")
+        self.status = new_status
 
 
 class Assignment(db.Model):
     """Assignment model linking employees to appointments"""
     __tablename__ = 'assignments'
+    __table_args__ = (CheckConstraint("status IN ('assigned', 'in-progress', 'completed', 'cancelled')"),)
     
     id = db.Column(db.Integer, primary_key=True)
     appointment_id = db.Column(db.Integer, db.ForeignKey('appointments.id'), nullable=False)
@@ -305,6 +355,7 @@ class Assignment(db.Model):
 class ServicePartner(db.Model):
     """Service Partner model for garages, car washes, etc."""
     __tablename__ = 'service_partners'
+    __table_args__ = (CheckConstraint("rating >= 0.00 AND rating <= 5.00"),)
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
@@ -339,6 +390,7 @@ class ServicePartner(db.Model):
 class AuditLog(db.Model):
     """Audit Log model for tracking all system activities"""
     __tablename__ = 'audit_logs'
+    __table_args__ = (CheckConstraint("status IN ('success', 'failed', 'error')"),)
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
@@ -391,7 +443,7 @@ class SystemMetric(db.Model):
     metric_unit = db.Column(db.String(20))  # count, ksh, hours, etc.
     period_start = db.Column(db.DateTime, nullable=False)
     period_end = db.Column(db.DateTime, nullable=False)
-    metadata = db.Column(db.JSON)  # Additional context
+    extra_data = db.Column(db.JSON)  # Additional context (renamed from metadata - reserved word)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def to_dict(self):
@@ -403,7 +455,7 @@ class SystemMetric(db.Model):
             'metric_unit': self.metric_unit,
             'period_start': self.period_start.isoformat(),
             'period_end': self.period_end.isoformat(),
-            'metadata': self.metadata,
+            'extra_data': self.extra_data,
             'created_at': self.created_at.isoformat()
         }
 

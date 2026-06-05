@@ -14,7 +14,7 @@ export function AppointmentsManager() {
   const appointments = [
     {
       id: 'A-1001',
-      customer: 'Kwame Asante',
+      customer: 'Kwame Juma',
       phone: '+254 712-0101',
       email: 'kwame@example.com',
       service: 'Premium Car Wash',
@@ -28,7 +28,7 @@ export function AppointmentsManager() {
     },
     {
       id: 'A-1002',
-      customer: 'Ngozi Adeyemi',
+      customer: 'Mike Awour',
       phone: '+254 723-0102',
       email: 'ngozi@example.com',
       service: 'Oil Change',
@@ -42,7 +42,7 @@ export function AppointmentsManager() {
     },
     {
       id: 'A-1003',
-      customer: 'Kofi Mensah',
+      customer: 'Kofi Kiptoo',
       phone: '+254 734-0103',
       email: 'kofi@example.com',
       service: 'Full Detailing',
@@ -56,7 +56,7 @@ export function AppointmentsManager() {
     },
     {
       id: 'A-1004',
-      customer: 'Amina Okonkwo',
+      customer: 'Amina mohammed',
       phone: '+254 745-0104',
       email: 'amina@example.com',
       service: 'Tire Rotation',
@@ -70,7 +70,7 @@ export function AppointmentsManager() {
     },
     {
       id: 'A-1005',
-      customer: 'Chinedu Eze',
+      customer: 'Chris Munene',
       phone: '+254 756-0105',
       email: 'chinedu@example.com',
       service: 'Vehicle Inspection',

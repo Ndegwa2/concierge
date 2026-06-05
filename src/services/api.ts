@@ -13,24 +13,12 @@ export interface User {
   email: string;
   phone?: string;
   address?: string;
-  role: 'customer' | 'employee' | 'admin';
+  role: 'client' | 'admin';
   is_active: boolean;
   created_at: string;
   updated_at: string;
-  employee?: Employee;
 }
 
-export interface Employee {
-  id: number;
-  user_id: number;
-  employee_id: string;
-  location: string;
-  specialties: string[];
-  rating: number;
-  total_services: number;
-  status: 'active' | 'off-duty' | 'suspended';
-  hired_at: string;
-}
 
 export interface Service {
   id: number;
@@ -52,6 +40,12 @@ export interface Vehicle {
   license_plate?: string;
   vin?: string;
   odometer?: number;
+  current_mileage?: number;
+  last_service_mileage?: number;
+  next_service_mileage?: number;
+  insurance_expiry_date?: string;
+  estimated_monthly_maintenance?: number;
+  total_maintenance_ytd: number;
   is_active: boolean;
 }
 
@@ -69,18 +63,6 @@ export interface Appointment {
   vehicle?: Vehicle;
   service?: Service;
   customer?: { id: number; name: string; phone: string };
-}
-
-export interface Assignment {
-  id: number;
-  appointment_id: number;
-  employee_id: number;
-  status: 'assigned' | 'in-progress' | 'completed' | 'cancelled';
-  assigned_at: string;
-  started_at?: string;
-  completed_at?: string;
-  notes?: string;
-  appointment?: Appointment;
 }
 
 export interface ServicePartner {
@@ -263,21 +245,46 @@ class ApiService {
     return response as LoginResponse;
   }
 
+  async adminLogin(email: string, password: string): Promise<LoginResponse> {
+    const response = await this.request<LoginResponse['data']>('/auth/admin/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (response.success && response.data) {
+      this.setTokens(response.data.access_token, response.data.refresh_token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+    }
+
+    return response as LoginResponse;
+  }
+
   async register(userData: {
     name: string;
     email: string;
     password: string;
     phone?: string;
     address?: string;
-  }): Promise<ApiResponse<{ user: User }>> {
-    return this.request('/auth/register', {
+  }): Promise<LoginResponse> {
+    const response = await this.request<LoginResponse['data']>('/auth/register', {
       method: 'POST',
       body: JSON.stringify(userData),
     });
+
+    if (response.success && response.data) {
+      this.setTokens(response.data.access_token, response.data.refresh_token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+    }
+
+    return response as LoginResponse;
   }
 
   async logout(): Promise<void> {
-    await this.request('/auth/logout', { method: 'POST' });
+    try {
+      await this.request('/auth/logout', { method: 'POST' });
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
     this.clearTokens();
   }
 
@@ -290,6 +297,20 @@ class ApiService {
       method: 'PUT',
       body: JSON.stringify(data),
     });
+  }
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<ApiResponse<{}>> {
+    return this.request('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    });
+  }
+
+  async verifyToken(): Promise<ApiResponse<{ user: User }>> {
+    return this.request('/auth/verify-token');
   }
 
   // ============================================================
@@ -378,61 +399,6 @@ class ApiService {
   }
 
   // ============================================================
-  // EMPLOYEE PORTAL ENDPOINTS
-  // ============================================================
-
-  async getEmployeeDashboard(): Promise<ApiResponse<{
-    employee: Employee;
-    statistics: {
-      total_assignments: number;
-      active_assignments: number;
-      completed_assignments: number;
-      today_assignments: number;
-      rating: number;
-    };
-  }>> {
-    return this.request('/employees/dashboard');
-  }
-
-  async getMyAssignments(status?: string): Promise<ApiResponse<{ assignments: Assignment[] }>> {
-    const query = status ? `?status=${status}` : '';
-    return this.request(`/employees/assignments${query}`);
-  }
-
-  async updateAssignmentStatus(
-    id: number,
-    status: string,
-    notes?: string
-  ): Promise<ApiResponse<{ assignment: Assignment }>> {
-    return this.request(`/employees/assignments/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify({ status, notes }),
-    });
-  }
-
-  async getMySchedule(startDate?: string, endDate?: string): Promise<ApiResponse<{
-    schedule: Record<string, any[]>;
-    employee: Employee;
-  }>> {
-    const params = new URLSearchParams();
-    if (startDate) params.append('start_date', startDate);
-    if (endDate) params.append('end_date', endDate);
-    const query = params.toString() ? `?${params.toString()}` : '';
-    return this.request(`/employees/schedule${query}`);
-  }
-
-  async getEmployeeProfile(): Promise<ApiResponse<{ user: User }>> {
-    return this.request('/employees/profile');
-  }
-
-  async updateEmployeeProfile(data: Partial<User>): Promise<ApiResponse<{ user: User }>> {
-    return this.request('/employees/profile', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-  }
-
-  // ============================================================
   // ADMIN ENDPOINTS
   // ============================================================
 
@@ -454,57 +420,6 @@ class ApiService {
 
   async getUser(id: number): Promise<ApiResponse<{ user: User }>> {
     return this.request(`/admin/users/${id}`);
-  }
-
-  // Employee Management
-  async getEmployees(status?: string, location?: string, search?: string): Promise<ApiResponse<{
-    employees: Array<User & { employee: Employee }>;
-  }>> {
-    const params = new URLSearchParams();
-    if (status) params.append('status', status);
-    if (location) params.append('location', location);
-    if (search) params.append('search', search);
-    const query = params.toString() ? `?${params.toString()}` : '';
-    return this.request(`/employees/admin/employees${query}`);
-  }
-
-  async registerEmployee(data: {
-    name: string;
-    email: string;
-    password: string;
-    phone?: string;
-    location: string;
-    specialties?: string[];
-  }): Promise<ApiResponse<{ user: User; employee_id: string }>> {
-    return this.request('/employees/admin/employees', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async updateEmployee(id: number, data: Partial<User & Employee>): Promise<ApiResponse<{ user: User }>> {
-    return this.request(`/employees/admin/employees/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async updateEmployeeStatus(id: number, status: string): Promise<ApiResponse<{ status: string }>> {
-    return this.request(`/employees/admin/employees/${id}/status`, {
-      method: 'PUT',
-      body: JSON.stringify({ status }),
-    });
-  }
-
-  async assignEmployeeToAppointment(
-    appointmentId: number,
-    employeeId: number,
-    notes?: string
-  ): Promise<ApiResponse<{ assignment: Assignment }>> {
-    return this.request(`/employees/admin/appointments/${appointmentId}/assign`, {
-      method: 'POST',
-      body: JSON.stringify({ employee_id: employeeId, notes }),
-    });
   }
 
   // Service Partners Management
@@ -538,6 +453,22 @@ class ApiService {
   async deactivateServicePartner(id: number): Promise<ApiResponse<{}>> {
     return this.request(`/partners/admin/${id}`, {
       method: 'DELETE',
+    });
+  }
+
+  // ============================================================
+  // ADMIN AUTH MANAGEMENT ENDPOINTS
+  // ============================================================
+
+  async createAdmin(data: {
+    name: string;
+    email: string;
+    password: string;
+    role?: string;
+  }): Promise<ApiResponse<{ admin: User }>> {
+    return this.request('/auth/admin/create', {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   }
 }

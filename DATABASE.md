@@ -61,20 +61,26 @@ Stores available vehicle care services.
 
 Stores customer vehicle information.
 
-| Field          | Type                | Description                          |
-|----------------|---------------------|--------------------------------------|
-| id             | INTEGER PRIMARY KEY | Unique vehicle identifier            |
-| user_id        | INTEGER             | Foreign key to users table           |
-| make           | TEXT NOT NULL       | Vehicle make (e.g., Toyota)          |
-| model          | TEXT NOT NULL       | Vehicle model (e.g., Camry)          |
-| year           | INTEGER             | Year of manufacture                  |
-| color          | TEXT                | Vehicle color                        |
-| license_plate  | TEXT                | License plate number                 |
-| vin            | TEXT                | Vehicle Identification Number        |
-| odometer       | INTEGER             | Current odometer reading             |
-| is_active      | INTEGER DEFAULT 1   | Active status                        |
-| created_at     | TIMESTAMP           | Record creation timestamp            |
-| updated_at     | TIMESTAMP           | Record last updated timestamp        |
+| Field                      | Type                | Description                          |
+|----------------------------|---------------------|--------------------------------------|
+| id                         | INTEGER PRIMARY KEY | Unique vehicle identifier            |
+| user_id                    | INTEGER             | Foreign key to users table           |
+| make                       | TEXT NOT NULL       | Vehicle make (e.g., Toyota)          |
+| model                      | TEXT NOT NULL       | Vehicle model (e.g., Camry)          |
+| year                       | INTEGER             | Year of manufacture                  |
+| color                      | TEXT                | Vehicle color                        |
+| license_plate              | TEXT                | License plate number                 |
+| vin                        | TEXT                | Vehicle Identification Number        |
+| odometer                   | INTEGER             | Current odometer reading             |
+| current_mileage            | INTEGER             | Current mileage reading              |
+| last_service_mileage       | INTEGER             | Mileage at last service              |
+| next_service_mileage       | INTEGER             | Next recommended service mileage     |
+| insurance_expiry_date      | DATE                | Insurance policy expiry date        |
+| estimated_monthly_maintenance | DECIMAL(10, 2)   | Estimated monthly maintenance cost   |
+| total_maintenance_ytd      | DECIMAL(10, 2)     | Total maintenance cost year-to-date  |
+| is_active                  | INTEGER DEFAULT 1   | Active status                        |
+| created_at                 | TIMESTAMP           | Record creation timestamp            |
+| updated_at                 | TIMESTAMP           | Record last updated timestamp        |
 
 ### Table 4: `appointments`
 

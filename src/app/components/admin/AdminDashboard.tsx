@@ -1,20 +1,14 @@
 import { useState } from 'react';
-import { 
-  LayoutDashboard, 
-  Calendar, 
-  Users, 
-  Car, 
-  Settings,
+import {
+  LayoutDashboard,
+  Calendar,
+  Users,
+  Car,
   LogOut,
   Menu,
-  X,
-  TrendingUp,
-  AlertCircle,
-  CheckCircle2,
-  Clock
+  X
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { DashboardOverview } from './DashboardOverview';
 import { AppointmentsManager } from './AppointmentsManager';
 import { ConciergeManager } from './ConciergeManager';
