@@ -248,10 +248,12 @@ def get_current_user_id():
     
     Returns:
         int: User ID
-        None: If no user is authenticated
+        None: If no user is authenticated or ID is missing
     """
     user = get_current_user()
-    return user.get('id') if user else None
+    if user is None:
+        return None
+    return user.get('id')
 
 
 def get_current_user_role():
@@ -260,10 +262,12 @@ def get_current_user_role():
     
     Returns:
         str: User role ('admin', 'employee', 'customer')
-        None: If no user is authenticated
+        None: If no user is authenticated or role is missing
     """
     user = get_current_user()
-    return user.get('role') if user else None
+    if user is None:
+        return None
+    return user.get('role')
 
 
 def is_admin():
