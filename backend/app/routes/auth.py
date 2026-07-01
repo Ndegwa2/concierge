@@ -1,15 +1,16 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity, get_jwt
+from flask_limiter import limiter
 from app import db
 from app.models import User, Admin, Employee, AuditLog
 from datetime import timedelta
 import re
+import logging
 from functools import wraps
 
-auth_bp = Blueprint('auth', __name__)
+logger = logging.getLogger(__name__)
 
-# Token blacklist for logout (in production, use Redis)
-token_blacklist = set()
+auth_bp = Blueprint('auth', __name__)
 
 def validate_password(password):
     """Validate password strength"""
@@ -42,21 +43,8 @@ def validate_phone(phone):
         return False, "Invalid Kenyan phone number format"
     return True, "Phone is valid"
 
-def role_required(*allowed_roles):
-    """Decorator to check if user has required role"""
-    def decorator(fn):
-        @wraps(fn)
-        @jwt_required()
-        def wrapper(*args, **kwargs):
-            current_user = get_jwt_identity()
-            if current_user['role'] not in allowed_roles:
-                return jsonify({
-                    'success': False,
-                    'message': 'Insufficient permissions'
-                }), 403
-            return fn(*args, **kwargs)
-        return wrapper
-    return decorator
+# Remove duplicate role_required - use the one from app.utils.decorators
+# This was a duplicate definition that caused inconsistency
 
 def log_audit(action, entity_type, entity_id, old_values=None, new_values=None, status='success', error_message=None, user_id=None, admin_id=None):
     """Log audit trail"""
@@ -77,12 +65,14 @@ def log_audit(action, entity_type, entity_id, old_values=None, new_values=None, 
         db.session.add(audit)
         db.session.commit()
     except Exception as e:
-        print(f"Audit log error: {e}")
+        logger.error(f"Audit log error: {str(e)}")
 
 
 @auth_bp.route('/register', methods=['POST'])
+@limiter.limit("5 per minute")  # Rate limit registration
 def register():
     """Register a new user (Customer or Employee with approval workflow)"""
+    request_id = g.get('request_id', 'unknown')
     try:
         data = request.get_json()
         
@@ -212,18 +202,27 @@ def register():
                 }
             }), 201
         
-    except Exception as e:
+    except ValueError as e:
         db.session.rollback()
-        log_audit('REGISTER', 'User', None, status='failed', error_message=str(e))
+        logger.warning(f"[{request_id}] Registration validation error: {str(e)}")
         return jsonify({
             'success': False,
-            'message': 'Registration failed',
-            'error': str(e)
+            'message': 'Invalid registration data'
+        }), 400
+    except Exception as e:
+        db.session.rollback()
+        log_audit('REGISTER', 'User', None, status='failed', error_message='Internal error')
+        logger.error(f"[{request_id}] Registration error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Registration failed'
         }), 500
 
 @auth_bp.route('/login', methods=['POST'])
+@limiter.limit("10 per minute")  # Rate limit login attempts
 def login():
     """User login for customers and employees"""
+    request_id = g.get('request_id', 'unknown')
     try:
         data = request.get_json()
         
@@ -285,17 +284,19 @@ def login():
         }), 200
         
     except Exception as e:
-        log_audit('LOGIN', 'User', None, status='failed', error_message=str(e))
+        log_audit('LOGIN', 'User', None, status='failed', error_message='Internal error')
+        logger.error(f"[{request_id}] Login error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Login failed',
-            'error': str(e)
+            'message': 'Login failed'
         }), 500
 
 
 @auth_bp.route('/employee/login', methods=['POST'])
+@limiter.limit("10 per minute")  # Rate limit login attempts
 def employee_login():
     """Employee login endpoint"""
+    request_id = g.get('request_id', 'unknown')
     try:
         data = request.get_json()
         
@@ -372,17 +373,19 @@ def employee_login():
         }), 200
         
     except Exception as e:
-        log_audit('LOGIN', 'Employee', None, status='failed', error_message=str(e))
+        log_audit('LOGIN', 'Employee', None, status='failed', error_message='Internal error')
+        logger.error(f"[{request_id}] Employee login error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Login failed',
-            'error': str(e)
+            'message': 'Login failed'
         }), 500
 
 
 @auth_bp.route('/admin/login', methods=['POST'])
+@limiter.limit("10 per minute")  # Rate limit admin login attempts
 def admin_login():
     """Admin login endpoint"""
+    request_id = g.get('request_id', 'unknown')
     try:
         data = request.get_json()
         
@@ -437,11 +440,11 @@ def admin_login():
         }), 200
         
     except Exception as e:
-        log_audit('LOGIN', 'Admin', None, status='failed', error_message=str(e))
+        log_audit('LOGIN', 'Admin', None, status='failed', error_message='Internal error')
+        logger.error(f"[{request_id}] Admin login error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Login failed',
-            'error': str(e)
+            'message': 'Login failed'
         }), 500
 
 
@@ -452,13 +455,8 @@ def refresh():
     try:
         current_user = get_jwt_identity()
         
-        # Check if token is blacklisted
-        jti = get_jwt()['jti']
-        if jti in token_blacklist:
-            return jsonify({
-                'success': False,
-                'message': 'Token has been revoked'
-            }), 401
+        # Token blocklist check is now handled automatically by JWTManager
+        # via the token_in_blocklist_loader callback in __init__.py
         
         # Create new access token
         access_token = create_access_token(
@@ -475,24 +473,37 @@ def refresh():
         }), 200
         
     except Exception as e:
+        logger.error(f"Token refresh error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Token refresh failed',
-            'error': str(e)
+            'message': 'Token refresh failed'
         }), 500
 
 
 @auth_bp.route('/logout', methods=['POST'])
 @jwt_required()
 def logout():
-    """Logout user by blacklisting token"""
+    """Logout user by blacklisting token (persistent)"""
     try:
-        jti = get_jwt()['jti']
-        token_blacklist.add(jti)
+        from app import TokenBlocklist
         
+        jti = get_jwt()['jti']
         current_user = get_jwt_identity()
-        user_id = current_user['id'] if current_user['role'] != 'admin' else None
-        admin_id = current_user['id'] if current_user['role'] == 'admin' else None
+        
+        # Get token expiration from JWT claims
+        exp = get_jwt().get('exp')
+        expires_at = datetime.utcfromtimestamp(exp) if exp else datetime.utcnow() + timedelta(hours=24)
+        
+        # Add to persistent blocklist
+        blocklist_entry = TokenBlocklist(
+            jti=jti,
+            expires_at=expires_at
+        )
+        db.session.add(blocklist_entry)
+        db.session.commit()
+        
+        user_id = current_user['id'] if current_user.get('role') != 'admin' else None
+        admin_id = current_user['id'] if current_user.get('role') == 'admin' else None
         log_audit('LOGOUT', 'User', current_user['id'], user_id=user_id, admin_id=admin_id)
         
         return jsonify({
@@ -501,10 +512,11 @@ def logout():
         }), 200
         
     except Exception as e:
+        db.session.rollback()
+        logger.error(f"Logout error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Logout failed',
-            'error': str(e)
+            'message': 'Logout failed'
         }), 500
 
 

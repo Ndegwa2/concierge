@@ -13,7 +13,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(128), nullable=False)  # Increased for bcrypt
     phone = db.Column(db.String(20))
     address = db.Column(db.String(255))
-    role = db.Column(db.String(20), default='client')  # 'client' or 'admin'
+    role = db.Column(db.String(20), default='customer')  # 'customer', 'employee', 'admin'
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -256,7 +256,7 @@ class TimestampMixin:
 class Employee(TimestampMixin, db.Model):
     """Employee model for concierge staff"""
     __tablename__ = 'employees'
-    __table_args__ = (CheckConstraint("status IN ('active', 'off-duty', 'suspended', 'terminated')"),
+    __table_args__ = (CheckConstraint("status IN ('active', 'off-duty', 'suspended', 'terminated', 'pending', 'rejected')"),
                       CheckConstraint("rating >= 0.00 AND rating <= 5.00"))
     
     id = db.Column(db.Integer, primary_key=True)

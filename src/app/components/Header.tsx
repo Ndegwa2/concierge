@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Menu, X, Car, User, Calendar } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { usePermission } from '@/hooks/usePermission';
 
 interface HeaderProps {
   currentView: string;
@@ -11,6 +12,7 @@ interface HeaderProps {
 
 export function Header({ currentView, onNavigate, onLoginClick, isLoggedIn }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { hasPermission, isLoading } = usePermission();
 
   return (
     <header className="border-b bg-white sticky top-0 z-50">
