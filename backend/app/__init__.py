@@ -1,4 +1,4 @@
-from flask import Flask, request, g
+from flask import Flask, request, g, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
@@ -16,6 +16,11 @@ migrate = Migrate()
 jwt = JWTManager()
 compress = Compress()
 csrf = CSRFProtect()
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"  # Use Redis in production
+)
 
 # Token blacklist table for persistent logout
 class TokenBlocklist(db.Model):
@@ -34,7 +39,10 @@ def create_app(config_class=None):
                 SECRET_KEY=os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production'),
                 SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL'),
                 SQLALCHEMY_TRACK_MODIFICATIONS=False,
-                JWT_SECRET_KEY=os.environ.get('JWT_SECRET_KEY', 'dev-jwt-secret-key-change-in-production')
+                JWT_SECRET_KEY=os.environ.get('JWT_SECRET_KEY', 'dev-jwt-secret-key-change-in-production'),
+                JWT_TOKEN_LOCATION=['headers', 'json'],
+                JWT_REFRESH_JSON_KEY='refresh_token',
+                JWT_VERIFY_SUB=False
             )
     else:
         app.config.from_object(config_class)
@@ -61,16 +69,52 @@ def create_app(config_class=None):
     CORS(app)
     csrf.init_app(app)
     
+    # JWT default error handlers
+    @jwt.expired_token_loader
+    def expired_token_callback(jwt_header, jwt_payload):
+        return jsonify({
+            'success': False,
+            'message': 'Token has expired',
+            'error': 'token_expired'
+        }), 401
+
+    @jwt.invalid_token_loader
+    def invalid_token_callback(err_str):
+        return jsonify({
+            'success': False,
+            'message': err_str,
+            'error': 'invalid_token'
+        }), 401
+
+    @jwt.unauthorized_loader
+    def missing_token_callback(err_str):
+        return jsonify({
+            'success': False,
+            'message': err_str,
+            'error': 'authorization_required'
+        }), 401
+
+    @jwt.revoked_token_loader
+    def revoked_token_callback(jwt_header, jwt_payload):
+        return jsonify({
+            'success': False,
+            'message': 'Token has been revoked',
+            'error': 'token_revoked'
+        }), 401
+
+    @jwt.needs_fresh_token_loader
+    def fresh_token_required_callback(jwt_header, jwt_payload):
+        return jsonify({
+            'success': False,
+            'message': 'Fresh token required',
+            'error': 'fresh_token_required'
+        }), 401
+
     # Request size limit (10MB)
     app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB
     
     # Rate limiting setup
-    limiter = Limiter(
-        key_func=get_remote_address,
-        app=app,
-        default_limits=["200 per day", "50 per hour"],
-        storage_uri="memory://"  # Use Redis in production
-    )
+    limiter.init_app(app)
     
     # JWT configuration with token blocklist callback
     @jwt.token_in_blocklist_loader
@@ -81,10 +125,19 @@ def create_app(config_class=None):
             TokenBlocklist.expires_at > datetime.utcnow()
         ).scalar() is not None
     
+    # Email configuration
+    app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+    app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
+    app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'True').lower() == 'true'
+    app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
+    app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
+    app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER') or os.environ.get('MAIL_USERNAME')
+    
     # Register blueprints
     from app.routes.auth import auth_bp
     from app.routes.services import services_bp
     from app.routes.appointments import appointments_bp
+    from app.routes.invoices import invoices_bp
     from app.routes.vehicles import vehicles_bp
     from app.routes.admin import admin_bp
     from app.routes.employees import employees_bp
@@ -92,8 +145,10 @@ def create_app(config_class=None):
     from app.routes.monitoring import monitoring_bp
     
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
+    csrf.exempt(auth_bp)  # JWT-based API: no session cookies, CSRF not needed for auth endpoints
     app.register_blueprint(services_bp, url_prefix='/api/services')
     app.register_blueprint(appointments_bp, url_prefix='/api/appointments')
+    app.register_blueprint(invoices_bp, url_prefix='/api/appointments')
     app.register_blueprint(vehicles_bp, url_prefix='/api/vehicles')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
     app.register_blueprint(employees_bp, url_prefix='/api/employees')

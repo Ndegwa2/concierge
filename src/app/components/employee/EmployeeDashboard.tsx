@@ -7,10 +7,12 @@ import {
   LogOut,
   Menu,
   X,
-  Car
+  Car,
+  Wrench
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { EmployeeOverview } from './EmployeeOverview';
+import { EmployeeFunctions } from './EmployeeFunctions';
 import { MyAssignments } from './MyAssignments';
 import { MySchedule } from './MySchedule';
 import { EmployeeProfile } from './EmployeeProfile';
@@ -20,7 +22,7 @@ interface EmployeeDashboardProps {
 }
 
 export function EmployeeDashboard({ onLogout }: EmployeeDashboardProps) {
-  const [currentSection, setCurrentSection] = useState<'overview' | 'assignments' | 'schedule' | 'profile'>('overview');
+  const [currentSection, setCurrentSection] = useState<'overview' | 'functions' | 'assignments' | 'schedule' | 'profile'>('functions');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Mock employee data
@@ -33,6 +35,7 @@ export function EmployeeDashboard({ onLogout }: EmployeeDashboardProps) {
   };
 
   const navigation = [
+    { id: 'functions', name: 'Functions', icon: Wrench },
     { id: 'overview', name: 'Overview', icon: LayoutDashboard },
     { id: 'assignments', name: 'My Assignments', icon: CheckSquare },
     { id: 'schedule', name: 'Schedule', icon: Calendar },
@@ -111,6 +114,7 @@ export function EmployeeDashboard({ onLogout }: EmployeeDashboardProps) {
 
         {/* Main Content */}
         <main className="flex-1 p-4 lg:p-8">
+          {currentSection === 'functions' && <EmployeeFunctions employeeData={employeeData} />}
           {currentSection === 'overview' && <EmployeeOverview employeeData={employeeData} />}
           {currentSection === 'assignments' && <MyAssignments employeeData={employeeData} />}
           {currentSection === 'schedule' && <MySchedule employeeData={employeeData} />}

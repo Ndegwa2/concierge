@@ -32,12 +32,14 @@ export function PendingEmployeesManager() {
     fetchPendingEmployees();
   }, []);
 
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
   const fetchPendingEmployees = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/auth/admin/pending-employees', {
+      const response = await fetch(`${apiUrl}/auth/admin/pending-employees`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       });
       
@@ -59,11 +61,11 @@ export function PendingEmployeesManager() {
 
   const handleApprove = async (userId: number) => {
     try {
-      const response = await fetch(`/api/auth/admin/approve-employee/${userId}`, {
+      const response = await fetch(`${apiUrl}/auth/admin/approve-employee/${userId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         },
         body: JSON.stringify({ action: 'approve' })
       });
@@ -86,11 +88,11 @@ export function PendingEmployeesManager() {
     }
 
     try {
-      const response = await fetch(`/api/auth/admin/approve-employee/${userId}`, {
+      const response = await fetch(`${apiUrl}/auth/admin/approve-employee/${userId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         },
         body: JSON.stringify({ action: 'reject' })
       });
