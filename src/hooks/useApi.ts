@@ -381,6 +381,118 @@ export function useUpdateEmployeeStatus() {
   });
 }
 
+export function useEmployee(id: number) {
+  return useQuery({
+    queryKey: queryKeys.employee(id),
+    queryFn: async () => {
+      const response = await api.getEmployee(id);
+      return response.success ? response.data : null;
+    },
+    enabled: !!id && api.isAuthenticated(),
+  });
+}
+
+export function useDeleteEmployee() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: api.deleteEmployee.bind(api),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.employees });
+    },
+  });
+}
+
+export function useUpdateEmployeeAccountStatus() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      accountStatus,
+      exitNotes,
+    }: {
+      id: number;
+      accountStatus: string;
+      exitNotes?: string;
+    }) => api.updateEmployeeAccountStatus(id, accountStatus, exitNotes),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.employees });
+    },
+  });
+}
+
+export function useEmployeeDocuments(employeeId: number) {
+  return useQuery({
+    queryKey: ['employee-docs', employeeId],
+    queryFn: async () => {
+      const response = await api.getEmployeeDocuments(employeeId);
+      return response.success ? response.data?.documents ?? [] : [];
+    },
+    enabled: !!employeeId && api.isAuthenticated(),
+  });
+}
+
+export function useUploadDocument() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      employeeId,
+      file,
+      docType,
+      documentName,
+      isVerified,
+    }: {
+      employeeId: number;
+      file: File;
+      docType: string;
+      documentName: string;
+      isVerified?: boolean;
+    }) =>
+      api.uploadEmployeeDocument(employeeId, file, docType, documentName, isVerified),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.employees });
+    },
+  });
+}
+
+export function useDeleteDocument() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ employeeId, docId }: { employeeId: number; docId: number }) =>
+      api.deleteEmployeeDocument(employeeId, docId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.employees });
+    },
+  });
+}
+
+export function useDepartments() {
+  return useQuery({
+    queryKey: ['departments'],
+    queryFn: async () => {
+      const response = await api.getDepartments();
+      return response.success ? (response.data?.departments ?? []) : [];
+    },
+    enabled: api.isAuthenticated(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useManagers() {
+  return useQuery({
+    queryKey: ['managers'],
+    queryFn: async () => {
+      const response = await api.getManagers();
+      return response.success ? (response.data?.managers ?? []) : [];
+    },
+    enabled: api.isAuthenticated(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useAssignEmployee() {
   const queryClient = useQueryClient();
 

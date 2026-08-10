@@ -6,9 +6,12 @@ This module handles employee management and employee portal endpoints.
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from app import db
-from app.models import User, Employee, Appointment, Assignment, Service
+from app.models import User, Employee, EmployeeDocument, Appointment, Assignment, Service
 from app.utils.decorators import admin_required, employee_required, role_required, get_current_user
 from datetime import datetime
+from io import StringIO
+import csv
+import os
 
 employees_bp = Blueprint('employees', __name__)
 
@@ -54,12 +57,34 @@ def register_employee():
         db.session.add(user)
         db.session.flush()  # Get user.id
         
-        # Create employee profile
+         # Create employee profile
         employee = Employee()
         employee.user_id = user.id
         employee.location = data['location']
         employee.specialties = data.get('specialties', [])
         employee.status = data.get('status', 'active')
+        
+        # Employment details
+        employee.department = data.get('department', 'Operations')
+        employee.title = data.get('title', 'Concierge')
+        employee.employment_type = data.get('employment_type', 'full_time')
+        if data.get('start_date'):
+            employee.start_date = datetime.fromisoformat(data['start_date'].replace('Z', '+00:00'))
+        employee.account_status = data.get('account_status', 'onboarding')
+        
+        # Compensation & benefits
+        if 'base_salary' in data:
+            employee.base_salary = data['base_salary']
+        if 'hourly_rate' in data:
+            employee.hourly_rate = data['hourly_rate']
+        if 'pay_frequency' in data:
+            employee.pay_frequency = data['pay_frequency']
+        if 'bank_account_number' in data:
+            employee.bank_account_number = data['bank_account_number']
+        if 'bank_name' in data:
+            employee.bank_name = data['bank_name']
+        if 'health_plan_tier' in data:
+            employee.health_plan_tier = data['health_plan_tier']
         
         db.session.add(employee)
         db.session.commit()
@@ -204,7 +229,7 @@ def update_employee(employee_id):
         if 'password' in data:
             user.set_password(data['password'])
         
-        # Update employee fields
+         # Update employee fields
         if 'location' in data:
             employee.location = data['location']
         
@@ -213,6 +238,51 @@ def update_employee(employee_id):
         
         if 'status' in data:
             employee.status = data['status']
+        
+        # Employment details
+        if 'department' in data:
+            employee.department = data['department']
+        
+        if 'title' in data:
+            employee.title = data['title']
+        
+        if 'employment_type' in data:
+            employee.employment_type = data['employment_type']
+        
+        if 'start_date' in data:
+            employee.start_date = datetime.fromisoformat(data['start_date'].replace('Z', '+00:00')) if data['start_date'] else employee.start_date
+        
+        if 'manager_id' in data:
+            employee.manager_id = data['manager_id']
+        
+        # Account status / onboarding / offboarding
+        if 'account_status' in data:
+            employee.account_status = data['account_status']
+        
+        if 'exit_notes' in data:
+            employee.exit_notes = data['exit_notes']
+        
+        if 'offboarding_checklist_completed' in data:
+            employee.offboarding_checklist_completed = data['offboarding_checklist_completed']
+        
+        # Compensation & benefits
+        if 'base_salary' in data:
+            employee.base_salary = data['base_salary']
+        
+        if 'hourly_rate' in data:
+            employee.hourly_rate = data['hourly_rate']
+        
+        if 'pay_frequency' in data:
+            employee.pay_frequency = data['pay_frequency']
+        
+        if 'bank_account_number' in data:
+            employee.bank_account_number = data['bank_account_number']
+        
+        if 'bank_name' in data:
+            employee.bank_name = data['bank_name']
+        
+        if 'health_plan_tier' in data:
+            employee.health_plan_tier = data['health_plan_tier']
         
         db.session.commit()
         
@@ -306,7 +376,7 @@ def update_employee_status(employee_id):
         
         db.session.commit()
         
-        return jsonify({
+         return jsonify({
             'success': True,
             'message': 'Employee status updated',
             'data': {
@@ -319,6 +389,420 @@ def update_employee_status(employee_id):
         return jsonify({
             'success': False,
             'message': 'Failed to update status',
+            'error': str(e)
+        }), 500
+
+
+# ============================================================
+# ADMIN ENDPOINTS - Employee Documents
+# ============================================================
+
+@employees_bp.route('/admin/employees/<int:employee_id>/documents', methods=['POST'])
+@jwt_required()
+@admin_required
+def upload_employee_document(employee_id):
+    """Upload a document for an employee (admin only)"""
+    try:
+        employee = Employee.query.get(employee_id)
+        
+        if not employee:
+            return jsonify({
+                'success': False,
+                'message': 'Employee not found'
+            }), 404
+        
+        if 'file' not in request.files:
+            return jsonify({
+                'success': False,
+                'message': 'No file provided'
+            }), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({
+                'success': False,
+                'message': 'No file selected'
+            }), 400
+        
+        doc_type = request.form.get('doc_type', 'other')
+        document_name = request.form.get('document_name', file.filename)
+        is_verified = request.form.get('is_verified', 'false').lower() == 'true'
+        
+        # Save file to a secure location
+        upload_dir = os.path.join(os.getcwd(), 'uploads', 'employee_documents')
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Generate unique filename
+        ext = os.path.splitext(file.filename)[1]
+        unique_filename = f"doc_{employee_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}{ext}"
+        file_path = os.path.join(upload_dir, unique_filename)
+        file.save(file_path)
+        
+        file_size = os.path.getsize(file_path)
+        
+        document = EmployeeDocument()
+        document.employee_id = employee.id
+        document.document_name = document_name
+        document.doc_type = doc_type
+        document.file_path = unique_filename
+        document.file_name = file.filename
+        document.file_size = file_size
+        document.mime_type = file.mimetype
+        document.is_verified = is_verified
+        document.verified_at = datetime.utcnow() if is_verified else None
+        
+        current_user = get_current_user()
+        if current_user:
+            document.uploaded_by = current_user.get('id')
+        
+        db.session.add(document)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Document uploaded successfully',
+            'data': {
+                'document': document.to_dict()
+            }
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': 'Failed to upload document',
+            'error': str(e)
+        }), 500
+
+
+@employees_bp.route('/admin/employees/<int:employee_id>/documents', methods=['GET'])
+@jwt_required()
+@admin_required
+def get_employee_documents(employee_id):
+    """Get all documents for an employee (admin only)"""
+    try:
+        employee = Employee.query.get(employee_id)
+        
+        if not employee:
+            return jsonify({
+                'success': False,
+                'message': 'Employee not found'
+            }), 404
+        
+        documents = EmployeeDocument.query.filter_by(employee_id=employee.id).all()
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'documents': [doc.to_dict() for doc in documents],
+                'count': len(documents)
+            }
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': 'Failed to get documents',
+            'error': str(e)
+        }), 500
+
+
+@employees_bp.route('/admin/employees/<int:employee_id>/documents/<int:doc_id>', methods=['DELETE'])
+@jwt_required()
+@admin_required
+def delete_employee_document(employee_id, doc_id):
+    """Delete a document for an employee (admin only)"""
+    try:
+        document = EmployeeDocument.query.get(doc_id)
+        
+        if not document or document.employee_id != employee_id:
+            return jsonify({
+                'success': False,
+                'message': 'Document not found'
+            }), 404
+        
+        # Delete file from filesystem
+        if document.file_path:
+            upload_dir = os.path.join(os.getcwd(), 'uploads', 'employee_documents')
+            file_path = os.path.join(upload_dir, document.file_path)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        
+        db.session.delete(document)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Document deleted successfully'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': 'Failed to delete document',
+            'error': str(e)
+        }), 500
+
+
+# ============================================================
+# ADMIN ENDPOINTS - Employee Export
+# ============================================================
+
+@employees_bp.route('/admin/employees/export/csv', methods=['GET'])
+@jwt_required()
+@admin_required
+def export_employees_csv():
+    """Export all employees as CSV (admin only)"""
+    try:
+        status = request.args.get('status')
+        location = request.args.get('location')
+        search = request.args.get('search')
+        
+        query = Employee.query.join(User)
+        
+        if status:
+            query = query.filter(Employee.status == status)
+        
+        if location:
+            query = query.filter(Employee.location.ilike(f'%{location}%'))
+        
+        if search:
+            query = query.filter(
+                db.or_(
+                    User.name.ilike(f'%{search}%'),
+                    Employee.employee_id.ilike(f'%{search}%'),
+                    User.email.ilike(f'%{search}%')
+                )
+            )
+        
+        employees = query.all()
+        
+        # Build CSV
+        output = StringIO()
+        writer = csv.writer(output)
+        
+        # Header
+        writer.writerow([
+            'Employee ID', 'Name', 'Email', 'Phone', 'Address',
+            'Location', 'Department', 'Title', 'Employment Type',
+            'Start Date', 'Status', 'Account Status', 'Rating',
+            'Total Services', 'Base Salary', 'Hourly Rate',
+            'Pay Frequency', 'Bank Name', 'Health Plan Tier'
+        ])
+        
+        # Rows
+        for emp in employees:
+            user = emp.user
+            writer.writerow([
+                emp.employee_id,
+                user.name,
+                user.email,
+                user.phone or '',
+                user.address or '',
+                emp.location or '',
+                emp.department or '',
+                emp.title or '',
+                emp.employment_type or '',
+                emp.start_date.strftime('%Y-%m-%d') if emp.start_date else '',
+                emp.status or '',
+                emp.account_status or '',
+                emp.rating or 0,
+                emp.total_services or 0,
+                emp.base_salary or '',
+                emp.hourly_rate or '',
+                emp.pay_frequency or '',
+                emp.bank_name or '',
+                emp.health_plan_tier or ''
+            ])
+        
+        csv_data = output.getvalue()
+        
+        # Return as downloadable attachment
+        from flask import Response
+        return Response(
+            csv_data,
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': f'attachment; filename=employees_export_{datetime.utcnow().strftime("%Y%m%d_%H%M%S")}.csv'
+            }
+        )
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': 'Failed to export employees',
+            'error': str(e)
+        }), 500
+
+
+@employees_bp.route('/admin/employees/<int:employee_id>/account-status', methods=['PUT'])
+@jwt_required()
+@admin_required
+def update_employee_account_status(employee_id):
+    """Update employee account status for onboarding / offboarding (admin only)"""
+    try:
+        employee = Employee.query.get(employee_id)
+
+        if not employee:
+            return jsonify({
+                'success': False,
+                'message': 'Employee not found'
+            }), 404
+
+        data = request.get_json()
+
+        if 'account_status' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'account_status is required'
+            }), 400
+
+        valid_statuses = ['active', 'onboarding', 'suspended', 'terminated']
+        if data['account_status'] not in valid_statuses:
+            return jsonify({
+                'success': False,
+                'message': f'Invalid account_status. Valid options: {valid_statuses}'
+            }), 400
+
+        employee.account_status = data['account_status']
+
+        if 'exit_notes' in data:
+            employee.exit_notes = data['exit_notes']
+
+        if 'offboarding_checklist_completed' in data:
+            employee.offboarding_checklist_completed = data['offboarding_checklist_completed']
+
+        # Sync user active flag
+        if data['account_status'] == 'terminated':
+            employee.user.is_active = False
+            employee.status = 'suspended'
+        elif data['account_status'] == 'suspended':
+            employee.user.is_active = False
+        else:
+            employee.user.is_active = True
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Employee account status updated',
+            'data': {
+                'account_status': employee.account_status
+            }
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': 'Failed to update account status',
+            'error': str(e)
+        }), 500
+
+
+@employees_bp.route('/admin/employees/documents/<int:document_id>/download', methods=['GET'])
+@jwt_required()
+@admin_required
+def download_employee_document(document_id):
+    """Download a document file (admin only)"""
+    try:
+        document = EmployeeDocument.query.get(document_id)
+
+        if not document:
+            return jsonify({
+                'success': False,
+                'message': 'Document not found'
+            }), 404
+
+        upload_dir = os.path.join(os.getcwd(), 'uploads', 'employee_documents')
+        file_path = os.path.join(upload_dir, document.file_path)
+
+        if not os.path.exists(file_path):
+            return jsonify({
+                'success': False,
+                'message': 'File not found on disk'
+            }), 404
+
+        from flask import send_file
+        return send_file(
+            file_path,
+            as_attachment=True,
+            download_name=document.file_name or document.document_name
+        )
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': 'Failed to download document',
+            'error': str(e)
+        }), 500
+
+
+@employees_bp.route('/admin/departments', methods=['GET'])
+@jwt_required()
+@admin_required
+def get_departments():
+    """Get list of all departments (admin only)"""
+    try:
+        departments = db.session.query(Employee.department).filter(Employee.department.isnot(None)).distinct().all()
+        dept_list = [d[0] for d in departments]
+        # Ensure defaults are present
+        defaults = ['Operations', 'Customer Service', 'Maintenance', 'Detailing', 'Administration']
+        for d in defaults:
+            if d not in dept_list:
+                dept_list.append(d)
+        return jsonify({
+            'success': True,
+            'data': {
+                'departments': dept_list
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': 'Failed to get departments',
+            'error': str(e)
+        }), 500
+
+
+@employees_bp.route('/admin/managers', methods=['GET'])
+@jwt_required()
+@admin_required
+def get_managers():
+    """Get list of manager / supervisor employees (admin only)"""
+    try:
+        employees = Employee.query.filter(Employee.title.in_(['Manager', 'Supervisor', 'Team Lead', 'Head of Operations'])).all()
+        managers = [
+            {
+                'id': emp.id,
+                'name': emp.user.name,
+                'employee_id': emp.employee_id
+            }
+            for emp in employees
+        ]
+        # If no managers exist yet, return an empty list with a note
+        if not managers:
+            return jsonify({
+                'success': True,
+                'data': {
+                    'managers': [],
+                    'message': 'No managers configured. Set employee titles to Manager/Supervisor to populate.'
+                }
+            }), 200
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'managers': managers
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': 'Failed to get managers',
             'error': str(e)
         }), 500
 
@@ -364,9 +848,9 @@ def assign_employee_to_appointment(appointment_id):
             }), 400
         
         # Check if already assigned
-        existing = Assignment.query.filter_by(
-            appointment_id=appointment_id,
-            status__in=['assigned', 'in-progress']
+        existing = Assignment.query.filter(
+            Assignment.appointment_id == appointment_id,
+            Assignment.status.in_(['assigned', 'in-progress'])
         ).first()
         
         if existing:
@@ -426,9 +910,9 @@ def get_employee_dashboard():
         
         # Get statistics
         total_assignments = Assignment.query.filter_by(employee_id=employee.id).count()
-        active_assignments = Assignment.query.filter_by(
-            employee_id=employee.id,
-            status__in=['assigned', 'in-progress']
+        active_assignments = Assignment.query.filter(
+            Assignment.employee_id == employee.id,
+            Assignment.status.in_(['assigned', 'in-progress'])
         ).count()
         completed_assignments = Assignment.query.filter_by(
             employee_id=employee.id,

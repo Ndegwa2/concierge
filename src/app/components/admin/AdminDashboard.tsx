@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   Calendar,
   Users,
+  UserCheck,
   Car,
   LogOut,
   Menu,
@@ -15,19 +16,26 @@ import { ConciergeManager } from './ConciergeManager';
 import { CustomersManager } from './CustomersManager';
 import { ServicePartnersManager } from './ServicePartnersManager';
 import { PendingEmployeesManager } from './PendingEmployeesManager';
+import { EmployeesManager } from './EmployeesManager';
 
 interface AdminDashboardProps {
   onLogout: () => void;
 }
 
 export function AdminDashboard({ onLogout }: AdminDashboardProps) {
-  const [currentSection, setCurrentSection] = useState<'overview' | 'appointments' | 'concierges' | 'customers' | 'partners' | 'pending-requests'>('overview');
+  const [currentSection, setCurrentSection] = useState<'overview' | 'appointments' | 'concierges' | 'employees' | 'customers' | 'partners' | 'pending-requests'>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const storedUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+  const user = storedUser ? JSON.parse(storedUser) : null;
+  const displayName = user?.name || 'Admin User';
+  const displayEmail = user?.email || 'admin@autoconcierge.com';
 
   const navigation = [
     { id: 'overview', name: 'Overview', icon: LayoutDashboard },
     { id: 'appointments', name: 'Appointments', icon: Calendar },
     { id: 'concierges', name: 'Concierge Staff', icon: Users },
+    { id: 'employees', name: 'Employees', icon: UserCheck },
     { id: 'customers', name: 'Customers', icon: Users },
     { id: 'partners', name: 'Service Partners', icon: Car },
     { id: 'pending-requests', name: 'Concierge Requests', icon: Users },
@@ -58,8 +66,8 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
           
           <div className="flex items-center gap-3">
             <div className="text-right hidden sm:block">
-              <p className="text-sm font-medium">Kwame Asante</p>
-              <p className="text-xs text-slate-500">admin@autoconcierge.com</p>
+              <p className="text-sm font-medium">{displayName}</p>
+              <p className="text-xs text-slate-500">{displayEmail}</p>
             </div>
             <Button variant="outline" size="sm" onClick={onLogout}>
               <LogOut className="h-4 w-4 mr-2" />
@@ -108,6 +116,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
           {currentSection === 'overview' && <DashboardOverview />}
           {currentSection === 'appointments' && <AppointmentsManager />}
           {currentSection === 'concierges' && <ConciergeManager />}
+          {currentSection === 'employees' && <EmployeesManager />}
           {currentSection === 'customers' && <CustomersManager />}
           {currentSection === 'partners' && <ServicePartnersManager />}
           {currentSection === 'pending-requests' && <PendingEmployeesManager />}

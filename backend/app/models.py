@@ -257,7 +257,9 @@ class Employee(TimestampMixin, db.Model):
     """Employee model for concierge staff"""
     __tablename__ = 'employees'
     __table_args__ = (CheckConstraint("status IN ('active', 'off-duty', 'suspended', 'terminated', 'pending', 'rejected')"),
-                      CheckConstraint("rating >= 0.00 AND rating <= 5.00"))
+                      CheckConstraint("rating >= 0.00 AND rating <= 5.00"),
+                      CheckConstraint("employment_type IN ('full_time', 'part_time', 'contractor')"),
+                      CheckConstraint("account_status IN ('active', 'onboarding', 'suspended', 'terminated')"))
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
@@ -269,8 +271,30 @@ class Employee(TimestampMixin, db.Model):
     status = db.Column(db.String(20), default='active')  # active, off-duty, suspended
     hired_at = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # Employment details
+    department = db.Column(db.String(100))  # Operations, Customer Service, etc.
+    title = db.Column(db.String(100))  # Job title / role
+    employment_type = db.Column(db.String(20), default='full_time')  # full_time, part_time, contractor
+    start_date = db.Column(db.DateTime, default=datetime.utcnow)
+    manager_id = db.Column(db.Integer, db.ForeignKey('employees.id'), nullable=True)  # Self-referential manager
+    
+    # Account status for onboarding/offboarding workflow
+    account_status = db.Column(db.String(20), default='onboarding')  # active, onboarding, suspended, terminated
+    exit_notes = db.Column(db.Text)
+    offboarding_checklist_completed = db.Column(db.Boolean, default=False)
+    
+    # Compensation & benefits (RBAC-gated fields)
+    base_salary = db.Column(db.Numeric(10, 2))
+    hourly_rate = db.Column(db.Numeric(10, 2))
+    pay_frequency = db.Column(db.String(20))  # monthly, bi_weekly, weekly
+    bank_account_number = db.Column(db.String(50))
+    bank_name = db.Column(db.String(100))
+    health_plan_tier = db.Column(db.String(20))  # basic, standard, premium
+    
     # Relationships
     assignments = db.relationship('Assignment', backref='assigned_employee', lazy=True)
+    documents = db.relationship('EmployeeDocument', backref='employee', lazy=True)
+    manager = db.relationship('Employee', remote_side=[id], backref='subordinates')
     
     def to_dict(self):
         return {
@@ -283,6 +307,20 @@ class Employee(TimestampMixin, db.Model):
             'total_services': self.total_services,
             'status': self.status,
             'hired_at': self.hired_at.isoformat() if self.hired_at else None,
+            'department': self.department,
+            'title': self.title,
+            'employment_type': self.employment_type,
+            'start_date': self.start_date.isoformat() if self.start_date else None,
+            'manager_id': self.manager_id,
+            'account_status': self.account_status,
+            'exit_notes': self.exit_notes,
+            'offboarding_checklist_completed': self.offboarding_checklist_completed,
+            'base_salary': float(self.base_salary) if self.base_salary else None,
+            'hourly_rate': float(self.hourly_rate) if self.hourly_rate else None,
+            'pay_frequency': self.pay_frequency,
+            'bank_account_number': self.bank_account_number,
+            'bank_name': self.bank_name,
+            'health_plan_tier': self.health_plan_tier,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }
@@ -319,6 +357,43 @@ class Employee(TimestampMixin, db.Model):
         if new_status not in valid_statuses:
             raise ValueError(f"Status must be one of {valid_statuses}")
         self.status = new_status
+
+
+class EmployeeDocument(db.Model):
+    """HR Document model for employee documents (ID proof, tax forms, certifications)"""
+    __tablename__ = 'employee_documents'
+    __table_args__ = (
+        CheckConstraint("doc_type IN ('id_proof', 'tax_form', 'certification', 'contract', 'other')"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employees.id'), nullable=False)
+    document_name = db.Column(db.String(255), nullable=False)
+    doc_type = db.Column(db.String(50), nullable=False)
+    file_path = db.Column(db.String(500))
+    file_name = db.Column(db.String(255))
+    file_size = db.Column(db.Integer)
+    mime_type = db.Column(db.String(100))
+    uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    is_verified = db.Column(db.Boolean, default=False)
+    verified_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'employee_id': self.employee_id,
+            'document_name': self.document_name,
+            'doc_type': self.doc_type,
+            'file_name': self.file_name,
+            'file_size': self.file_size,
+            'mime_type': self.mime_type,
+            'is_verified': self.is_verified,
+            'verified_at': self.verified_at.isoformat() if self.verified_at else None,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat(),
+        }
 
 
 class Assignment(db.Model):
@@ -551,6 +626,38 @@ class DiscountCode(db.Model):
             'start_date': self.start_date.isoformat() if self.start_date else None,
             'end_date': self.end_date.isoformat() if self.end_date else None,
             'is_active': self.is_active,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat()
+        }
+
+
+class Invoice(db.Model):
+    __tablename__ = 'invoices'
+    __table_args__ = (CheckConstraint("status IN ('draft', 'sent', 'paid', 'void')"),)
+    
+    id = db.Column(db.Integer, primary_key=True)
+    invoice_number = db.Column(db.String(50), unique=True, nullable=False)
+    appointment_id = db.Column(db.Integer, db.ForeignKey('appointments.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    total_amount = db.Column(db.Numeric(10, 2), nullable=False)
+    status = db.Column(db.String(20), default='draft', nullable=False)
+    pdf_path = db.Column(db.String(255))
+    sent_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    appointment = db.relationship('Appointment', backref=db.backref('invoice', uselist=False), lazy=True)
+    customer = db.relationship('User', backref='invoices', lazy=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'invoice_number': self.invoice_number,
+            'appointment_id': self.appointment_id,
+            'user_id': self.user_id,
+            'total_amount': float(self.total_amount),
+            'status': self.status,
+            'sent_at': self.sent_at.isoformat() if self.sent_at else None,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }

@@ -20,6 +20,7 @@ export function RBACProvider({ children }: RBACProviderProps) {
         // Map simple user data to UserPermissions structure
         const permissions: PermissionMap = {
           users: [],
+          employees: [],
           billing: [],
           system_settings: [],
           logs: []
@@ -30,18 +31,21 @@ export function RBACProvider({ children }: RBACProviderProps) {
           case 'super_admin':
           case 'admin':
             permissions.users = ['create', 'read', 'update', 'delete'];
+            permissions.employees = ['create', 'read', 'update', 'delete', 'manage_compensation', 'upload_documents'];
             permissions.billing = ['read', 'create', 'update'];
             permissions.system_settings = ['read', 'update'];
             permissions.logs = ['read', 'export'];
             break;
           case 'manager':
             permissions.users = ['read', 'update'];
+            permissions.employees = ['read', 'update', 'upload_documents'];
             permissions.billing = ['read'];
             permissions.system_settings = [];
             permissions.logs = ['read'];
             break;
           case 'employee':
             permissions.users = ['read'];
+            permissions.employees = ['read', 'update_own_profile'];
             permissions.billing = [];
             permissions.system_settings = [];
             permissions.logs = ['read'];
@@ -77,6 +81,7 @@ export function RBACProvider({ children }: RBACProviderProps) {
         const userData = JSON.parse(storedUser);
         const permissions: PermissionMap = {
           users: [],
+          employees: [],
           billing: [],
           system_settings: [],
           logs: []
@@ -86,18 +91,21 @@ export function RBACProvider({ children }: RBACProviderProps) {
           case 'super_admin':
           case 'admin':
             permissions.users = ['create', 'read', 'update', 'delete'];
+            permissions.employees = ['create', 'read', 'update', 'delete', 'manage_compensation', 'upload_documents'];
             permissions.billing = ['read', 'create', 'update'];
             permissions.system_settings = ['read', 'update'];
             permissions.logs = ['read', 'export'];
             break;
           case 'manager':
             permissions.users = ['read', 'update'];
+            permissions.employees = ['read', 'update', 'upload_documents'];
             permissions.billing = ['read'];
             permissions.system_settings = [];
             permissions.logs = ['read'];
             break;
           case 'employee':
             permissions.users = ['read'];
+            permissions.employees = ['read', 'update_own_profile'];
             permissions.billing = [];
             permissions.system_settings = [];
             permissions.logs = ['read'];

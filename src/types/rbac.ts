@@ -7,6 +7,7 @@ export type Permission =
   | 'view_customers'
   | 'manage_customers'
   | 'view_employees'
+  | 'manage_employees'
   | 'manage_employee_schedule'
   | 'view_own_schedule'
   | 'update_own_profile'
