@@ -67,12 +67,12 @@ export default defineConfig({
     hmr: {
       overlay: false,
     },
-    proxy: {
-      '/api': {
-        target: 'http://localhost:5000',
-        changeOrigin: true,
-        secure: false,
-      },
-    },
+     proxy: {
+       '/api': {
+         target: 'https://auto-concierge-backend.onrender.com',
+         changeOrigin: true,
+         secure: false,
+       },
+     },
   },
 })

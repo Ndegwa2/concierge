@@ -28,8 +28,8 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const storedUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
   const user = storedUser ? JSON.parse(storedUser) : null;
-  const displayName = user?.name || 'Admin User';
-  const displayEmail = user?.email || 'admin@autoconcierge.com';
+  const displayName = user?.name || 'Admin';
+  const displayEmail = user?.email || 'admin@autoconcierge.co.ke';
 
   const navigation = [
     { id: 'overview', name: 'Overview', icon: LayoutDashboard },

@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { Badge } from '@/app/components/ui/badge';
 import { User, Mail, Phone, MapPin, Lock, Eye, EyeOff, Loader2, CheckCircle2, XCircle, Briefcase, Users } from 'lucide-react';
+import { api, API_BASE_URL } from '@/services/api';
 
 interface SignUpModalProps {
   open: boolean;
@@ -147,7 +148,7 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
           : [];
       }
       
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/register`, {
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -163,6 +164,7 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
           localStorage.setItem('auth_token', data.data.access_token);
           localStorage.setItem('refresh_token', data.data.refresh_token);
           localStorage.setItem('user', JSON.stringify(data.data.user));
+          api.setTokens(data.data.access_token, data.data.refresh_token);
           onSignUp(data.data.user);
           onClose();
         } else if (data.data.requires_approval) {
@@ -302,7 +304,7 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
               <Input
                 id="signup-email"
                 type="email"
-                placeholder="john@example.com"
+                placeholder="you@autoconcierge.co.ke"
                 value={formData.email}
                 onChange={(e) => handleInputChange('email', e.target.value)}
                 onBlur={() => handleBlur('email')}

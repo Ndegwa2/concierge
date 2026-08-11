@@ -6,6 +6,7 @@ import { Label } from '@/app/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { Shield, User as UserIcon, Loader2, Eye, EyeOff, Mail, Lock } from 'lucide-react';
+import { api, API_BASE_URL } from '@/services/api';
 
 interface LoginModalProps {
   open: boolean;
@@ -36,7 +37,7 @@ export function LoginModal({ open, onClose, onLogin, onSwitchToSignUp }: LoginMo
     setIsLoading(true);
     
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/login`, {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -55,6 +56,7 @@ export function LoginModal({ open, onClose, onLogin, onSwitchToSignUp }: LoginMo
           localStorage.setItem('auth_token', data.data.access_token);
           localStorage.setItem('refresh_token', data.data.refresh_token);
           localStorage.setItem('user', JSON.stringify(data.data.user));
+          api.setTokens(data.data.access_token, data.data.refresh_token);
         }
         
         onLogin('customer');
@@ -79,7 +81,7 @@ export function LoginModal({ open, onClose, onLogin, onSwitchToSignUp }: LoginMo
     setIsLoading(true);
     
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/admin/login`, {
+      const response = await fetch(`${API_BASE_URL}/auth/admin/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -98,6 +100,7 @@ export function LoginModal({ open, onClose, onLogin, onSwitchToSignUp }: LoginMo
           localStorage.setItem('auth_token', data.data.access_token);
           localStorage.setItem('refresh_token', data.data.refresh_token);
           localStorage.setItem('user', JSON.stringify(data.data.user));
+          api.setTokens(data.data.access_token, data.data.refresh_token);
         }
         
         onLogin('admin');
@@ -122,7 +125,7 @@ export function LoginModal({ open, onClose, onLogin, onSwitchToSignUp }: LoginMo
     setIsLoading(true);
     
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/employee/login`, {
+      const response = await fetch(`${API_BASE_URL}/auth/employee/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -141,6 +144,7 @@ export function LoginModal({ open, onClose, onLogin, onSwitchToSignUp }: LoginMo
           localStorage.setItem('auth_token', data.data.access_token);
           localStorage.setItem('refresh_token', data.data.refresh_token);
           localStorage.setItem('user', JSON.stringify(data.data.user));
+          api.setTokens(data.data.access_token, data.data.refresh_token);
         }
         
         onLogin('employee');
@@ -202,7 +206,7 @@ export function LoginModal({ open, onClose, onLogin, onSwitchToSignUp }: LoginMo
                   <Input
                     id="customer-email"
                     type="email"
-                    placeholder="customer@example.com"
+                    placeholder="you@autoconcierge.co.ke"
                     value={customerEmail}
                     onChange={(e) => setCustomerEmail(e.target.value)}
                     className="pl-10"
@@ -256,7 +260,7 @@ export function LoginModal({ open, onClose, onLogin, onSwitchToSignUp }: LoginMo
                   <Input
                     id="employee-email"
                     type="email"
-                    placeholder="employee@autoconcierge.com"
+                    placeholder="employee@autoconcierge.co.ke"
                     value={employeeEmail}
                     onChange={(e) => setEmployeeEmail(e.target.value)}
                     className="pl-10"
@@ -314,7 +318,7 @@ export function LoginModal({ open, onClose, onLogin, onSwitchToSignUp }: LoginMo
                   <Input
                     id="admin-email"
                     type="email"
-                    placeholder="admin@autoconcierge.com"
+                    placeholder="admin@autoconcierge.co.ke"
                     value={adminEmail}
                     onChange={(e) => setAdminEmail(e.target.value)}
                     className="pl-10"

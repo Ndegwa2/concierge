@@ -7,10 +7,11 @@ interface HeaderProps {
   currentView: string;
   onNavigate: (view: string) => void;
   onLoginClick?: () => void;
+  onProfileClick?: () => void;
   isLoggedIn?: boolean;
 }
 
-export function Header({ currentView, onNavigate, onLoginClick, isLoggedIn }: HeaderProps) {
+export function Header({ currentView, onNavigate, onLoginClick, onProfileClick, isLoggedIn }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { hasPermission, isLoading } = usePermission();
 
@@ -53,7 +54,11 @@ export function Header({ currentView, onNavigate, onLoginClick, isLoggedIn }: He
             >
               How It Works
             </button>
-            <Button variant="outline" size="sm" onClick={onLoginClick}>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={isLoggedIn ? onProfileClick : onLoginClick}
+            >
               <User className="h-4 w-4 mr-2" />
               {isLoggedIn ? 'Profile' : 'Sign In'}
             </Button>
@@ -103,7 +108,7 @@ export function Header({ currentView, onNavigate, onLoginClick, isLoggedIn }: He
               >
                 How It Works
               </button>
-              <Button variant="outline" size="sm" className="w-fit" onClick={onLoginClick}>
+              <Button variant="outline" size="sm" className="w-fit" onClick={isLoggedIn ? onProfileClick : onLoginClick}>
                 <User className="h-4 w-4 mr-2" />
                 {isLoggedIn ? 'Profile' : 'Sign In'}
               </Button>

@@ -1,59 +1,42 @@
 import { useState, useEffect } from 'react';
-import { Search, Check, X, Phone, Mail, MapPin, Star, Clock } from 'lucide-react';
+import { Search, Check, X, Phone, Mail, MapPin, Clock } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/app/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
+import { api } from '@/services/api';
+import type { User, EmployeeProfile } from '@/services/api';
 
-// Define types for our data
 interface PendingEmployee {
-  user: {
-    id: number;
-    name: string;
-    email: string;
-    phone: string | null;
-    created_at: string;
-  };
-  employee: {
-    employee_id: string;
-    location: string | null;
-    specialties: string[] | null;
-  };
+  user: User;
+  employee: EmployeeProfile;
 }
 
 export function PendingEmployeesManager() {
   const [searchQuery, setSearchQuery] = useState('');
   const [pendingEmployees, setPendingEmployees] = useState<PendingEmployee[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchPendingEmployees();
   }, []);
 
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-
   const fetchPendingEmployees = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const response = await fetch(`${apiUrl}/auth/admin/pending-employees`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        // Assuming the API returns { success: true, data: { pending_employees: [...] } }
-        setPendingEmployees(data.data?.pending_employees || []);
+      const response = await api.getPendingEmployees();
+      if (response.success && response.data) {
+        setPendingEmployees(response.data.pending_employees || []);
       } else {
-        console.error('Failed to fetch pending employees');
-        setPendingEmployees([]);
+        setError(response.message || 'Failed to fetch pending employees');
       }
-    } catch (error) {
-      console.error('Error fetching pending employees:', error);
-      setPendingEmployees([]);
+    } catch (err) {
+      setError('Failed to fetch pending employees');
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -61,24 +44,15 @@ export function PendingEmployeesManager() {
 
   const handleApprove = async (userId: number) => {
     try {
-      const response = await fetch(`${apiUrl}/auth/admin/approve-employee/${userId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        },
-        body: JSON.stringify({ action: 'approve' })
-      });
-      
-      if (response.ok) {
+      const response = await api.approveEmployee(userId, 'approve');
+      if (response.success) {
         await fetchPendingEmployees();
       } else {
-        const errorData = await response.json();
-        alert(`Failed to approve employee: ${errorData.message || 'Unknown error'}`);
+        alert(`Failed to approve employee: ${response.message || 'Unknown error'}`);
       }
-    } catch (error) {
-      console.error('Error approving employee:', error);
+    } catch (err) {
       alert('Failed to approve employee');
+      console.error(err);
     }
   };
 
@@ -88,24 +62,15 @@ export function PendingEmployeesManager() {
     }
 
     try {
-      const response = await fetch(`${apiUrl}/auth/admin/approve-employee/${userId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        },
-        body: JSON.stringify({ action: 'reject' })
-      });
-      
-      if (response.ok) {
+      const response = await api.approveEmployee(userId, 'reject');
+      if (response.success) {
         await fetchPendingEmployees();
       } else {
-        const errorData = await response.json();
-        alert(`Failed to reject employee: ${errorData.message || 'Unknown error'}`);
+        alert(`Failed to reject employee: ${response.message || 'Unknown error'}`);
       }
-    } catch (error) {
-      console.error('Error rejecting employee:', error);
+    } catch (err) {
       alert('Failed to reject employee');
+      console.error(err);
     }
   };
 
@@ -124,6 +89,29 @@ export function PendingEmployeesManager() {
       <div className="text-center py-12">
         <div className="inline-block animate-spin rounded-full border-4 border-b-slate-900 w-12 h-12"></div>
         <p className="mt-4 text-slate-600">Loading pending employee registrations...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Pending Employee Registrations</h1>
+            <p className="text-slate-600">Review and approve new employee registration requests</p>
+          </div>
+          <Button variant="outline" onClick={fetchPendingEmployees}>
+            <Clock className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
+        <Card>
+          <CardContent className="text-center py-8">
+            <p className="text-red-600">{error}</p>
+            <Button onClick={fetchPendingEmployees} className="mt-4">Retry</Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -198,87 +186,91 @@ export function PendingEmployeesManager() {
             <CardDescription>{filteredEmployees.length} employees awaiting approval</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Contact</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Specialties</TableHead>
-                    <TableHead>Registration Date</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredEmployees.map((emp) => (
-                    <TableRow key={emp.user.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <Avatar>
-                            <AvatarFallback className="bg-slate-900 text-white">
-                              {getInitials(emp.user.name)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-medium">{emp.user.name}</p>
-                            <p className="text-xs text-slate-500">ID: {emp.employee.employee_id}</p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-sm">
-                            <Mail className="h-3 w-3 text-slate-400" />
-                            <span className="text-slate-600">{emp.user.email}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-sm">
-                            <Phone className="h-3 w-3 text-slate-400" />
-                            <span className="text-slate-600">{emp.user.phone || 'Not provided'}</span>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm text-slate-600">
-                          {emp.employee.location || 'Not specified'}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1 text-xs">
-                          {(emp.employee.specialties || []).map((specialty, index) => (
-                            <Badge key={index} variant="outline" className="text-xs">
-                              {specialty}
-                            </Badge>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-slate-600">
-                        {new Date(emp.user.created_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="text-right space-x-2">
-                        <Button 
-                          variant="default" 
-                          size="sm" 
-                          onClick={() => handleApprove(emp.user.id)}
-                          className="bg-green-500 hover:bg-green-600 text-white"
-                        >
-                          <Check className="h-3 w-3 mr-1" />
-                          Approve
-                        </Button>
-                        <Button 
-                          variant="destructive" 
-                          size="sm" 
-                          onClick={() => handleReject(emp.user.id)}
-                        >
-                          <X className="h-3 w-3 mr-1" />
-                          Reject
-                        </Button>
-                      </TableCell>
+            {filteredEmployees.length === 0 ? (
+              <p className="text-slate-500 text-center py-4">No matching registrations</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Contact</TableHead>
+                      <TableHead>Location</TableHead>
+                      <TableHead>Specialties</TableHead>
+                      <TableHead>Registration Date</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredEmployees.map((emp) => (
+                      <TableRow key={emp.user.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              <AvatarFallback className="bg-slate-900 text-white">
+                                {getInitials(emp.user.name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-medium">{emp.user.name}</p>
+                              <p className="text-xs text-slate-500">ID: {emp.employee.employee_id}</p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-sm">
+                              <Mail className="h-3 w-3 text-slate-400" />
+                              <span className="text-slate-600">{emp.user.email}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm">
+                              <Phone className="h-3 w-3 text-slate-400" />
+                              <span className="text-slate-600">{emp.user.phone || 'Not provided'}</span>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm text-slate-600">
+                            {emp.employee.location || 'Not specified'}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1 text-xs">
+                            {(emp.employee.specialties || []).map((specialty, index) => (
+                              <Badge key={index} variant="outline" className="text-xs">
+                                {specialty}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-slate-600">
+                          {new Date(emp.user.created_at).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-right space-x-2">
+                          <Button 
+                            variant="default" 
+                            size="sm" 
+                            onClick={() => handleApprove(emp.user.id)}
+                            className="bg-green-500 hover:bg-green-600 text-white"
+                          >
+                            <Check className="h-3 w-3 mr-1" />
+                            Approve
+                          </Button>
+                          <Button 
+                            variant="destructive" 
+                            size="sm" 
+                            onClick={() => handleReject(emp.user.id)}
+                          >
+                            <X className="h-3 w-3 mr-1" />
+                            Reject
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

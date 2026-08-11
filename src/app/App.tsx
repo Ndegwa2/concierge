@@ -22,6 +22,7 @@ import { LoginModal } from '@/app/components/LoginModal';
 import { SignUpModal } from '@/app/components/SignUpModal';
 import { AdminDashboard } from '@/app/components/admin/AdminDashboard';
 import { EmployeeDashboard } from '@/app/components/employee/EmployeeDashboard';
+import { CustomerProfile } from '@/app/components/customer/CustomerProfile';
 import { VehicleReturnConfirmation, ConfirmationData } from '@/app/components/VehicleReturnConfirmation';
 import { ConfirmationSuccessModal } from '@/app/components/ConfirmationSuccessModal';
 import { Button } from '@/app/components/ui/button';
@@ -29,10 +30,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/ta
 import { Badge } from '@/app/components/ui/badge';
 import { toast, Toaster } from 'sonner';
 import { services } from '@/app/data/services';
-import { mockAppointments } from '@/app/data/mockAppointments';
+import { useAppointments, useProfile } from '@/hooks/useApi';
+import { api } from '@/services/api';
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<'home' | 'booking' | 'appointments' | 'how-it-works'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'booking' | 'appointments' | 'how-it-works' | 'profile'>('home');
   const [selectedService, setSelectedService] = useState<string>();
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [signupModalOpen, setSignupModalOpen] = useState(false);
@@ -42,12 +44,12 @@ export default function App() {
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
   const [lastSubmittedRating, setLastSubmittedRating] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0);
 
-  // Mock appointments data
-  const mockAppointmentsData: typeof mockAppointments = mockAppointments;
+  const { data: profile } = useProfile();
+  const { data: appointments = [], isLoading: appointmentsLoading, refetch: refetchAppointments } = useAppointments();
 
   const handleBookService = (serviceTitle: string) => {
-    // RBAC: Require login for booking
     if (userType !== 'customer') {
       setLoginModalOpen(true);
       toast.error('Please login to book a service');
@@ -64,24 +66,18 @@ export default function App() {
 
   const handleLogin = (type: 'customer' | 'admin' | 'employee') => {
     setIsLoading(true);
-    // The actual login is handled by the LoginModal component
-    // This callback is called after successful login
     setUserType(type);
     setIsLoading(false);
     toast.success(`Logged in as ${type}`);
   };
 
   const handleSignUp = (user: any) => {
-    // Called after successful registration
     setUserType('customer');
     toast.success('Account created successfully!');
   };
 
   const handleLogout = () => {
-    // Clear tokens from localStorage
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('user');
+    api.logout();
     setUserType(null);
     setCurrentView('home');
     toast.info('Logged out successfully');
@@ -102,11 +98,26 @@ export default function App() {
     setConfirmationModalOpen(true);
   };
 
-  const handleConfirmationSubmit = (data: ConfirmationData) => {
-    console.log('Confirmation submitted:', data);
-    setLastSubmittedRating(data.serviceRating);
-    setConfirmationModalOpen(false);
-    setSuccessModalOpen(true);
+  const handleConfirmationSubmit = async (data: ConfirmationData) => {
+    try {
+      const response = await api.confirmVehicleReturn(selectedAppointment.id, {
+        service_rating: data.serviceRating,
+        condition_rating: data.conditionRating,
+        review: data.feedback || undefined
+      });
+      
+      if (response.success) {
+        setLastSubmittedRating(data.serviceRating);
+        setConfirmationModalOpen(false);
+        setSuccessModalOpen(true);
+        refetchAppointments();
+        toast.success('Thank you for your feedback!');
+      } else {
+        toast.error(response.message || 'Failed to submit confirmation');
+      }
+    } catch (error) {
+      toast.error('Failed to submit confirmation');
+    }
   };
 
   const handleSuccessClose = () => {
@@ -115,10 +126,15 @@ export default function App() {
   };
 
   const handleNavigate = (view: string) => {
-    // RBAC: Require login for appointments view
     if (view === 'appointments' && userType !== 'customer') {
       setLoginModalOpen(true);
       toast.error('Please login to view your appointments');
+      return;
+    }
+    
+    if (view === 'profile' && userType !== 'customer') {
+      setLoginModalOpen(true);
+      toast.error('Please login to view your profile');
       return;
     }
     
@@ -139,16 +155,14 @@ export default function App() {
     }
   };
 
-  // RBAC: Protect routes - redirect to home if not logged in
   useEffect(() => {
-    if ((currentView === 'appointments' || currentView === 'booking') && userType !== 'customer') {
+    if ((currentView === 'appointments' || currentView === 'booking' || currentView === 'profile') && userType !== 'customer') {
       setCurrentView('home');
       setLoginModalOpen(true);
       toast.error('Please login to access this page');
     }
   }, [currentView, userType]);
 
-  // Error boundary effect for fetching (to satisfy user request)
   useEffect(() => {
     const handleFetchError = (e: ErrorEvent) => {
       if (e.message && e.message.includes('fetch')) {
@@ -160,7 +174,6 @@ export default function App() {
     return () => window.removeEventListener('error', handleFetchError);
   }, []);
 
-  // Show admin dashboard if logged in as admin
   if (userType === 'admin') {
     return (
       <>
@@ -170,7 +183,6 @@ export default function App() {
     );
   }
 
-  // Show employee dashboard if logged in as employee
   if (userType === 'employee') {
     return (
       <>
@@ -180,6 +192,11 @@ export default function App() {
     );
   }
 
+  const upcomingAppointments = appointments.filter(a => 
+    a.status === 'scheduled' || a.status === 'confirmed' || a.status === 'in-progress'
+  );
+  const completedAppointments = appointments.filter(a => a.status === 'completed');
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <Toaster position="top-right" />
@@ -187,6 +204,7 @@ export default function App() {
         currentView={currentView} 
         onNavigate={handleNavigate}
         onLoginClick={() => setLoginModalOpen(true)}
+        onProfileClick={() => handleNavigate('profile')}
         isLoggedIn={userType === 'customer'}
       />
 
@@ -211,7 +229,7 @@ export default function App() {
           <section className="relative h-[600px] flex items-center overflow-hidden">
             <div className="absolute inset-0 z-0">
               <img 
-                src="https://images.unsplash.com/photo-1758179128122-6079c9cb3e4e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBjYXIlMjBjb25jaWVyZ2UlMjBzZXJ2aWNlfGVufDF8fHx8MTc2OTg3MDU1Mnww&ixlib=rb-4.1.0&q=80&w=1920" 
+                src="/images/hero/luxury-car-concierge.jpg" 
                 alt="Luxury Car Concierge" 
                 className="w-full h-full object-cover"
               />
@@ -263,16 +281,16 @@ export default function App() {
                   <div>
                     <div className="flex items-center gap-1 mb-1">
                       <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
-                      <span className="font-bold text-xl">4.9</span>
+                      <span className="font-bold text-xl">{import.meta.env.VITE_APP_RATING || '4.9'}</span>
                     </div>
                     <p className="text-sm text-slate-300">Average Rating</p>
                   </div>
                   <div>
-                    <p className="font-bold text-xl mb-1">10,000+</p>
+                    <p className="font-bold text-xl mb-1">{import.meta.env.VITE_APP_SERVICES_COMPLETED || '10,000+'}</p>
                     <p className="text-sm text-slate-300">Services Completed</p>
                   </div>
                   <div>
-                    <p className="font-bold text-xl mb-1">2-4 hrs</p>
+                    <p className="font-bold text-xl mb-1">{import.meta.env.VITE_APP_TURNAROUND || '2-4 hrs'}</p>
                     <p className="text-sm text-slate-300">Average Turnaround</p>
                   </div>
                 </div>
@@ -336,7 +354,7 @@ export default function App() {
               {services.map((service) => (
                 <DetailedServiceCard
                   key={service.title}
-                  icon={service.icon as any}
+                  icon={service.icon}
                   title={service.title}
                   features={service.features}
                   image={service.image}
@@ -358,7 +376,7 @@ export default function App() {
               <h2 className="text-4xl font-bold mb-6">Ready to Save Time?</h2>
               <p className="text-slate-300 mb-10 max-w-2xl mx-auto text-lg leading-relaxed">
                 Book your first service today and experience the convenience of having a 
-                professional take care of your vehicle needs. Join 5,000+ happy car owners.
+                professional take care of your vehicle needs. Join {import.meta.env.VITE_APP_HAPPY_CUSTOMERS || '5,000+'} happy car owners.
               </p>
               <div className="flex flex-col sm:flex-row justify-center gap-4">
                 <Button
@@ -410,25 +428,40 @@ export default function App() {
               </p>
             </div>
 
-            <Tabs defaultValue="upcoming" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-8 h-12">
-                <TabsTrigger value="upcoming" className="text-base">Upcoming Services</TabsTrigger>
-                <TabsTrigger value="completed" className="text-base">Past Services</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="upcoming" className="mt-0">
-                <AppointmentList
-                  appointments={mockAppointmentsData.filter(a => a.status !== 'completed')}
-                  onConfirmReturn={handleConfirmReturn}
-                />
-              </TabsContent>
-              
-              <TabsContent value="completed" className="mt-0">
-                <AppointmentList
-                  appointments={mockAppointmentsData.filter(a => a.status === 'completed')}
-                />
-              </TabsContent>
-            </Tabs>
+            {appointmentsLoading ? (
+              <div className="animate-pulse space-y-4">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="h-32 bg-slate-200 rounded-xl" />
+                ))}
+              </div>
+            ) : (
+              <Tabs defaultValue="upcoming" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-8 h-12">
+                  <TabsTrigger value="upcoming" className="text-base">
+                    Upcoming Services ({upcomingAppointments.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="completed" className="text-base">
+                    Past Services ({completedAppointments.length})
+                  </TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="upcoming" className="mt-0">
+                  <AppointmentList
+                    appointments={upcomingAppointments}
+                    onConfirmReturn={handleConfirmReturn}
+                    onCancel={() => refetchAppointments()}
+                  />
+                </TabsContent>
+                
+                <TabsContent value="completed" className="mt-0">
+                  <AppointmentList
+                    appointments={completedAppointments}
+                    onConfirmReturn={handleConfirmReturn}
+                    onCancel={() => refetchAppointments()}
+                  />
+                </TabsContent>
+              </Tabs>
+            )}
 
             <div className="mt-12 p-8 border rounded-2xl bg-white text-center shadow-sm">
               <h3 className="text-xl font-bold mb-2">Need something else?</h3>
@@ -458,6 +491,13 @@ export default function App() {
               serviceRating={lastSubmittedRating}
             />
           )}
+        </main>
+      )}
+
+      {/* Profile View */}
+      {currentView === 'profile' && (
+        <main className="flex-1">
+          <CustomerProfile />
         </main>
       )}
 
@@ -531,7 +571,7 @@ export default function App() {
           
           <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="text-slate-500 text-sm">
-              © 2026 AutoConcierge. All rights reserved. Built with passion for car care.
+              © {new Date().getFullYear()} AutoConcierge. All rights reserved. Built with passion for car care.
             </div>
             <div className="flex gap-6 text-sm text-slate-500">
               <span className="hover:text-white cursor-pointer transition-colors">Privacy Policy</span>

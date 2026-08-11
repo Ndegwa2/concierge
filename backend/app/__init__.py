@@ -7,9 +7,10 @@ from flask_compress import Compress
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from sqlalchemy import func
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 db = SQLAlchemy()
 migrate = Migrate()
@@ -19,16 +20,16 @@ csrf = CSRFProtect()
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=["200 per day", "50 per hour"],
-    storage_uri="memory://"  # Use Redis in production
+    storage_uri=os.environ.get("RATELIMIT_STORAGE_URI", "memory://"),
 )
 
 # Token blacklist table for persistent logout
 class TokenBlocklist(db.Model):
     __tablename__ = 'token_blocklist'
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.BigInteger, primary_key=True)
     jti = db.Column(db.String(36), nullable=False, index=True, unique=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    expires_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
 
 def create_app(config_class=None):
     app = Flask(__name__)
@@ -40,6 +41,8 @@ def create_app(config_class=None):
                 SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL'),
                 SQLALCHEMY_TRACK_MODIFICATIONS=False,
                 JWT_SECRET_KEY=os.environ.get('JWT_SECRET_KEY', 'dev-jwt-secret-key-change-in-production'),
+                JWT_ACCESS_TOKEN_EXPIRES=int(os.environ.get('JWT_ACCESS_TOKEN_EXPIRES', 86400)),
+                JWT_REFRESH_TOKEN_EXPIRES=int(os.environ.get('JWT_REFRESH_TOKEN_EXPIRES', 2592000)),
                 JWT_TOKEN_LOCATION=['headers', 'json'],
                 JWT_REFRESH_JSON_KEY='refresh_token',
                 JWT_VERIFY_SUB=False
@@ -53,6 +56,7 @@ def create_app(config_class=None):
         'max_overflow': 0,
         'pool_timeout': 30,
         'pool_recycle': 1800,
+        'pool_pre_ping': True,
     }
 
     # Read replica configuration
@@ -122,7 +126,7 @@ def create_app(config_class=None):
         jti = jwt_payload["jti"]
         # Check if token is in blocklist and not expired
         return db.session.query(TokenBlocklist.id).filter_by(jti=jti).filter(
-            TokenBlocklist.expires_at > datetime.utcnow()
+            TokenBlocklist.expires_at > datetime.now(timezone.utc)
         ).scalar() is not None
     
     # Email configuration
@@ -148,12 +152,17 @@ def create_app(config_class=None):
     csrf.exempt(auth_bp)  # JWT-based API: no session cookies, CSRF not needed for auth endpoints
     app.register_blueprint(services_bp, url_prefix='/api/services')
     app.register_blueprint(appointments_bp, url_prefix='/api/appointments')
-    app.register_blueprint(invoices_bp, url_prefix='/api/appointments')
+    app.register_blueprint(invoices_bp, url_prefix='/api/invoices')
     app.register_blueprint(vehicles_bp, url_prefix='/api/vehicles')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
     app.register_blueprint(employees_bp, url_prefix='/api/employees')
     app.register_blueprint(partners_bp, url_prefix='/api/partners')
     app.register_blueprint(monitoring_bp, url_prefix='/api/monitoring')
+
+    # JWT-based API: CSRF protection not needed for any API blueprint
+    for bp in [services_bp, appointments_bp, invoices_bp, vehicles_bp,
+               admin_bp, employees_bp, partners_bp, monitoring_bp]:
+        csrf.exempt(bp)
     
     # Create database tables if they don't exist
     with app.app_context():

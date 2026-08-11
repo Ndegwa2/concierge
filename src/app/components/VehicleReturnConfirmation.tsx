@@ -21,12 +21,13 @@ interface VehicleReturnConfirmationProps {
   open: boolean;
   onClose: () => void;
   appointment: {
-    id: string;
-    service: string;
-    vehicle: string;
-    concierge: string;
-    date: string;
-    time: string;
+    id: number | string;
+    service?: string | { name: string };
+    vehicle?: string | { year?: number; make?: string; model?: string };
+    concierge?: string;
+    date?: string;
+    time?: string;
+    appointment_date?: string;
   };
   onSubmit: (data: ConfirmationData) => void;
 }
@@ -59,6 +60,35 @@ export function VehicleReturnConfirmation({
   const [feedback, setFeedback] = useState('');
   const [hasIssues, setHasIssues] = useState(false);
   const [issueDescription, setIssueDescription] = useState('');
+  
+  const getServiceName = () => {
+    if (typeof appointment.service === 'string') return appointment.service;
+    return appointment.service?.name || `Appointment #${appointment.id}`;
+  };
+
+  const getVehicleDisplay = () => {
+    if (typeof appointment.vehicle === 'string') return appointment.vehicle;
+    if (appointment.vehicle && typeof appointment.vehicle === 'object') {
+      const v = appointment.vehicle as any;
+      return `${v.year || ''} ${v.make || ''} ${v.model || ''}`.trim() || 'Unknown Vehicle';
+    }
+    return 'Unknown Vehicle';
+  };
+
+  const getDateTimeDisplay = () => {
+    if (appointment.date && appointment.time) return `${appointment.date} at ${appointment.time}`;
+    if (appointment.appointment_date) {
+      const d = new Date(appointment.appointment_date);
+      return d.toLocaleString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+    return 'Date not specified';
+  };
   
   const [vehicleChecks, setVehicleChecks] = useState({
     exteriorClean: false,
@@ -124,9 +154,9 @@ export function VehicleReturnConfirmation({
             <Car className="h-5 w-5" />
             Vehicle Return Confirmation
           </DialogTitle>
-          <DialogDescription>
-            Appointment #{appointment.id} - {appointment.service}
-          </DialogDescription>
+                  <DialogDescription>
+                    Appointment #{appointment.id} - {getServiceName()}
+                  </DialogDescription>
         </DialogHeader>
 
         {/* Step 1: Vehicle Inspection */}
@@ -151,19 +181,19 @@ export function VehicleReturnConfirmation({
               <CardContent className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-slate-600">Vehicle:</span>
-                  <span className="font-medium">{appointment.vehicle}</span>
+                  <span className="font-medium">{getVehicleDisplay()}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-600">Service:</span>
-                  <span className="font-medium">{appointment.service}</span>
+                  <span className="font-medium">{getServiceName()}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-600">Concierge:</span>
-                  <span className="font-medium">{appointment.concierge}</span>
+                  <span className="font-medium">{appointment.concierge || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-600">Completed:</span>
-                  <span className="font-medium">{appointment.date} at {appointment.time}</span>
+                  <span className="font-medium">{getDateTimeDisplay()}</span>
                 </div>
               </CardContent>
             </Card>
@@ -321,7 +351,7 @@ export function VehicleReturnConfirmation({
                   <StarRating 
                     rating={conciergeBehaviorRating}
                     setRating={setConciergeBehaviorRating}
-                    label={`Concierge Performance - ${appointment.concierge}`}
+                    label={`Concierge Performance - ${appointment.concierge || 'N/A'}`}
                   />
                 </div>
               </CardContent>

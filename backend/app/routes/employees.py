@@ -8,7 +8,7 @@ from flask_jwt_extended import jwt_required
 from app import db
 from app.models import User, Employee, EmployeeDocument, Appointment, Assignment, Service
 from app.utils.decorators import admin_required, employee_required, role_required, get_current_user
-from datetime import datetime
+from datetime import datetime, timezone
 from io import StringIO
 import csv
 import os
@@ -376,7 +376,7 @@ def update_employee_status(employee_id):
         
         db.session.commit()
         
-         return jsonify({
+        return jsonify({
             'success': True,
             'message': 'Employee status updated',
             'data': {
@@ -435,7 +435,7 @@ def upload_employee_document(employee_id):
         
         # Generate unique filename
         ext = os.path.splitext(file.filename)[1]
-        unique_filename = f"doc_{employee_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}{ext}"
+        unique_filename = f"doc_{employee_id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}{ext}"
         file_path = os.path.join(upload_dir, unique_filename)
         file.save(file_path)
         
@@ -450,7 +450,7 @@ def upload_employee_document(employee_id):
         document.file_size = file_size
         document.mime_type = file.mimetype
         document.is_verified = is_verified
-        document.verified_at = datetime.utcnow() if is_verified else None
+        document.verified_at = datetime.now(timezone.utc) if is_verified else None
         
         current_user = get_current_user()
         if current_user:
@@ -625,7 +625,7 @@ def export_employees_csv():
             csv_data,
             mimetype='text/csv',
             headers={
-                'Content-Disposition': f'attachment; filename=employees_export_{datetime.utcnow().strftime("%Y%m%d_%H%M%S")}.csv'
+                'Content-Disposition': f'attachment; filename=employees_export_{datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")}.csv'
             }
         )
         
@@ -920,7 +920,7 @@ def get_employee_dashboard():
         ).count()
         
         # Today's assignments
-        today = datetime.utcnow().date()
+        today = datetime.now(timezone.utc).date()
         today_assignments = Assignment.query.filter(
             Assignment.employee_id == employee.id,
             db.func.date(Assignment.assigned_at) == today
@@ -1069,11 +1069,11 @@ def update_assignment_status(assignment_id):
         
         # Update timestamps
         if new_status == 'in-progress':
-            assignment.started_at = datetime.utcnow()
+            assignment.started_at = datetime.now(timezone.utc)
             assignment.appointment.status = 'in-progress'
         
         elif new_status == 'completed':
-            assignment.completed_at = datetime.utcnow()
+            assignment.completed_at = datetime.now(timezone.utc)
             assignment.appointment.status = 'completed'
             
             # Update employee stats

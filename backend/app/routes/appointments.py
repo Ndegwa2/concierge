@@ -1,9 +1,11 @@
 from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
-from app.models import Appointment, User, Vehicle, Service, DiscountCode
+from app.models import Appointment, User, Vehicle, Service, DiscountCode, Invoice, ServiceHistory
 from app.utils.decorators import admin_required, role_required, get_current_user, get_current_user_id, is_admin
-from datetime import datetime, timedelta
+from app.utils.invoice import generate_invoice_pdf
+from app.utils.email import send_email_with_attachment
+from datetime import datetime, timedelta, timezone
 import logging
 
 logger = logging.getLogger(__name__)
@@ -94,12 +96,15 @@ def validate_appointment_date(date_str):
     except (ValueError, TypeError):
         return None, "Invalid date format. Use ISO 8601 format (e.g., 2024-01-15T10:00:00)"
     
+    if appointment_date.tzinfo is None:
+        appointment_date = appointment_date.replace(tzinfo=timezone.utc)
+    
     # Ensure date is in the future (with 1 hour buffer)
-    if appointment_date < datetime.utcnow() + timedelta(hours=1):
+    if appointment_date < datetime.now(timezone.utc) + timedelta(hours=1):
         return None, "Appointment must be scheduled at least 1 hour in the future"
     
     # Limit to reasonable future date (max 1 year)
-    if appointment_date > datetime.utcnow() + timedelta(days=365):
+    if appointment_date > datetime.now(timezone.utc) + timedelta(days=365):
         return None, "Appointment cannot be scheduled more than 1 year in advance"
     
     return appointment_date, None
@@ -120,7 +125,7 @@ def apply_discount_safely(discount_code, total_amount):
     if not discount or not discount.is_active:
         return 0.0, total_amount, "Invalid discount code"
     
-    current_date = datetime.utcnow()
+    current_date = datetime.now(timezone.utc)
     
     # Validate date range
     if discount.start_date and current_date < discount.start_date:
@@ -293,6 +298,7 @@ def update_appointment(appointment_id):
             }), 403
         
         data = request.get_json()
+        original_status = appointment.status
         
         if 'vehicle_id' in data:
             vehicle = Vehicle.query.get(data['vehicle_id'])
@@ -321,7 +327,13 @@ def update_appointment(appointment_id):
             appointment.service_id = data['service_id']
         
         if 'appointment_date' in data:
-            appointment.appointment_date = datetime.fromisoformat(data['appointment_date'])
+            parsed_date, date_error = validate_appointment_date(data['appointment_date'])
+            if date_error:
+                return jsonify({
+                    'success': False,
+                    'message': date_error
+                }), 400
+            appointment.appointment_date = parsed_date
         
         if 'notes' in data:
             appointment.notes = data['notes']
@@ -333,6 +345,12 @@ def update_appointment(appointment_id):
             appointment.payment_status = data['payment_status']
         
         db.session.commit()
+
+        if original_status != 'completed' and appointment.status == 'completed':
+            try:
+                _auto_send_invoice(appointment)
+            except Exception as exc:
+                logger.warning('Auto invoice failed for appointment %s: %s', appointment.id, exc)
         
         return jsonify({
             'success': True,
@@ -387,3 +405,134 @@ def delete_appointment(appointment_id):
             'message': 'Failed to delete appointment',
             'error': str(e)
         }), 500
+
+
+@appointments_bp.route('/<int:appointment_id>/confirm-return', methods=['POST'])
+@jwt_required()
+@role_required('customer', 'admin')
+def confirm_vehicle_return(appointment_id):
+    """Confirm vehicle return and submit ratings/review"""
+    request_id = g.get('request_id', 'unknown')
+    try:
+        current_user = get_current_user()
+        appointment = Appointment.query.get(appointment_id)
+        
+        if not appointment:
+            return jsonify({
+                'success': False,
+                'message': 'Appointment not found'
+            }), 404
+        
+        if current_user['role'] == 'customer' and appointment.user_id != current_user['id']:
+            return jsonify({
+                'success': False,
+                'message': 'Unauthorized access'
+            }), 403
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid request data'
+            }), 400
+        
+        service_rating = data.get('service_rating')
+        condition_rating = data.get('condition_rating')
+        review = data.get('review', '')
+        
+        if not service_rating or not condition_rating:
+            return jsonify({
+                'success': False,
+                'message': 'Service rating and condition rating are required'
+            }), 400
+        
+        if not (1 <= service_rating <= 5) or not (1 <= condition_rating <= 5):
+            return jsonify({
+                'success': False,
+                'message': 'Ratings must be between 1 and 5'
+            }), 400
+        
+        service = Service.query.get(appointment.service_id)
+        vehicle = Vehicle.query.get(appointment.vehicle_id)
+        
+        service_history = ServiceHistory()
+        service_history.user_id = appointment.user_id
+        service_history.vehicle_id = appointment.vehicle_id
+        service_history.service_id = appointment.service_id
+        service_history.appointment_id = appointment.id
+        service_history.completed_date = datetime.now(timezone.utc)
+        service_history.notes = appointment.notes or ''
+        service_history.cost = appointment.total_amount
+        service_history.rating = service_rating
+        service_history.review = review[:2000] if review else None
+        
+        db.session.add(service_history)
+        
+        if appointment.status != 'completed':
+            appointment.status = 'completed'
+        
+        db.session.commit()
+        
+        logger.info(f"[{request_id}] Vehicle return confirmed for appointment {appointment.id} by user {current_user['id']}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Vehicle return confirmed and ratings submitted successfully',
+            'data': {
+                'service_history': service_history.to_dict()
+            }
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"[{request_id}] Error confirming vehicle return: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to confirm vehicle return',
+            'error': str(e)
+        }), 500
+
+
+def _auto_send_invoice(appointment):
+    from app.utils.invoice import _generate_invoice_number
+    from app.utils.email import send_email_with_attachment
+    from datetime import datetime, timezone
+
+    customer = User.query.get(appointment.user_id)
+    vehicle = Vehicle.query.get(appointment.vehicle_id)
+    service = Service.query.get(appointment.service_id)
+
+    if not all([customer, vehicle, service]) or not customer.email:
+        logger.warning('Skipping auto-invoice for appointment %s: missing data', appointment.id)
+        return
+
+    invoice_number = _generate_invoice_number(appointment.id, appointment.updated_at)
+    pdf_path = generate_invoice_pdf(appointment, customer, vehicle, service, invoice_number)
+
+    invoice = Invoice(
+        invoice_number=invoice_number,
+        appointment_id=appointment.id,
+        user_id=customer.id,
+        total_amount=appointment.total_amount or 0,
+        status='sent',
+        pdf_path=pdf_path,
+        sent_at=datetime.now(timezone.utc),
+    )
+    db.session.add(invoice)
+    db.session.commit()
+
+    subject = f'Invoice {invoice_number} - Ndegwa Auto Concierge'
+    body = (
+        f"Dear {customer.name},\n\n"
+        f"Please find your invoice for the completed service attached.\n\n"
+        f"Invoice Number: {invoice_number}\n"
+        f"Total Amount: KSh {float(invoice.total_amount):,.2f}\n\n"
+        f"Thank you for choosing Ndegwa Auto Concierge.\n"
+    )
+    send_email_with_attachment(
+        to=customer.email,
+        subject=subject,
+        body=body,
+        attachment_path=pdf_path,
+        attachment_filename=f'{invoice_number}.pdf',
+    )

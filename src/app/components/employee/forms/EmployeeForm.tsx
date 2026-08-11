@@ -295,7 +295,7 @@ export function EmployeeForm({
                       <Input
                         id="email"
                         type="email"
-                        placeholder="john@example.com"
+                        placeholder="employee@autoconcierge.co.ke"
                         className="pl-10"
                         aria-invalid={!!errors.email}
                         aria-describedby={errors.email ? 'email-error' : undefined}

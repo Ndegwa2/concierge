@@ -1,11 +1,14 @@
-import { useState } from 'react';
-import { Calendar, Clock, MapPin, Car } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Calendar, Clock, MapPin, Car, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { Textarea } from '@/app/components/ui/textarea';
+import { toast } from 'sonner';
+import { api } from '@/services/api';
+import type { Service, Vehicle } from '@/services/api';
 
 interface BookingFormProps {
   selectedService?: string;
@@ -13,23 +16,96 @@ interface BookingFormProps {
 }
 
 export function BookingForm({ selectedService, onClose }: BookingFormProps) {
+  const [services, setServices] = useState<Service[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [isLoadingServices, setIsLoadingServices] = useState(true);
+  const [isLoadingVehicles, setIsLoadingVehicles] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
   const [formData, setFormData] = useState({
-    service: selectedService || '',
-    date: '',
-    time: '',
-    pickupLocation: '',
-    vehicleMake: '',
-    vehicleModel: '',
+    service_id: selectedService ? parseInt(selectedService) : 0,
+    vehicle_id: 0,
+    appointment_date: '',
     notes: ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log('Booking submitted:', formData);
-    // Show success message
-    alert('Booking request submitted! We will confirm your appointment shortly.');
-    onClose();
+  useEffect(() => {
+    loadServices();
+    loadVehicles();
+  }, []);
+
+  const loadServices = async () => {
+    try {
+      const response = await api.getServices();
+      if (response.success && response.data?.services) {
+        setServices(response.data.services);
+      }
+    } catch (error) {
+      console.error('Failed to load services:', error);
+      toast.error('Failed to load services');
+    } finally {
+      setIsLoadingServices(false);
+    }
   };
+
+  const loadVehicles = async () => {
+    try {
+      const response = await api.getVehicles();
+      if (response.success && response.data?.vehicles) {
+        setVehicles(response.data.vehicles);
+      }
+    } catch (error) {
+      console.error('Failed to load vehicles:', error);
+      toast.error('Failed to load your vehicles');
+    } finally {
+      setIsLoadingVehicles(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.service_id) {
+      toast.error('Please select a service');
+      return;
+    }
+    
+    if (!formData.vehicle_id) {
+      toast.error('Please select a vehicle');
+      return;
+    }
+    
+    if (!formData.appointment_date) {
+      toast.error('Please select a date and time');
+      return;
+    }
+
+    setIsSubmitting(true);
+    
+    try {
+      const response = await api.createAppointment({
+        vehicle_id: formData.vehicle_id,
+        service_id: formData.service_id,
+        appointment_date: new Date(formData.appointment_date).toISOString(),
+        notes: formData.notes
+      });
+
+      if (response.success) {
+        toast.success('Booking confirmed! We will confirm your appointment shortly.');
+        onClose();
+      } else {
+        toast.error(response.message || 'Failed to create booking');
+      }
+    } catch (error) {
+      console.error('Booking error:', error);
+      toast.error('Failed to create booking. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const selectedServiceData = services.find(s => s.id === formData.service_id);
+  const selectedVehicleData = vehicles.find(v => v.id === formData.vehicle_id);
 
   return (
     <Card className="max-w-2xl mx-auto">
@@ -44,101 +120,77 @@ export function BookingForm({ selectedService, onClose }: BookingFormProps) {
           <div className="space-y-2">
             <Label htmlFor="service">Service Type</Label>
             <Select 
-              value={formData.service} 
-              onValueChange={(value) => setFormData({ ...formData, service: value })}
+              value={formData.service_id.toString()} 
+              onValueChange={(value) => setFormData({ ...formData, service_id: parseInt(value) })}
+              disabled={isLoadingServices}
             >
               <SelectTrigger id="service">
-                <SelectValue placeholder="Select a service" />
+                <SelectValue placeholder={isLoadingServices ? "Loading services..." : "Select a service"} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="car-wash">Premium Car Wash</SelectItem>
-                <SelectItem value="oil-change">Oil Change</SelectItem>
-                <SelectItem value="tire-rotation">Tire Rotation</SelectItem>
-                <SelectItem value="inspection">Vehicle Inspection</SelectItem>
-                <SelectItem value="brake-service">Brake Service</SelectItem>
-                <SelectItem value="detailing">Full Detailing</SelectItem>
+                {services.map((service) => (
+                  <SelectItem key={service.id} value={service.id.toString()}>
+                    {service.name} {service.price ? `- KES ${service.price.toLocaleString()}` : ''}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="date" className="flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                Preferred Date
-              </Label>
-              <Input 
-                id="date" 
-                type="date" 
-                value={formData.date}
-                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="time" className="flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                Preferred Time
-              </Label>
-              <Select 
-                value={formData.time}
-                onValueChange={(value) => setFormData({ ...formData, time: value })}
-              >
-                <SelectTrigger id="time">
-                  <SelectValue placeholder="Select time" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="08:00">8:00 AM</SelectItem>
-                  <SelectItem value="10:00">10:00 AM</SelectItem>
-                  <SelectItem value="12:00">12:00 PM</SelectItem>
-                  <SelectItem value="14:00">2:00 PM</SelectItem>
-                  <SelectItem value="16:00">4:00 PM</SelectItem>
-                  <SelectItem value="18:00">6:00 PM</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {selectedServiceData && (
+              <p className="text-xs text-slate-500 mt-1">
+                Duration: {selectedServiceData.duration || 60} mins
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="pickup" className="flex items-center gap-2">
-              <MapPin className="h-4 w-4" />
-              Pickup Location
+            <Label htmlFor="vehicle" className="flex items-center gap-2">
+              <Car className="h-4 w-4" />
+              Select Vehicle
             </Label>
-            <Input 
-              id="pickup" 
-              placeholder="Enter your address"
-              value={formData.pickupLocation}
-              onChange={(e) => setFormData({ ...formData, pickupLocation: e.target.value })}
-              required
-            />
+            <Select 
+              value={formData.vehicle_id.toString()} 
+              onValueChange={(value) => setFormData({ ...formData, vehicle_id: parseInt(value) })}
+              disabled={isLoadingVehicles}
+            >
+              <SelectTrigger id="vehicle">
+                <SelectValue placeholder={isLoadingVehicles ? "Loading vehicles..." : "Select a vehicle"} />
+              </SelectTrigger>
+              <SelectContent>
+                {vehicles.length === 0 ? (
+                  <div className="p-2 text-sm text-slate-500">
+                    No vehicles registered. Please add a vehicle first.
+                  </div>
+                ) : (
+                  vehicles.map((vehicle) => (
+                    <SelectItem key={vehicle.id} value={vehicle.id.toString()}>
+                      {vehicle.year} {vehicle.make} {vehicle.model} {vehicle.license_plate ? `(${vehicle.license_plate})` : ''}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+            {selectedVehicleData && (
+              <p className="text-xs text-slate-500 mt-1">
+                {selectedVehicleData.color && <span>{selectedVehicleData.color}</span>}
+                {selectedVehicleData.color && selectedVehicleData.license_plate && <span> • </span>}
+                {selectedVehicleData.license_plate && <span>{selectedVehicleData.license_plate}</span>}
+              </p>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="make" className="flex items-center gap-2">
-                <Car className="h-4 w-4" />
-                Vehicle Make
-              </Label>
-              <Input 
-                id="make" 
-                placeholder="e.g., Toyota"
-                value={formData.vehicleMake}
-                onChange={(e) => setFormData({ ...formData, vehicleMake: e.target.value })}
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="model">Vehicle Model</Label>
-              <Input 
-                id="model" 
-                placeholder="e.g., Camry"
-                value={formData.vehicleModel}
-                onChange={(e) => setFormData({ ...formData, vehicleModel: e.target.value })}
-                required
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="date" className="flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Preferred Date & Time
+            </Label>
+            <Input 
+              id="date" 
+              type="datetime-local" 
+              value={formData.appointment_date}
+              onChange={(e) => setFormData({ ...formData, appointment_date: e.target.value })}
+              required
+              min={new Date(Date.now() + 3600000).toISOString().slice(0, 16)}
+            />
           </div>
 
           <div className="space-y-2">
@@ -153,13 +205,30 @@ export function BookingForm({ selectedService, onClose }: BookingFormProps) {
           </div>
 
           <div className="flex gap-3 pt-4">
-            <Button type="submit" className="flex-1">
-              Confirm Booking
+            <Button 
+              type="submit" 
+              className="flex-1" 
+              disabled={isSubmitting || vehicles.length === 0}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Booking...
+                </>
+              ) : (
+                'Confirm Booking'
+              )}
             </Button>
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </Button>
           </div>
+          
+          {vehicles.length === 0 && !isLoadingVehicles && (
+            <p className="text-xs text-amber-600 text-center mt-2">
+              Please add a vehicle in your profile before booking.
+            </p>
+          )}
         </form>
       </CardContent>
     </Card>

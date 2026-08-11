@@ -1,6 +1,6 @@
 from app import db
 from app.models import (User, Service, Vehicle, Admin, DiscountCode)
-from datetime import datetime
+from datetime import datetime, timezone
 
 def initialize_database():
     """Initialize database with sample data if it doesn't exist"""

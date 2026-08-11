@@ -9,7 +9,7 @@ from flask_jwt_extended import jwt_required
 from app import db
 from app.models import ServicePartner, Service, Appointment
 from app.utils.decorators import admin_required, role_required, get_current_user
-from datetime import datetime
+from datetime import datetime, timezone
 
 partners_bp = Blueprint('partners', __name__)
 

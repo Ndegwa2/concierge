@@ -1,12 +1,12 @@
 from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity, get_jwt
-from flask_limiter import limiter
-from app import db
+from app import db, limiter
 from app.models import User, Admin, Employee, AuditLog
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import re
 import logging
 from functools import wraps
+from app.utils.decorators import admin_required, role_required, get_current_user, get_current_user_id, is_admin
 
 logger = logging.getLogger(__name__)
 
@@ -167,19 +167,11 @@ def register():
         # For employees: return success message about approval
         if role == 'customer':
             access_token = create_access_token(
-                identity={
-                    'id': user.id,
-                    'email': user.email,
-                    'role': user.role
-                },
+                identity=str(user.id),
                 expires_delta=timedelta(hours=24)
             )
             refresh_token = create_refresh_token(
-                identity={
-                    'id': user.id,
-                    'email': user.email,
-                    'role': user.role
-                }
+                identity=str(user.id)
             )
             
             return jsonify({
@@ -255,19 +247,11 @@ def login():
         
         # Create tokens
         access_token = create_access_token(
-            identity={
-                'id': user.id,
-                'email': user.email,
-                'role': user.role
-            },
+            identity=str(user.id),
             expires_delta=timedelta(hours=24)
         )
         refresh_token = create_refresh_token(
-            identity={
-                'id': user.id,
-                'email': user.email,
-                'role': user.role
-            }
+            identity=str(user.id)
         )
         
         # Log audit
@@ -344,19 +328,11 @@ def employee_login():
         
         # Create tokens
         access_token = create_access_token(
-            identity={
-                'id': user.id,
-                'email': user.email,
-                'role': user.role
-            },
+            identity=str(user.id),
             expires_delta=timedelta(hours=24)
         )
         refresh_token = create_refresh_token(
-            identity={
-                'id': user.id,
-                'email': user.email,
-                'role': user.role
-            }
+            identity=str(user.id)
         )
         
         # Log audit
@@ -411,19 +387,11 @@ def admin_login():
         
         # Create tokens
         access_token = create_access_token(
-            identity={
-                'id': admin.id,
-                'email': admin.email,
-                'role': admin.role
-            },
+            identity=str(admin.id),
             expires_delta=timedelta(hours=8)  # Shorter expiry for admin
         )
         refresh_token = create_refresh_token(
-            identity={
-                'id': admin.id,
-                'email': admin.email,
-                'role': admin.role
-            }
+            identity=str(admin.id)
         )
         
         # Log audit
@@ -453,14 +421,21 @@ def admin_login():
 def refresh():
     """Refresh access token"""
     try:
-        current_user = get_jwt_identity()
+        current_user = get_current_user()
+        
+        if not current_user:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid token',
+                'error': 'INVALID_TOKEN'
+            }), 401
         
         # Token blocklist check is now handled automatically by JWTManager
         # via the token_in_blocklist_loader callback in __init__.py
         
         # Create new access token
         access_token = create_access_token(
-            identity=current_user,
+            identity=str(current_user['id']),
             expires_delta=timedelta(hours=24)
         )
         
@@ -488,11 +463,18 @@ def logout():
         from app import TokenBlocklist
         
         jti = get_jwt()['jti']
-        current_user = get_jwt_identity()
+        current_user = get_current_user()
+        
+        if not current_user:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid token',
+                'error': 'INVALID_TOKEN'
+            }), 401
         
         # Get token expiration from JWT claims
         exp = get_jwt().get('exp')
-        expires_at = datetime.utcfromtimestamp(exp) if exp else datetime.utcnow() + timedelta(hours=24)
+        expires_at = datetime.fromtimestamp(exp, timezone.utc) if exp else datetime.now(timezone.utc) + timedelta(hours=24)
         
         # Add to persistent blocklist
         blocklist_entry = TokenBlocklist(
@@ -525,7 +507,15 @@ def logout():
 def change_password():
     """Change user password"""
     try:
-        current_user = get_jwt_identity()
+        current_user = get_current_user()
+        
+        if not current_user:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid token',
+                'error': 'INVALID_TOKEN'
+            }), 401
+        
         data = request.get_json()
         
         # Validate input
@@ -589,7 +579,7 @@ def change_password():
 def verify_token():
     """Verify if current token is valid"""
     try:
-        current_user = get_jwt_identity()
+        current_user = get_current_user()
         
         # Get user details
         if current_user['role'] == 'admin':
@@ -623,7 +613,7 @@ def verify_token():
 def get_profile():
     """Get user profile"""
     try:
-        current_user = get_jwt_identity()
+        current_user = get_current_user()
         
         if current_user['role'] == 'admin':
             user = Admin.query.get(current_user['id'])
@@ -655,7 +645,7 @@ def get_profile():
 def update_profile():
     """Update user profile"""
     try:
-        current_user = get_jwt_identity()
+        current_user = get_current_user()
         data = request.get_json()
         
         if current_user['role'] == 'admin':
@@ -712,7 +702,7 @@ def update_profile():
 def create_admin():
     """Create a new admin account (Super Admin only)"""
     try:
-        current_user = get_jwt_identity()
+        current_user = get_current_user()
         
         # Only super_admin can create new admin accounts
         if current_user['role'] != 'super_admin':
@@ -789,7 +779,7 @@ def create_admin():
 def get_pending_employees():
     """Get list of pending employee registrations (Admin only)"""
     try:
-        current_user = get_jwt_identity()
+        current_user = get_current_user()
         
         # Only admin can view pending employees
         if current_user['role'] not in ['admin', 'super_admin']:
@@ -833,7 +823,7 @@ def get_pending_employees():
 def approve_employee(user_id):
     """Approve or reject an employee registration (Admin only)"""
     try:
-        current_user = get_jwt_identity()
+        current_user = get_current_user()
         
         # Only admin can approve employees
         if current_user['role'] not in ['admin', 'super_admin']:
@@ -910,7 +900,7 @@ def approve_employee(user_id):
 def update_employee_status(user_id):
     """Update employee status - activate/deactivate/suspend (Admin only)"""
     try:
-        current_user = get_jwt_identity()
+        current_user = get_current_user()
         
         # Only admin can update employee status
         if current_user['role'] not in ['admin', 'super_admin']:

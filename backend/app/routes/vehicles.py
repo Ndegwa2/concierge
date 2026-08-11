@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
 from app.models import Vehicle, User
+from app.utils.decorators import get_current_user
 
 vehicles_bp = Blueprint('vehicles', __name__)
 
@@ -10,7 +11,7 @@ vehicles_bp = Blueprint('vehicles', __name__)
 def get_vehicles():
     """Get user's vehicles"""
     try:
-        current_user = get_jwt_identity()
+        current_user = get_current_user()
         
         if current_user['role'] == 'admin':
             # Admin gets all vehicles
@@ -39,7 +40,7 @@ def get_vehicles():
 def get_vehicle(vehicle_id):
     """Get a single vehicle"""
     try:
-        current_user = get_jwt_identity()
+        current_user = get_current_user()
         vehicle = Vehicle.query.get(vehicle_id)
         
         if not vehicle:
@@ -74,7 +75,7 @@ def get_vehicle(vehicle_id):
 def create_vehicle():
     """Create a new vehicle"""
     try:
-        current_user = get_jwt_identity()
+        current_user = get_current_user()
         data = request.get_json()
         
         # Validate input
@@ -119,7 +120,7 @@ def create_vehicle():
 def update_vehicle(vehicle_id):
     """Update a vehicle"""
     try:
-        current_user = get_jwt_identity()
+        current_user = get_current_user()
         vehicle = Vehicle.query.get(vehicle_id)
         
         if not vehicle:
@@ -184,7 +185,7 @@ def update_vehicle(vehicle_id):
 def delete_vehicle(vehicle_id):
     """Delete a vehicle"""
     try:
-        current_user = get_jwt_identity()
+        current_user = get_current_user()
         vehicle = Vehicle.query.get(vehicle_id)
         
         if not vehicle:

@@ -1,76 +1,60 @@
-import { useState } from 'react';
-import { Search, Plus, Edit, Trash2, Phone, Mail, MapPin, Star } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, Edit, Trash2, Phone, Mail, MapPin, Star } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/app/components/ui/avatar';
+import { api } from '@/services/api';
+
+interface ConciergeRow {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  location: string;
+  rating: number;
+  totalServices: number;
+  status: string;
+  specialties: string[];
+}
 
 export function ConciergeManager() {
+  const [concierges, setConcierges] = useState<ConciergeRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const concierges = [
-    {
-      id: 'C-001',
-      name: 'Kwame Asante',
-      email: 'kwame.asante@autoconcierge.com',
-      phone: '+254 712-1001',
-      location: 'Nairobi CBD',
-      rating: 4.9,
-      totalServices: 156,
-      activeServices: 3,
-      status: 'active',
-      specialties: ['Luxury Vehicles', 'Detailing']
-    },
-    {
-      id: 'C-002',
-      name: 'Ngozi Adeyemi',
-      email: 'ngozi.a@autoconcierge.com',
-      phone: '+254 723-1002',
-      location: 'Westlands',
-      rating: 4.8,
-      totalServices: 142,
-      activeServices: 2,
-      status: 'active',
-      specialties: ['Maintenance', 'Inspections']
-    },
-    {
-      id: 'C-003',
-      name: 'Obi Okafor',
-      email: 'obi.okafor@autoconcierge.com',
-      phone: '+254 734-1003',
-      location: 'Kilimani',
-      rating: 4.9,
-      totalServices: 138,
-      activeServices: 4,
-      status: 'active',
-      specialties: ['Repairs', 'Diagnostics']
-    },
-    {
-      id: 'C-004',
-      name: 'Amara Diallo',
-      email: 'amara.diallo@autoconcierge.com',
-      phone: '+254 745-1004',
-      location: 'Karen',
-      rating: 4.7,
-      totalServices: 125,
-      activeServices: 1,
-      status: 'active',
-      specialties: ['Car Wash', 'Quick Service']
-    },
-    {
-      id: 'C-005',
-      name: 'Kofi Mensah',
-      email: 'kofi.m@autoconcierge.com',
-      phone: '+254 756-1005',
-      location: 'Lavington',
-      rating: 4.6,
-      totalServices: 98,
-      activeServices: 0,
-      status: 'off-duty',
-      specialties: ['Fleet Service', 'Corporate']
+  useEffect(() => {
+    fetchConcierges();
+  }, []);
+
+  const fetchConcierges = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await api.getAllEmployeesAdmin();
+      if (response.success && response.data) {
+        const mapped = (response.data.employees || []).map((item: any) => ({
+          id: item.employee?.employee_id || String(item.id),
+          name: item.name,
+          email: item.email,
+          phone: item.phone || '',
+          location: item.employee?.location || '',
+          rating: item.employee?.rating || 0,
+          totalServices: item.employee?.total_services || 0,
+          status: item.employee?.status || 'active',
+          specialties: item.employee?.specialties || [],
+        }));
+        setConcierges(mapped);
+      }
+    } catch (err) {
+      setError('Failed to load concierge staff');
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
   const filteredConcierges = concierges.filter(concierge =>
     concierge.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -88,6 +72,38 @@ export function ConciergeManager() {
       : 'bg-slate-100 text-slate-800 border-slate-200';
   };
 
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Concierge Staff</h1>
+          <p className="text-slate-600">Loading staff data...</p>
+        </div>
+        <Card>
+          <CardContent className="py-8">
+            <div className="animate-pulse space-y-4">
+              <div className="h-10 bg-slate-200 rounded"></div>
+              <div className="h-10 bg-slate-200 rounded"></div>
+              <div className="h-10 bg-slate-200 rounded"></div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Concierge Staff</h1>
+          <p className="text-red-600">{error}</p>
+          <Button onClick={fetchConcierges} className="mt-4">Retry</Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -95,9 +111,9 @@ export function ConciergeManager() {
           <h1 className="text-3xl font-bold mb-2">Concierge Staff</h1>
           <p className="text-slate-600">Manage your concierge team members</p>
         </div>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Concierge
+        <Button onClick={fetchConcierges}>
+          <Search className="h-4 w-4 mr-2" />
+          Refresh
         </Button>
       </div>
 
@@ -120,110 +136,122 @@ export function ConciergeManager() {
       <div className="grid md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">5</div>
+            <div className="text-2xl font-bold">{concierges.length}</div>
             <p className="text-sm text-slate-600">Total Concierges</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">4</div>
+            <div className="text-2xl font-bold">
+              {concierges.filter(c => c.status === 'active').length}
+            </div>
             <p className="text-sm text-slate-600">Active Now</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">10</div>
+            <div className="text-2xl font-bold">-</div>
             <p className="text-sm text-slate-600">Services in Progress</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">4.8</div>
+            <div className="text-2xl font-bold">
+              {concierges.length > 0
+                ? (concierges.reduce((sum, c) => sum + c.rating, 0) / concierges.length).toFixed(1)
+                : '0.0'}
+            </div>
             <p className="text-sm text-slate-600">Avg. Rating</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Concierge Grid */}
-      <div className="grid md:grid-cols-2 gap-6">
-        {filteredConcierges.map((concierge) => (
-          <Card key={concierge.id} className="hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-4">
-                  <Avatar className="h-12 w-12">
-                    <AvatarFallback className="bg-slate-900 text-white">
-                      {getInitials(concierge.name)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <CardTitle className="text-lg">{concierge.name}</CardTitle>
-                    <p className="text-sm text-slate-500">{concierge.id}</p>
+      {filteredConcierges.length === 0 ? (
+        <Card>
+          <CardContent className="text-center py-8">
+            <p className="text-slate-500">No concierge staff found</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid md:grid-cols-2 gap-6">
+          {filteredConcierges.map((concierge) => (
+            <Card key={concierge.id} className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-4">
+                    <Avatar className="h-12 w-12">
+                      <AvatarFallback className="bg-slate-900 text-white">
+                        {getInitials(concierge.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <CardTitle className="text-lg">{concierge.name}</CardTitle>
+                      <p className="text-sm text-slate-500">{concierge.id}</p>
+                    </div>
+                  </div>
+                  <Badge className={getStatusColor(concierge.status)}>
+                    {concierge.status === 'active' ? 'Active' : 'Off Duty'}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Mail className="h-4 w-4" />
+                    <span>{concierge.email}</span>
+                  </div>
+                  {concierge.phone && (
+                    <div className="flex items-center gap-2 text-slate-600">
+                      <Phone className="h-4 w-4" />
+                      <span>{concierge.phone}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <MapPin className="h-4 w-4" />
+                    <span>{concierge.location || 'Not specified'}</span>
                   </div>
                 </div>
-                <Badge className={getStatusColor(concierge.status)}>
-                  {concierge.status === 'active' ? 'Active' : 'Off Duty'}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2 text-slate-600">
-                  <Mail className="h-4 w-4" />
-                  <span>{concierge.email}</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-600">
-                  <Phone className="h-4 w-4" />
-                  <span>{concierge.phone}</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-600">
-                  <MapPin className="h-4 w-4" />
-                  <span>{concierge.location}</span>
-                </div>
-              </div>
 
-              <div className="pt-4 border-t space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600">Rating</span>
-                  <div className="flex items-center gap-1">
-                    <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                    <span className="font-semibold">{concierge.rating}</span>
+                <div className="pt-4 border-t space-y-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-600">Rating</span>
+                    <div className="flex items-center gap-1">
+                      <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                      <span className="font-semibold">{concierge.rating.toFixed(1)}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-600">Total Services</span>
+                    <span className="font-semibold">{concierge.totalServices}</span>
                   </div>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600">Total Services</span>
-                  <span className="font-semibold">{concierge.totalServices}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600">Active Services</span>
-                  <span className="font-semibold">{concierge.activeServices}</span>
-                </div>
-              </div>
 
-              <div className="pt-4 border-t">
-                <p className="text-sm text-slate-600 mb-2">Specialties</p>
-                <div className="flex flex-wrap gap-2">
-                  {concierge.specialties.map((specialty) => (
-                    <Badge key={specialty} variant="outline" className="text-xs">
-                      {specialty}
-                    </Badge>
-                  ))}
+                <div className="pt-4 border-t">
+                  <p className="text-sm text-slate-600 mb-2">Specialties</p>
+                  <div className="flex flex-wrap gap-2">
+                    {concierge.specialties.map((specialty) => (
+                      <Badge key={specialty} variant="outline" className="text-xs">
+                        {specialty}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex gap-2 pt-4">
-                <Button variant="outline" className="flex-1" size="sm">
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit
-                </Button>
-                <Button variant="outline" size="sm">
-                  <Trash2 className="h-4 w-4 text-red-500" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                <div className="flex gap-2 pt-4">
+                  <Button variant="outline" className="flex-1" size="sm">
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit
+                  </Button>
+                  <Button variant="outline" size="sm">
+                    <Trash2 className="h-4 w-4 text-red-500" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

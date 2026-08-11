@@ -7,35 +7,18 @@ from functools import wraps
 from flask import jsonify
 from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 
+from app.models import User, Admin, Employee
+
 
 def role_required(*allowed_roles):
     """
     Decorator to check if the current user has one of the required roles.
-    
-    Usage:
-        @app.route('/admin/endpoint')
-        @jwt_required()
-        @role_required('admin')
-        def admin_only():
-            return {'message': 'Welcome admin'}
-        
-        @app.route('/manager/endpoint')
-        @jwt_required()
-        @role_required('admin', 'manager')
-        def admin_or_manager():
-            return {'message': 'Welcome'}
-    
-    Args:
-        *allowed_roles: Variable number of role strings that are allowed access
-    
-    Returns:
-        Decorated function or error response
     """
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
             verify_jwt_in_request()
-            current_user = get_jwt_identity()
+            current_user = get_current_user()
             
             if not current_user:
                 return jsonify({
@@ -64,19 +47,11 @@ def role_required(*allowed_roles):
 def admin_required(fn):
     """
     Decorator that requires admin role.
-    Shortcut for @role_required('admin')
-    
-    Usage:
-        @app.route('/admin/endpoint')
-        @jwt_required()
-        @admin_required
-        def admin_endpoint():
-            return {'message': 'Admin access granted'}
     """
     @wraps(fn)
     def wrapper(*args, **kwargs):
         verify_jwt_in_request()
-        current_user = get_jwt_identity()
+        current_user = get_current_user()
         
         if not current_user:
             return jsonify({
@@ -102,19 +77,11 @@ def admin_required(fn):
 def employee_required(fn):
     """
     Decorator that requires employee role.
-    Shortcut for @role_required('employee')
-    
-    Usage:
-        @app.route('/employee/endpoint')
-        @jwt_required()
-        @employee_required
-        def employee_endpoint():
-            return {'message': 'Employee access granted'}
     """
     @wraps(fn)
     def wrapper(*args, **kwargs):
         verify_jwt_in_request()
-        current_user = get_jwt_identity()
+        current_user = get_current_user()
         
         if not current_user:
             return jsonify({
@@ -140,19 +107,11 @@ def employee_required(fn):
 def customer_required(fn):
     """
     Decorator that requires customer role.
-    Shortcut for @role_required('customer')
-    
-    Usage:
-        @app.route('/customer/endpoint')
-        @jwt_required()
-        @customer_required
-        def customer_endpoint():
-            return {'message': 'Customer access granted'}
     """
     @wraps(fn)
     def wrapper(*args, **kwargs):
         verify_jwt_in_request()
-        current_user = get_jwt_identity()
+        current_user = get_current_user()
         
         if not current_user:
             return jsonify({
@@ -178,22 +137,12 @@ def customer_required(fn):
 def owner_or_admin_required(get_resource_user_id):
     """
     Decorator that allows access if the user is the owner of the resource or an admin.
-    
-    Usage:
-        @app.route('/appointments/<int:appointment_id>')
-        @jwt_required()
-        @owner_or_admin_required(lambda appointment_id: Appointment.query.get(appointment_id).user_id)
-        def get_appointment(appointment_id):
-            return {'message': 'Access granted'}
-    
-    Args:
-        get_resource_user_id: A function that takes the route parameters and returns the user_id of the resource owner
     """
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
             verify_jwt_in_request()
-            current_user = get_jwt_identity()
+            current_user = get_current_user()
             
             if not current_user:
                 return jsonify({
@@ -229,15 +178,33 @@ def owner_or_admin_required(get_resource_user_id):
 
 def get_current_user():
     """
-    Helper function to get the current authenticated user's identity.
+    Helper function to get the current authenticated user's full record.
     
     Returns:
-        dict: User identity containing id, email, and role
+        dict: User record containing id, email, role, etc.
         None: If no user is authenticated
     """
     try:
         verify_jwt_in_request()
-        return get_jwt_identity()
+        identity = get_jwt_identity()
+        
+        if not identity:
+            return None
+        
+        # Identity is now a string ID
+        user_id = str(identity)
+        
+        # Try Admin first
+        admin = Admin.query.get(user_id)
+        if admin:
+            return admin.to_dict()
+        
+        # Try Employee/User
+        user = User.query.get(user_id)
+        if user:
+            return user.to_dict()
+        
+        return None
     except Exception:
         return None
 
@@ -245,10 +212,6 @@ def get_current_user():
 def get_current_user_id():
     """
     Helper function to get the current authenticated user's ID.
-    
-    Returns:
-        int: User ID
-        None: If no user is authenticated or ID is missing
     """
     user = get_current_user()
     if user is None:
@@ -259,10 +222,6 @@ def get_current_user_id():
 def get_current_user_role():
     """
     Helper function to get the current authenticated user's role.
-    
-    Returns:
-        str: User role ('admin', 'employee', 'customer')
-        None: If no user is authenticated or role is missing
     """
     user = get_current_user()
     if user is None:
@@ -273,9 +232,6 @@ def get_current_user_role():
 def is_admin():
     """
     Helper function to check if the current user is an admin.
-    
-    Returns:
-        bool: True if admin, False otherwise
     """
     return get_current_user_role() == 'admin'
 
@@ -283,9 +239,6 @@ def is_admin():
 def is_employee():
     """
     Helper function to check if the current user is an employee.
-    
-    Returns:
-        bool: True if employee, False otherwise
     """
     return get_current_user_role() == 'employee'
 
@@ -293,8 +246,5 @@ def is_employee():
 def is_customer():
     """
     Helper function to check if the current user is a customer.
-    
-    Returns:
-        bool: True if customer, False otherwise
     """
     return get_current_user_role() == 'customer'

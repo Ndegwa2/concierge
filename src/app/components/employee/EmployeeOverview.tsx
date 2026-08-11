@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { 
   CheckCircle2, 
   Clock, 
@@ -6,85 +7,120 @@ import {
   Calendar,
   AlertCircle,
   Navigation,
-  DollarSign
+  DollarSign,
+  Users,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
+import { api } from '@/services/api';
+import type { Appointment } from '@/services/api';
 
 interface EmployeeOverviewProps {
   employeeData: {
     name: string;
     id: string;
-    email: string;
-    phone: string;
-    location: string;
   };
 }
 
 export function EmployeeOverview({ employeeData }: EmployeeOverviewProps) {
-  const todayAppointments = [
-    {
-      id: 'A-1001',
-      customer: 'Kwame Asante',
-      service: 'Premium Car Wash',
-      vehicle: 'Tesla Model 3',
-      time: '10:30 AM',
-      location: '123 Kenyatta Ave, Nairobi CBD',
-      status: 'in-progress',
-      estimatedDuration: '45 min'
-    },
-    {
-      id: 'A-1007',
-      customer: 'Ngozi Adeyemi',
-      service: 'Oil Change',
-      vehicle: 'Honda Civic',
-      time: '1:00 PM',
-      location: '789 Moi Ave, Westlands',
-      status: 'upcoming',
-      estimatedDuration: '60 min'
-    },
-    {
-      id: 'A-1012',
-      customer: 'Kofi Mensah',
-      service: 'Tire Rotation',
-      vehicle: 'Ford F-150',
-      time: '3:30 PM',
-      location: '456 Uhuru Hwy, Kilimani',
-      status: 'upcoming',
-      estimatedDuration: '40 min'
-    }
-  ];
+  const [dashboard, setDashboard] = useState<any>(null);
+  const [todayAppointments, setTodayAppointments] = useState<Appointment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const stats = [
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [dashResponse, apptResponse] = await Promise.all([
+          api.getEmployeeDashboard(),
+          api.getMyAssignments(),
+        ]);
+
+        if (dashResponse.success && dashResponse.data) {
+          setDashboard(dashResponse.data);
+        }
+
+        if (apptResponse.success && apptResponse.data) {
+          const today = new Date();
+          const todayAppts = apptResponse.data.appointments.filter(a => {
+            const apptDate = new Date(a.appointment_date);
+            return apptDate.toDateString() === today.toDateString();
+          });
+          setTodayAppointments(todayAppts);
+        }
+      } catch (err) {
+        setError('Failed to load dashboard data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const stats = dashboard ? [
     {
       title: 'Today\'s Assignments',
-      value: '3',
-      description: '2 remaining',
+      value: String(dashboard.statistics?.today_assignments || 0),
+      description: `${dashboard.statistics?.active_assignments || 0} active`,
       icon: Calendar,
       color: 'text-blue-600',
       bgColor: 'bg-blue-100'
     },
     {
       title: 'Completed This Week',
-      value: '18',
-      description: '+3 from last week',
+      value: String(dashboard.statistics?.completed_assignments || 0),
+      description: `${dashboard.statistics?.total_assignments || 0} total assignments`,
       icon: CheckCircle2,
       color: 'text-green-600',
       bgColor: 'bg-green-100'
     },
     {
       title: 'Average Rating',
-      value: '4.9',
-      description: 'Based on 156 reviews',
+      value: dashboard.employee?.rating?.toFixed(1) || '0.0',
+      description: 'Based on all reviews',
       icon: Star,
       color: 'text-yellow-600',
       bgColor: 'bg-yellow-100'
     },
     {
-      title: 'Earnings This Month',
-      value: 'KES 324,500',
-      description: '+12% from last month',
+      title: 'Total Services',
+      value: String(dashboard.employee?.total_services || 0),
+      description: `ID: ${employeeData.id}`,
+      icon: DollarSign,
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-100'
+    }
+  ] : [
+    {
+      title: 'Today\'s Assignments',
+      value: '0',
+      description: 'Loading...',
+      icon: Calendar,
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-100'
+    },
+    {
+      title: 'Completed This Week',
+      value: '0',
+      description: 'Loading...',
+      icon: CheckCircle2,
+      color: 'text-green-600',
+      bgColor: 'bg-green-100'
+    },
+    {
+      title: 'Average Rating',
+      value: '0.0',
+      description: 'Loading...',
+      icon: Star,
+      color: 'text-yellow-600',
+      bgColor: 'bg-yellow-100'
+    },
+    {
+      title: 'Total Services',
+      value: '0',
+      description: 'Loading...',
       icon: DollarSign,
       color: 'text-purple-600',
       bgColor: 'bg-purple-100'
@@ -95,8 +131,11 @@ export function EmployeeOverview({ employeeData }: EmployeeOverviewProps) {
     switch (status) {
       case 'in-progress':
         return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'upcoming':
+      case 'scheduled':
+      case 'confirmed':
         return 'bg-green-100 text-green-800 border-green-200';
+      case 'completed':
+        return 'bg-slate-100 text-slate-800 border-slate-200';
       default:
         return 'bg-slate-100 text-slate-800 border-slate-200';
     }
@@ -105,6 +144,23 @@ export function EmployeeOverview({ employeeData }: EmployeeOverviewProps) {
   const getStatusLabel = (status: string) => {
     return status.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   };
+
+  const todayFormatted = new Date().toLocaleDateString('en-KE', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <p className="text-slate-500">{error}</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -137,75 +193,83 @@ export function EmployeeOverview({ employeeData }: EmployeeOverviewProps) {
       </div>
 
       {/* Current Assignment Alert */}
-      <Card className="border-blue-200 bg-blue-50">
-        <CardContent className="pt-6">
-          <div className="flex items-start gap-4">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <AlertCircle className="h-5 w-5 text-blue-600" />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-semibold mb-1">Active Service in Progress</h3>
-              <p className="text-sm text-slate-700 mb-3">
-                Premium Car Wash for Kwame Asante - Tesla Model 3
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm">
-                  <Navigation className="h-4 w-4 mr-2" />
-                  Navigate
-                </Button>
-                <Button size="sm" variant="outline">
-                  Update Status
-                </Button>
-                <Button size="sm" variant="outline">
-                  Contact Customer
-                </Button>
+      {dashboard?.statistics?.active_assignments > 0 && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-4">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <AlertCircle className="h-5 w-5 text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold mb-1">Active Service in Progress</h3>
+                <p className="text-sm text-slate-700 mb-3">
+                  You have {dashboard.statistics.active_assignments} active assignment{dashboard.statistics.active_assignments > 1 ? 's' : ''}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm">
+                    <Navigation className="h-4 w-4 mr-2" />
+                    Navigate
+                  </Button>
+                  <Button size="sm" variant="outline">
+                    Update Status
+                  </Button>
+                  <Button size="sm" variant="outline">
+                    Contact Customer
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Today's Schedule */}
       <div className="grid lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Today's Schedule</CardTitle>
-            <CardDescription>Your assigned appointments for Monday, January 26, 2026</CardDescription>
+            <CardDescription>Your assigned appointments for {todayFormatted}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {todayAppointments.map((appointment) => (
-                <div key={appointment.id} className="flex items-start justify-between p-4 bg-slate-50 rounded-lg border">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Clock className="h-4 w-4 text-slate-500" />
-                      <span className="font-semibold">{appointment.time}</span>
-                      <Badge className={getStatusColor(appointment.status)} variant="outline">
-                        {getStatusLabel(appointment.status)}
-                      </Badge>
-                    </div>
-                    <h4 className="font-medium mb-1">{appointment.service}</h4>
-                    <p className="text-sm text-slate-600 mb-1">
-                      Customer: {appointment.customer}
-                    </p>
-                    <p className="text-sm text-slate-600 mb-1">
-                      Vehicle: {appointment.vehicle}
-                    </p>
-                    <div className="flex items-center gap-2 text-sm text-slate-500 mt-2">
-                      <Navigation className="h-3 w-3" />
-                      <span>{appointment.location}</span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-slate-500 mb-2">{appointment.estimatedDuration}</p>
-                    {appointment.status === 'in-progress' ? (
-                      <Button size="sm">View Details</Button>
-                    ) : (
-                      <Button size="sm" variant="outline">Start Service</Button>
-                    )}
-                  </div>
+              {!isLoading && todayAppointments.length === 0 ? (
+                <div className="text-center py-8 text-slate-500">
+                  No appointments scheduled for today
                 </div>
-              ))}
+              ) : (
+                todayAppointments.map((appointment) => (
+                  <div key={appointment.id} className="flex items-start justify-between p-4 bg-slate-50 rounded-lg border">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Clock className="h-4 w-4 text-slate-500" />
+                        <span className="font-semibold">{new Date(appointment.appointment_date).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}</span>
+                        <Badge className={getStatusColor(appointment.status)} variant="outline">
+                          {getStatusLabel(appointment.status)}
+                        </Badge>
+                      </div>
+                      <h4 className="font-medium mb-1">{appointment.service?.name || 'Unknown Service'}</h4>
+                      <p className="text-sm text-slate-600 mb-1">
+                        Customer: {appointment.customer?.name || 'N/A'}
+                      </p>
+                      <p className="text-sm text-slate-600 mb-1">
+                        Vehicle: {appointment.vehicle ? `${appointment.vehicle.make} ${appointment.vehicle.model}` : 'N/A'}
+                      </p>
+                      <div className="flex items-center gap-2 text-sm text-slate-500 mt-2">
+                        <Navigation className="h-3 w-3" />
+                        <span>{appointment.notes || 'No special instructions'}</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-slate-500 mb-2">{appointment.service ? `${appointment.service.duration} min` : 'N/A'}</p>
+                      {appointment.status === 'in-progress' ? (
+                        <Button size="sm">View Details</Button>
+                      ) : (
+                        <Button size="sm" variant="outline">Start Service</Button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
@@ -237,36 +301,40 @@ export function EmployeeOverview({ employeeData }: EmployeeOverviewProps) {
               <CardTitle>This Week</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  <span className="text-sm">Completed</span>
-                </div>
-                <span className="font-semibold">18</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-blue-500" />
-                  <span className="text-sm">In Progress</span>
-                </div>
-                <span className="font-semibold">1</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-slate-500" />
-                  <span className="text-sm">Upcoming</span>
-                </div>
-                <span className="font-semibold">2</span>
-              </div>
-              <div className="pt-4 border-t">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-purple-500" />
-                    <span className="text-sm">Efficiency</span>
+              {dashboard && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      <span className="text-sm">Completed</span>
+                    </div>
+                    <span className="font-semibold">{dashboard.statistics?.completed_assignments || 0}</span>
                   </div>
-                  <span className="font-semibold">96%</span>
-                </div>
-              </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-blue-500" />
+                      <span className="text-sm">In Progress</span>
+                    </div>
+                    <span className="font-semibold">{dashboard.statistics?.active_assignments || 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-slate-500" />
+                      <span className="text-sm">Total</span>
+                    </div>
+                    <span className="font-semibold">{dashboard.statistics?.total_assignments || 0}</span>
+                  </div>
+                  <div className="pt-4 border-t">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4 text-purple-500" />
+                        <span className="text-sm">Rating</span>
+                      </div>
+                      <span className="font-semibold">{dashboard.employee?.rating ? `${dashboard.employee.rating.toFixed(1)}/5` : 'N/A'}</span>
+                    </div>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -280,52 +348,10 @@ export function EmployeeOverview({ employeeData }: EmployeeOverviewProps) {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {[
-              {
-                customer: 'Ngozi Adeyemi',
-                rating: 5,
-                comment: 'Kwame was professional and handled my car with great care. Excellent service!',
-                service: 'Full Detailing',
-                date: 'Jan 24, 2026'
-              },
-              {
-                customer: 'Chinedu Eze',
-                rating: 5,
-                comment: 'Very punctual and kept me updated throughout the entire process. Highly recommend!',
-                service: 'Oil Change',
-                date: 'Jan 22, 2026'
-              },
-              {
-                customer: 'Amina Okonkwo',
-                rating: 4,
-                comment: 'Great service overall. Car came back looking brand new!',
-                service: 'Premium Car Wash',
-                date: 'Jan 20, 2026'
-              }
-            ].map((feedback, index) => (
-              <div key={index} className="p-4 bg-slate-50 rounded-lg">
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <p className="font-medium">{feedback.customer}</p>
-                    <p className="text-sm text-slate-500">{feedback.service}</p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {[...Array(5)].map((_, i) => (
-                      <Star
-                        key={i}
-                        className={`h-4 w-4 ${
-                          i < feedback.rating
-                            ? 'fill-yellow-400 text-yellow-400'
-                            : 'text-slate-300'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <p className="text-sm text-slate-600 mb-2">{feedback.comment}</p>
-                <p className="text-xs text-slate-500">{feedback.date}</p>
-              </div>
-            ))}
+            <div className="text-center py-8 text-slate-500">
+              <Users className="h-8 w-8 mx-auto mb-2 text-slate-300" />
+              <p>Customer feedback will appear here once reviews are submitted</p>
+            </div>
           </div>
         </CardContent>
       </Card>

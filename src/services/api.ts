@@ -5,6 +5,7 @@
  */
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+export { API_BASE_URL };
 
 // Types
 export interface User {
@@ -277,7 +278,16 @@ class ApiService {
         headers,
       });
 
-      const data = await response.json();
+      let data: ApiResponse<T>;
+      try {
+        data = await response.json();
+      } catch {
+        data = {
+          success: false,
+          message: response.statusText || 'Invalid response from server',
+          error: `HTTP ${response.status}: ${response.statusText}`,
+        };
+      }
 
       // Handle token expiration / missing JWT
       const method = (options.method || 'GET').toUpperCase();
@@ -325,7 +335,12 @@ class ApiService {
         }),
       });
 
-      const data = await response.json();
+      let data: ApiResponse<any>;
+      try {
+        data = await response.json();
+      } catch {
+        return false;
+      }
 
       if (data.success && data.data?.access_token) {
         this.setTokens(data.data.access_token);

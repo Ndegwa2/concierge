@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
   Calendar, 
@@ -11,6 +11,7 @@ import {
   Wrench
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { api } from '@/services/api';
 import { EmployeeOverview } from './EmployeeOverview';
 import { EmployeeFunctions } from './EmployeeFunctions';
 import { MyAssignments } from './MyAssignments';
@@ -25,14 +26,57 @@ export function EmployeeDashboard({ onLogout }: EmployeeDashboardProps) {
   const [currentSection, setCurrentSection] = useState<'overview' | 'functions' | 'assignments' | 'schedule' | 'profile'>('functions');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Mock employee data
-  const employeeData = {
-    name: 'Kwame Asante',
-    id: 'C-001',
-    email: 'kwame.asante@autoconcierge.com',
-    phone: '+254 712-1001',
-    location: 'Nairobi CBD'
-  };
+  const [employeeData, setEmployeeData] = useState<{ name: string; id: string } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const response = await api.getEmployeeProfile();
+        if (response.success && response.data) {
+          const user = response.data.user;
+          const employee = user.employee;
+          setEmployeeData({
+            name: user.name,
+            id: employee?.employee_id || `EMP-${user.id}`,
+          });
+        } else {
+          const storedUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+          if (storedUser) {
+            const user = JSON.parse(storedUser);
+            setEmployeeData({
+              name: user.name,
+              id: user.employee?.employee_id || `EMP-${user.id}`,
+            });
+          }
+        }
+      } catch {
+        const storedUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+        if (storedUser) {
+          const user = JSON.parse(storedUser);
+          setEmployeeData({
+            name: user.name,
+            id: user.employee?.employee_id || `EMP-${user.id}`,
+          });
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProfile();
+  }, []);
+
+  if (isLoading || !employeeData) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <Car className="h-8 w-8 text-slate-900 animate-spin mx-auto mb-4" />
+          <p className="text-slate-600">Loading employee dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   const navigation = [
     { id: 'functions', name: 'Functions', icon: Wrench },

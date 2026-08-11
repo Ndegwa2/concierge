@@ -3,7 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
 from app.models import Service, DiscountCode
 from app.utils.decorators import admin_required, role_required
-from datetime import datetime
+from datetime import datetime, timezone
 
 services_bp = Blueprint('services', __name__)
 
@@ -102,7 +102,7 @@ def get_categories():
 def get_discounts():
     """Get active discount codes"""
     try:
-        current_date = datetime.utcnow()
+        current_date = datetime.now(timezone.utc)
         discounts = DiscountCode.query.filter(
             DiscountCode.is_active == True,
             DiscountCode.start_date <= current_date,
@@ -129,7 +129,7 @@ def get_discounts():
 def get_discount(code):
     """Get discount code details"""
     try:
-        current_date = datetime.utcnow()
+        current_date = datetime.now(timezone.utc)
         discount = DiscountCode.query.filter_by(code=code.upper()).first()
         
         if not discount:

@@ -4,7 +4,7 @@ from app import db
 from app.models import (User, Service, Vehicle, Appointment,
                      ServiceHistory, Notification, Admin, PaymentMethod, DiscountCode)
 from app.utils.decorators import admin_required, role_required, get_current_user
-from datetime import datetime
+from datetime import datetime, timezone
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -233,7 +233,7 @@ def create_discount():
         if 'start_date' in data:
             discount.start_date = datetime.fromisoformat(data['start_date'])
         else:
-            discount.start_date = datetime.utcnow()
+            discount.start_date = datetime.now(timezone.utc)
             
         if 'end_date' in data:
             discount.end_date = datetime.fromisoformat(data['end_date'])

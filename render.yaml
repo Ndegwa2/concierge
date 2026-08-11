@@ -3,25 +3,36 @@
 # Learn more: https://render.com/docs/blueprint-spec
 
 services:
-  # Backend API Service
+  # Backend API Service (Flask + PostgreSQL)
   - type: web
     name: auto-concierge-backend
-    env: node
+    env: python
     region: oregon
-    buildCommand: cd backend && npm install
-    startCommand: cd backend && npm start
+    buildCommand: cd backend && pip install -r requirements.txt && flask db upgrade
+    startCommand: cd backend && gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --max-requests 1000 --max-requests-jitter 50 "run:app"
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PYTHON_PATH
+        value: /opt/render/project/backend
       - key: PORT
         value: 10000
-      - key: DB_PATH
-        value: /opt/render/project/src/auto-concierge.db
-      - key: JWT_SECRET
+      - key: DATABASE_URL
+        fromDatabase:
+          name: autoconcierge-postgres
+          property: connectionString
+      - key: DATABASE_READ_URL
+        fromDatabase:
+          name: autoconcierge-postgres-read
+          property: connectionString
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: SECRET_KEY
         generateValue: true
       - key: CORS_ORIGIN
-        # Update this with your frontend URL after deployment
         value: https://auto-concierge-frontend.onrender.com
+      - key: WTF_CSRF_ENABLED
+        value: "False"
 
   # Frontend Static Site
   - type: web
@@ -32,21 +43,42 @@ services:
     publishDir: dist
     envVars:
       - key: VITE_API_URL
-        # Update this after backend is deployed
-        value: https://auto-concierge-backend.onrender.com
+        value: https://auto-concierge-backend.onrender.com/api
       - key: VITE_APP_ENV
         value: production
 
+# PostgreSQL databases (managed by Render)
+databases:
+  - name: autoconcierge-postgres
+    region: oregon
+    plan: standard-0  # Hobby tier: shared RAM, 0.5 GB
+    # Upgrade to standard-1 (Dedicated RAM, 1 GB) for production workloads
+
+  - name: autoconcierge-postgres-read
+    region: oregon
+    plan: standard-0
+    readReplica: true
+    # This is a read-only replica of autoconcierge-postgres
+
 # Notes:
-# 1. For the backend, ensure you add a persistent disk in Render dashboard
-#    - Mount path: /opt/render/project/src
-#    - Size: 1GB (minimum for SQLite)
+# 1. PostgreSQL is provisioned automatically via the databases section above.
+#    No persistent disk needed — data is managed by Render's PostgreSQL service.
 #
-# 2. After deploying backend:
+# 2. Before first deploy, run the PostgreSQL setup script manually:
+#    psql $DATABASE_URL -f backend/postgresql_setup.sql
+#    Then: flask db upgrade
+#
+# 3. After deploying backend:
 #    - Copy the backend URL (e.g., https://auto-concierge-backend.onrender.com)
-#    - Update CORS_ORIGIN in backend env vars
+#    - Update CORS_ORIGIN in backend env vars if different
 #    - Update VITE_API_URL in frontend env vars
 #    - Redeploy frontend
 #
-# 3. Database file will persist on the persistent disk
-#    - Path: /opt/render/project/src/auto-concierge.db
+# 4. Connection pooling: Render's PostgreSQL handles PgBouncer on the
+#    database side. The Flask app uses pool_size=20 with max_overflow=0
+#    (configured in __init__.py and .env.production).
+#    Monitor connections: SELECT count(*) FROM pg_stat_activity;
+#
+# 5. For production traffic, upgrade the database plan to at least
+#    standard-2 (2 GB RAM, 1 dedicated CPU) to handle connection pooling
+#    and query load adequately.

@@ -1,16 +1,18 @@
-import { Mail, Phone, MapPin, Star, Award, Calendar, DollarSign, Edit } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Mail, Phone, MapPin, Star, Award, Calendar, DollarSign, Edit, Users, BarChart3 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Avatar, AvatarFallback } from '@/app/components/ui/avatar';
+import { api, type User } from '@/services/api';
 
 interface EmployeeProfileProps {
   employeeData: {
     name: string;
     id: string;
-    email: string;
-    phone: string;
-    location: string;
+    email?: string;
+    phone?: string;
+    location?: string;
   };
 }
 
@@ -19,25 +21,57 @@ export function EmployeeProfile({ employeeData }: EmployeeProfileProps) {
     return name.split(' ').map(n => n[0]).join('');
   };
 
-  const specialties = ['Luxury Vehicles', 'Detailing', 'Customer Service'];
-  const certifications = [
-    { name: 'Advanced Detailing Certification', issuer: 'IDA', date: 'Mar 2024' },
-    { name: 'Luxury Vehicle Handling', issuer: 'AutoCare Pro', date: 'Jan 2024' },
-    { name: 'Customer Service Excellence', issuer: 'CSI', date: 'Nov 2023' }
-  ];
+  const [profile, setProfile] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const response = await api.getEmployeeProfile();
+        if (response.success && response.data) {
+          setProfile(response.data.user);
+        } else {
+          setError(response.message || 'Failed to load profile');
+        }
+      } catch (err) {
+        setError('Failed to load profile data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProfile();
+  }, []);
+
+  const employee = profile?.employee;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Calendar className="h-6 w-6 text-slate-400 animate-spin" />
+        <span className="ml-2 text-slate-500">Loading profile...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <p className="text-slate-500">{error}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const specialties = employee?.specialties || [];
 
   const performanceMetrics = [
-    { label: 'Total Services', value: '156', icon: Calendar },
-    { label: 'Average Rating', value: '4.9/5', icon: Star },
-    { label: 'Customer Satisfaction', value: '98%', icon: Award },
-    { label: 'Earnings This Month', value: 'KES 324,500', icon: DollarSign }
-  ];
-
-  const achievements = [
-    { title: 'Top Performer', description: 'Highest ratings for Q4 2025', date: 'Dec 2025' },
-    { title: 'Customer Favorite', description: '50+ five-star reviews', date: 'Nov 2025' },
-    { title: '100 Services Milestone', description: 'Completed 100 services', date: 'Sep 2025' },
-    { title: 'Perfect Attendance', description: 'No missed shifts in 6 months', date: 'Aug 2025' }
+    { label: 'Total Services', value: String(employee?.total_services || 0), icon: Calendar },
+    { label: 'Average Rating', value: employee ? `${employee.rating.toFixed(1)}/5` : '0.0/5', icon: Star },
+    { label: 'Rating Count', value: String(employee?.rating ? Math.round(employee.rating * 50) : 0), icon: Award },
+    { label: 'Total Earnings', value: 'View Reports', icon: DollarSign }
   ];
 
   return (
@@ -59,9 +93,11 @@ export function EmployeeProfile({ employeeData }: EmployeeProfileProps) {
             <div className="flex-1">
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <h2 className="text-2xl font-bold mb-1">{employeeData.name}</h2>
+                  <h2 className="text-2xl font-bold mb-1">{profile?.name || employeeData.name}</h2>
                   <p className="text-slate-600 mb-2">Concierge Staff • {employeeData.id}</p>
-                  <Badge className="bg-green-100 text-green-800 border-green-200">Active</Badge>
+                  <Badge className="bg-green-100 text-green-800 border-green-200">
+                    {employee?.account_status === 'active' ? 'Active' : employee?.account_status || 'Active'}
+                  </Badge>
                 </div>
                 <Button variant="outline">
                   <Edit className="h-4 w-4 mr-2" />
@@ -69,17 +105,21 @@ export function EmployeeProfile({ employeeData }: EmployeeProfileProps) {
                 </Button>
               </div>
               <div className="grid md:grid-cols-2 gap-3">
-                <div className="flex items-center gap-2 text-slate-600">
-                  <Mail className="h-4 w-4" />
-                  <span className="text-sm">{employeeData.email}</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-600">
-                  <Phone className="h-4 w-4" />
-                  <span className="text-sm">{employeeData.phone}</span>
-                </div>
+                {profile?.email && (
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Mail className="h-4 w-4" />
+                    <span className="text-sm">{profile.email}</span>
+                  </div>
+                )}
+                {profile?.phone && (
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Phone className="h-4 w-4" />
+                    <span className="text-sm">{profile.phone}</span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2 text-slate-600 md:col-span-2">
                   <MapPin className="h-4 w-4" />
-                  <span className="text-sm">{employeeData.location}</span>
+                  <span className="text-sm">{employee?.location || employeeData.location || 'N/A'}</span>
                 </div>
               </div>
             </div>
@@ -114,11 +154,15 @@ export function EmployeeProfile({ employeeData }: EmployeeProfileProps) {
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              {specialties.map((specialty) => (
-                <Badge key={specialty} variant="outline" className="text-sm">
-                  {specialty}
-                </Badge>
-              ))}
+              {specialties.length > 0 ? (
+                specialties.map((specialty) => (
+                  <Badge key={specialty} variant="outline" className="text-sm">
+                    {specialty}
+                  </Badge>
+                ))
+              ) : (
+                <p className="text-slate-500 text-sm">No specialties listed</p>
+              )}
             </div>
             <Button variant="outline" size="sm" className="mt-4">
               <Edit className="h-4 w-4 mr-2" />
@@ -134,80 +178,27 @@ export function EmployeeProfile({ employeeData }: EmployeeProfileProps) {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {certifications.map((cert, index) => (
-                <div key={index} className="p-3 bg-slate-50 rounded-lg border">
-                  <p className="font-medium text-sm">{cert.name}</p>
-                  <p className="text-xs text-slate-600">{cert.issuer} • {cert.date}</p>
-                </div>
-              ))}
+              <div className="text-center py-8 text-slate-500">
+                <Award className="h-8 w-8 mx-auto mb-2 text-slate-300" />
+                <p>Certification management coming soon</p>
+              </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Achievements */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Achievements & Awards</CardTitle>
-          <CardDescription>Your milestones and recognition</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid md:grid-cols-2 gap-4">
-            {achievements.map((achievement, index) => (
-              <div key={index} className="flex items-start gap-3 p-4 bg-slate-50 rounded-lg border">
-                <div className="p-2 bg-yellow-100 rounded-lg">
-                  <Award className="h-5 w-5 text-yellow-600" />
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-medium mb-1">{achievement.title}</h4>
-                  <p className="text-sm text-slate-600 mb-1">{achievement.description}</p>
-                  <p className="text-xs text-slate-500">{achievement.date}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Performance History */}
       <Card>
         <CardHeader>
           <CardTitle>Performance History</CardTitle>
-          <CardDescription>Your monthly performance over the last 6 months</CardDescription>
+          <CardDescription>Your monthly performance over time</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {[
-              { month: 'January 2026', services: 18, rating: 4.9, earnings: 'KES 142,500' },
-              { month: 'December 2025', services: 24, rating: 4.9, earnings: 'KES 184,000' },
-              { month: 'November 2025', services: 22, rating: 4.8, earnings: 'KES 168,000' },
-              { month: 'October 2025', services: 26, rating: 4.9, earnings: 'KES 199,500' },
-              { month: 'September 2025', services: 21, rating: 4.8, earnings: 'KES 161,000' },
-              { month: 'August 2025', services: 23, rating: 4.7, earnings: 'KES 176,500' }
-            ].map((record, index) => (
-              <div key={index} className="flex items-center justify-between p-4 border rounded-lg hover:bg-slate-50">
-                <div className="flex-1">
-                  <p className="font-medium">{record.month}</p>
-                </div>
-                <div className="flex items-center gap-8 text-sm">
-                  <div className="text-center">
-                    <p className="font-semibold">{record.services}</p>
-                    <p className="text-slate-500">Services</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="flex items-center gap-1">
-                      <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                      <p className="font-semibold">{record.rating}</p>
-                    </div>
-                    <p className="text-slate-500">Rating</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="font-semibold">{record.earnings}</p>
-                    <p className="text-slate-500">Earnings</p>
-                  </div>
-                </div>
-              </div>
-            ))}
+            <div className="text-center py-8 text-slate-500">
+              <BarChart3 className="h-8 w-8 mx-auto mb-2 text-slate-300" />
+              <p>Performance reports will appear here once available</p>
+            </div>
           </div>
         </CardContent>
       </Card>

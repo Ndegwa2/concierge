@@ -9,7 +9,7 @@ from app import db
 from app.models import AuditLog, SystemMetric, ActivityTracker, User, Appointment, Service, Employee
 from app.utils.decorators import admin_required, get_current_user
 from app.utils.audit import log_audit, track_activity
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import func
 
 monitoring_bp = Blueprint('monitoring', __name__)
@@ -224,7 +224,7 @@ def get_activities():
 def get_online_users():
     """Get currently online users (active in last 15 minutes)"""
     try:
-        threshold = datetime.utcnow() - timedelta(minutes=15)
+        threshold = datetime.now(timezone.utc) - timedelta(minutes=15)
         
         # Get unique users with recent activity
         online_users = db.session.query(
@@ -285,7 +285,7 @@ def get_system_metrics():
     """Get system metrics (admin only)"""
     try:
         # Get date range (default to last 30 days)
-        end_date = datetime.utcnow()
+        end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=30)
         
         start_date_str = request.args.get('start_date')
@@ -328,9 +328,9 @@ def get_system_metrics():
 def get_dashboard_metrics():
     """Get dashboard statistics (admin only)"""
     try:
-        today = datetime.utcnow().date()
+        today = datetime.now(timezone.utc).date()
         start_of_month = datetime(today.year, today.month, 1)
-        start_of_week = datetime.utcnow() - timedelta(days=7)
+        start_of_week = datetime.now(timezone.utc) - timedelta(days=7)
         
         # User statistics
         total_users = User.query.filter_by(is_active=True).count()
@@ -372,7 +372,7 @@ def get_dashboard_metrics():
         total_services = Service.query.filter_by(is_active=True).count()
         
         # Activity statistics (last 24 hours)
-        activity_threshold = datetime.utcnow() - timedelta(hours=24)
+        activity_threshold = datetime.now(timezone.utc) - timedelta(hours=24)
         api_calls_24h = ActivityTracker.query.filter(
             ActivityTracker.created_at >= activity_threshold,
             ActivityTracker.activity_type == 'api_call'
@@ -432,7 +432,7 @@ def get_revenue_metrics():
     """Get revenue metrics over time (admin only)"""
     try:
         # Get date range
-        end_date = datetime.utcnow()
+        end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=30)
         
         start_date_str = request.args.get('start_date')
@@ -491,7 +491,7 @@ def get_performance_metrics():
     """Get API performance metrics (admin only)"""
     try:
         # Get average response times by endpoint
-        threshold = datetime.utcnow() - timedelta(hours=24)
+        threshold = datetime.now(timezone.utc) - timedelta(hours=24)
         
         performance_data = db.session.query(
             ActivityTracker.activity_details['endpoint'].astext.label('endpoint'),
@@ -544,7 +544,7 @@ def health_check():
         return jsonify({
             'success': True,
             'status': 'healthy',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'services': {
                 'database': 'healthy'
             }
@@ -554,7 +554,7 @@ def health_check():
         return jsonify({
             'success': False,
             'status': 'unhealthy',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'error': str(e)
         }), 503
 
@@ -567,7 +567,7 @@ def detailed_health_check():
     try:
         health_status = {
             'database': 'healthy',
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': datetime.now(timezone.utc).isoformat()
         }
         
         # Check database
@@ -587,7 +587,7 @@ def detailed_health_check():
         # Get recent errors
         recent_errors = AuditLog.query.filter(
             AuditLog.status == 'error',
-            AuditLog.created_at >= datetime.utcnow() - timedelta(hours=1)
+            AuditLog.created_at >= datetime.now(timezone.utc) - timedelta(hours=1)
         ).count()
         
         health_status['recent_errors_1h'] = recent_errors

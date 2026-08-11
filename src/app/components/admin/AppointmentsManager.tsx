@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Filter, Download, Eye, Edit, Trash2, Phone, Mail } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
@@ -6,108 +6,70 @@ import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
+import { api } from '@/services/api';
+import type { Appointment, User, Vehicle, Service } from '@/services/api';
+
+interface AppointmentRow extends Appointment {
+  customer_name?: string;
+  customer_phone?: string;
+  customer_email?: string;
+  vehicle_info?: string;
+  service_name?: string;
+}
 
 export function AppointmentsManager() {
+  const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  const appointments = [
-    {
-      id: 'A-1001',
-      customer: 'Kwame Juma',
-      phone: '+254 712-0101',
-      email: 'kwame@example.com',
-      service: 'Premium Car Wash',
-      vehicle: 'Tesla Model 3 (2023)',
-      date: 'Jan 27, 2026',
-      time: '10:30 AM',
-      location: '123 Kenyatta Ave, Nairobi CBD',
-      concierge: 'Obi Okafor',
-      status: 'in-progress',
-      price: 'KES 4,500'
-    },
-    {
-      id: 'A-1002',
-      customer: 'Mike Awour',
-      phone: '+254 723-0102',
-      email: 'ngozi@example.com',
-      service: 'Oil Change',
-      vehicle: 'BMW 5 Series (2022)',
-      date: 'Jan 27, 2026',
-      time: '2:00 PM',
-      location: '456 Moi Ave, Westlands',
-      concierge: 'Amara Diallo',
-      status: 'scheduled',
-      price: 'KES 7,500'
-    },
-    {
-      id: 'A-1003',
-      customer: 'Kofi Kiptoo',
-      phone: '+254 734-0103',
-      email: 'kofi@example.com',
-      service: 'Full Detailing',
-      vehicle: 'Mercedes E-Class (2021)',
-      date: 'Jan 27, 2026',
-      time: '9:00 AM',
-      location: '789 Uhuru Hwy, Kilimani',
-      concierge: 'Fatou Ndiaye',
-      status: 'in-progress',
-      price: 'KES 22,500'
-    },
-    {
-      id: 'A-1004',
-      customer: 'Amina mohammed',
-      phone: '+254 745-0104',
-      email: 'amina@example.com',
-      service: 'Tire Rotation',
-      vehicle: 'Audi A4 (2023)',
-      date: 'Jan 27, 2026',
-      time: '4:30 PM',
-      location: '321 Waiyaki Way, Lavington',
-      concierge: 'Unassigned',
-      status: 'pending',
-      price: 'KES 4,000'
-    },
-    {
-      id: 'A-1005',
-      customer: 'Chris Munene',
-      phone: '+254 756-0105',
-      email: 'chinedu@example.com',
-      service: 'Vehicle Inspection',
-      vehicle: 'Honda Accord (2020)',
-      date: 'Jan 26, 2026',
-      time: '11:00 AM',
-      location: '654 Ngong Rd, Karen',
-      concierge: 'Amina Okonkwo',
-      status: 'completed',
-      price: 'KES 8,500'
-    },
-    {
-      id: 'A-1006',
-      customer: 'Fatou Ndiaye',
-      phone: '+254 767-0106',
-      email: 'fatou@example.com',
-      service: 'Brake Service',
-      vehicle: 'Toyota Camry (2019)',
-      date: 'Jan 28, 2026',
-      time: '8:00 AM',
-      location: '987 Thika Rd, Runda',
-      concierge: 'Obi Okafor',
-      status: 'scheduled',
-      price: 'KES 17,500'
+  useEffect(() => {
+    fetchAppointments();
+  }, []);
+
+  const fetchAppointments = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await api.getAllAppointmentsAdmin();
+      if (response.success && response.data) {
+        const enriched = (response.data.appointments || []).map((apt: Appointment) => {
+          const customer = apt.customer as User | undefined;
+          const vehicle = apt.vehicle as Vehicle | undefined;
+          const service = apt.service as Service | undefined;
+          return {
+            ...apt,
+            customer_name: customer?.name || `Customer #${apt.user_id}`,
+            customer_phone: customer?.phone || '',
+            customer_email: customer?.email || '',
+            vehicle_info: vehicle ? `${vehicle.make} ${vehicle.model} (${vehicle.year})` : `Vehicle #${apt.vehicle_id}`,
+            service_name: service?.name || `Service #${apt.service_id}`,
+          };
+        });
+        setAppointments(enriched);
+      }
+    } catch (err) {
+      setError('Failed to load appointments');
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'in-progress':
         return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'scheduled':
+      case 'confirmed':
         return 'bg-green-100 text-green-800 border-green-200';
       case 'pending':
         return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'completed':
         return 'bg-slate-100 text-slate-800 border-slate-200';
+      case 'cancelled':
+        return 'bg-red-100 text-red-800 border-red-200';
       default:
         return 'bg-slate-100 text-slate-800 border-slate-200';
     }
@@ -119,14 +81,46 @@ export function AppointmentsManager() {
 
   const filteredAppointments = appointments.filter(appointment => {
     const matchesSearch = 
-      appointment.customer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      appointment.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      appointment.vehicle.toLowerCase().includes(searchQuery.toLowerCase());
+      appointment.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      appointment.id.toString().includes(searchQuery) ||
+      appointment.vehicle_info?.toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesStatus = statusFilter === 'all' || appointment.status === statusFilter;
     
     return matchesSearch && matchesStatus;
   });
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Appointments Manager</h1>
+          <p className="text-slate-600">Loading appointments...</p>
+        </div>
+        <Card>
+          <CardContent className="py-8">
+            <div className="animate-pulse space-y-4">
+              <div className="h-10 bg-slate-200 rounded"></div>
+              <div className="h-10 bg-slate-200 rounded"></div>
+              <div className="h-10 bg-slate-200 rounded"></div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Appointments Manager</h1>
+          <p className="text-red-600">{error}</p>
+          <Button onClick={fetchAppointments} className="mt-4">Retry</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -157,13 +151,15 @@ export function AppointmentsManager() {
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="scheduled">Scheduled</SelectItem>
+                <SelectItem value="confirmed">Confirmed</SelectItem>
                 <SelectItem value="in-progress">In Progress</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline">
+            <Button variant="outline" onClick={fetchAppointments}>
               <Download className="h-4 w-4 mr-2" />
-              Export
+              Refresh
             </Button>
           </div>
         </CardContent>
@@ -180,67 +176,77 @@ export function AppointmentsManager() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Service</TableHead>
-                  <TableHead>Vehicle</TableHead>
-                  <TableHead>Date & Time</TableHead>
-                  <TableHead>Concierge</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredAppointments.map((appointment) => (
-                  <TableRow key={appointment.id}>
-                    <TableCell className="font-medium">{appointment.id}</TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{appointment.customer}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Phone className="h-3 w-3 text-slate-400" />
-                          <p className="text-xs text-slate-500">{appointment.phone}</p>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>{appointment.service}</TableCell>
-                    <TableCell className="text-sm">{appointment.vehicle}</TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="text-sm">{appointment.date}</p>
-                        <p className="text-xs text-slate-500">{appointment.time}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>{appointment.concierge}</TableCell>
-                    <TableCell>
-                      <Badge className={getStatusColor(appointment.status)}>
-                        {getStatusLabel(appointment.status)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="font-semibold">{appointment.price}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button variant="ghost" size="sm">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm">
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm">
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </Button>
-                      </div>
-                    </TableCell>
+          {filteredAppointments.length === 0 ? (
+            <p className="text-slate-500 text-center py-8">No appointments found</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Service</TableHead>
+                    <TableHead>Vehicle</TableHead>
+                    <TableHead>Date & Time</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Price</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {filteredAppointments.map((appointment) => (
+                    <TableRow key={appointment.id}>
+                      <TableCell className="font-medium">#{appointment.id}</TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{appointment.customer_name}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Mail className="h-3 w-3 text-slate-400" />
+                            <p className="text-xs text-slate-500">{appointment.customer_email}</p>
+                          </div>
+                          {appointment.customer_phone && (
+                            <div className="flex items-center gap-2 mt-1">
+                              <Phone className="h-3 w-3 text-slate-400" />
+                              <p className="text-xs text-slate-500">{appointment.customer_phone}</p>
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>{appointment.service_name}</TableCell>
+                      <TableCell className="text-sm">{appointment.vehicle_info}</TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="text-sm">{new Date(appointment.appointment_date).toLocaleDateString()}</p>
+                          <p className="text-xs text-slate-500">{new Date(appointment.appointment_date).toLocaleTimeString()}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={getStatusColor(appointment.status)}>
+                          {getStatusLabel(appointment.status)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-semibold">
+                        {appointment.total_amount ? `KES ${Number(appointment.total_amount).toLocaleString()}` : '-'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button variant="ghost" size="sm">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm">
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

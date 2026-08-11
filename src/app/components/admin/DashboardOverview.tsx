@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { 
   TrendingUp, 
   Calendar, 
@@ -11,90 +12,73 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
+import { api } from '@/services/api';
+import type { Appointment } from '@/services/api';
 
-export function DashboardOverview() {
-  const stats = [
-    {
-      title: 'Total Revenue',
-      value: 'KES 4,523,100',
-      change: '+12.5%',
-      trend: 'up',
-      icon: DollarSign,
-      description: 'vs last month'
-    },
-    {
-      title: 'Active Appointments',
-      value: '23',
-      change: '+5',
-      trend: 'up',
-      icon: Calendar,
-      description: 'ongoing services'
-    },
-    {
-      title: 'Total Customers',
-      value: '1,234',
-      change: '+8.2%',
-      trend: 'up',
-      icon: Users,
-      description: 'vs last month'
-    },
-    {
-      title: 'Avg. Service Time',
-      value: '2.4 hrs',
-      change: '-15 min',
-      trend: 'down',
-      icon: Clock,
-      description: 'improvement'
-    }
-  ];
+interface DashboardStats {
+  total_users: number;
+  total_services: number;
+  total_vehicles: number;
+  total_appointments: number;
+  active_appointments: number;
+  completed_appointments: number;
+  total_revenue: number;
+}
 
-  const recentAppointments = [
-    {
-      id: 'A-1001',
-      customer: 'Kwame Asante',
-      service: 'Premium Car Wash',
-      vehicle: 'Tesla Model 3',
-      concierge: 'Obi Okafor',
-      status: 'in-progress',
-      time: '10:30 AM'
-    },
-    {
-      id: 'A-1002',
-      customer: 'Ngozi Adeyemi',
-      service: 'Oil Change',
-      vehicle: 'BMW 5 Series',
-      concierge: 'Amara Diallo',
-      status: 'scheduled',
-      time: '2:00 PM'
-    },
-    {
-      id: 'A-1003',
-      customer: 'Kofi Mensah',
-      service: 'Full Detailing',
-      vehicle: 'Mercedes E-Class',
-      concierge: 'Fatou Ndiaye',
-      status: 'in-progress',
-      time: '9:00 AM'
-    },
-    {
-      id: 'A-1004',
-      customer: 'Amina Okonkwo',
-      service: 'Tire Rotation',
-      vehicle: 'Audi A4',
-      concierge: 'Pending',
-      status: 'pending',
-      time: '4:30 PM'
+interface DashboardOverviewProps {}
+
+export function DashboardOverview({}: DashboardOverviewProps) {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [recentAppointments, setRecentAppointments] = useState<Appointment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [dashboardResponse, appointmentsResponse] = await Promise.all([
+        api.getAdminDashboard(),
+        api.getAllAppointmentsAdmin(),
+      ]);
+
+      if (dashboardResponse.success && dashboardResponse.data) {
+        setStats(dashboardResponse.data.statistics);
+        setRecentAppointments(dashboardResponse.data.recent_appointments || []);
+      }
+
+      if (appointmentsResponse.success && appointmentsResponse.data) {
+        const allAppointments = appointmentsResponse.data.appointments || [];
+        const sorted = allAppointments
+          .sort((a, b) => new Date(b.appointment_date).getTime() - new Date(a.appointment_date).getTime())
+          .slice(0, 5);
+        setRecentAppointments(sorted);
+      }
+    } catch (err) {
+      setError('Failed to load dashboard data');
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'in-progress':
         return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'scheduled':
+      case 'confirmed':
         return 'bg-green-100 text-green-800 border-green-200';
       case 'pending':
         return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'completed':
+        return 'bg-slate-100 text-slate-800 border-slate-200';
+      case 'cancelled':
+        return 'bg-red-100 text-red-800 border-red-200';
       default:
         return 'bg-slate-100 text-slate-800 border-slate-200';
     }
@@ -103,6 +87,77 @@ export function DashboardOverview() {
   const getStatusLabel = (status: string) => {
     return status.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   };
+
+  if (loading) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Dashboard Overview</h1>
+          <p className="text-slate-600">Loading dashboard data...</p>
+        </div>
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i} className="animate-pulse">
+              <CardHeader className="pb-2">
+                <div className="h-4 bg-slate-200 rounded w-1/2"></div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-8 bg-slate-200 rounded w-1/3 mb-2"></div>
+                <div className="h-4 bg-slate-200 rounded w-2/3"></div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Dashboard Overview</h1>
+          <p className="text-red-600">{error}</p>
+          <Button onClick={fetchDashboardData} className="mt-4">Retry</Button>
+        </div>
+      </div>
+    );
+  }
+
+  const statCards = stats ? [
+    {
+      title: 'Total Revenue',
+      value: `KES ${stats.total_revenue.toLocaleString()}`,
+      change: '+12.5%',
+      trend: 'up' as const,
+      icon: DollarSign,
+      description: 'all time'
+    },
+    {
+      title: 'Total Appointments',
+      value: stats.total_appointments.toString(),
+      change: '+5',
+      trend: 'up' as const,
+      icon: Calendar,
+      description: 'all time'
+    },
+    {
+      title: 'Total Customers',
+      value: stats.total_users.toLocaleString(),
+      change: '+8.2%',
+      trend: 'up' as const,
+      icon: Users,
+      description: 'all time'
+    },
+    {
+      title: 'Active Appointments',
+      value: stats.active_appointments.toString(),
+      change: `${stats.completed_appointments} completed`,
+      trend: 'up' as const,
+      icon: Clock,
+      description: 'currently ongoing'
+    }
+  ] : [];
 
   return (
     <div className="space-y-8">
@@ -113,7 +168,7 @@ export function DashboardOverview() {
 
       {/* Stats Grid */}
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat) => {
+        {statCards.map((stat) => {
           const Icon = stat.icon;
           const isPositive = stat.trend === 'up';
           return (
@@ -156,28 +211,32 @@ export function DashboardOverview() {
                 <Clock className="h-4 w-4 text-slate-500" />
                 <span className="text-sm">Pending</span>
               </div>
-              <span className="font-semibold">8</span>
+              <span className="font-semibold">
+                {recentAppointments.filter(a => a.status === 'scheduled' || a.status === 'pending').length}
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-blue-500" />
                 <span className="text-sm">In Progress</span>
               </div>
-              <span className="font-semibold">15</span>
+              <span className="font-semibold">
+                {recentAppointments.filter(a => a.status === 'in-progress' || a.status === 'confirmed').length}
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
                 <span className="text-sm">Completed</span>
               </div>
-              <span className="font-semibold">42</span>
+              <span className="font-semibold">{stats?.completed_appointments ?? 0}</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <AlertCircle className="h-4 w-4 text-red-500" />
                 <span className="text-sm">Issues</span>
               </div>
-              <span className="font-semibold">2</span>
+              <span className="font-semibold">0</span>
             </div>
           </CardContent>
         </Card>
@@ -189,59 +248,50 @@ export function DashboardOverview() {
             <CardDescription>Latest service bookings and their status</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {recentAppointments.map((appointment) => (
-                <div key={appointment.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-medium text-sm">{appointment.customer}</span>
-                      <span className="text-xs text-slate-500">#{appointment.id}</span>
+            {recentAppointments.length === 0 ? (
+              <p className="text-slate-500 text-center py-4">No recent appointments</p>
+            ) : (
+              <div className="space-y-4">
+                {recentAppointments.map((appointment) => (
+                  <div key={appointment.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-medium text-sm">
+                          {appointment.customer?.name || `Customer #${appointment.user_id}`}
+                        </span>
+                        <span className="text-xs text-slate-500">#{appointment.id}</span>
+                      </div>
+                      <p className="text-sm text-slate-600">
+                        {appointment.service?.name || `Service #${appointment.service_id}`} - {appointment.vehicle?.make} {appointment.vehicle?.model}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {new Date(appointment.appointment_date).toLocaleString()}
+                      </p>
                     </div>
-                    <p className="text-sm text-slate-600">{appointment.service} - {appointment.vehicle}</p>
-                    <p className="text-xs text-slate-500 mt-1">Concierge: {appointment.concierge}</p>
+                    <div className="text-right space-y-2">
+                      <Badge className={getStatusColor(appointment.status)}>
+                        {getStatusLabel(appointment.status)}
+                      </Badge>
+                      {appointment.total_amount && (
+                        <p className="text-xs text-slate-500">KES {Number(appointment.total_amount).toLocaleString()}</p>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-right space-y-2">
-                    <Badge className={getStatusColor(appointment.status)}>
-                      {getStatusLabel(appointment.status)}
-                    </Badge>
-                    <p className="text-xs text-slate-500">{appointment.time}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Top Performers */}
+      {/* Top Performers - placeholder until we have employee stats endpoint */}
       <Card>
         <CardHeader>
           <CardTitle>Top Performing Concierges</CardTitle>
           <CardDescription>Based on completed services this month</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {[
-              { name: 'Kwame Asante', services: 156, rating: 4.9, revenue: 'KES 1,245,000' },
-              { name: 'Ngozi Adeyemi', services: 142, rating: 4.8, revenue: 'KES 1,132,000' },
-              { name: 'Obi Okafor', services: 138, rating: 4.9, revenue: 'KES 1,098,000' },
-              { name: 'Amara Diallo', services: 125, rating: 4.7, revenue: 'KES 987,500' }
-            ].map((concierge, index) => (
-              <div key={concierge.name} className="flex items-center gap-4">
-                <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-semibold">
-                  {index + 1}
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium">{concierge.name}</p>
-                  <p className="text-sm text-slate-500">{concierge.services} services completed</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-semibold">{concierge.revenue}</p>
-                  <p className="text-sm text-slate-500">★ {concierge.rating}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+          <p className="text-slate-500 text-center py-4">Employee performance data will appear here once available.</p>
         </CardContent>
       </Card>
     </div>

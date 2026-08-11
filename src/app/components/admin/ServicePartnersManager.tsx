@@ -1,98 +1,42 @@
-import { useState } from 'react';
-import { Search, Plus, Star, MapPin, Phone, Mail } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, Star, MapPin, Phone, Mail } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
+import { api } from '@/services/api';
+import type { ServicePartner } from '@/services/api';
 
 export function ServicePartnersManager() {
+  const [partners, setPartners] = useState<ServicePartner[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const partners = [
-    {
-      id: 'SP-001',
-      name: 'Premium Auto Spa',
-      type: 'Car Wash & Detailing',
-      location: 'Westlands, 456 Parklands Rd',
-      phone: '+254 720-2001',
-      email: 'info@premiumautospa.co.ke',
-      rating: 4.8,
-      totalServices: 234,
-      activeContracts: 3,
-      pricing: 'Standard',
-      specialties: ['Premium Wash', 'Full Detailing', 'Paint Protection']
-    },
-    {
-      id: 'SP-002',
-      name: 'Precision Mechanics',
-      type: 'Full Service Garage',
-      location: 'Industrial Area, 789 Enterprise Rd',
-      phone: '+254 721-2002',
-      email: 'service@precisionmech.co.ke',
-      rating: 4.9,
-      totalServices: 456,
-      activeContracts: 5,
-      pricing: 'Premium',
-      specialties: ['Oil Change', 'Brake Service', 'Engine Diagnostics', 'Transmission']
-    },
-    {
-      id: 'SP-003',
-      name: 'Quick Lube Express',
-      type: 'Oil Change Specialist',
-      location: 'Kilimani, 321 Argwings Kodhek Rd',
-      phone: '+254 722-2003',
-      email: 'contact@quicklube.co.ke',
-      rating: 4.6,
-      totalServices: 567,
-      activeContracts: 4,
-      pricing: 'Budget',
-      specialties: ['Oil Change', 'Filter Replacement', 'Fluid Checks']
-    },
-    {
-      id: 'SP-004',
-      name: 'Elite Auto Care',
-      type: 'Luxury Vehicle Service',
-      location: 'Karen, 654 Karen Rd',
-      phone: '+254 723-2004',
-      email: 'concierge@eliteauto.co.ke',
-      rating: 4.9,
-      totalServices: 189,
-      activeContracts: 6,
-      pricing: 'Premium',
-      specialties: ['Luxury Brands', 'Exotic Cars', 'Full Service', 'Detailing']
-    },
-    {
-      id: 'SP-005',
-      name: 'Tire Masters Pro',
-      type: 'Tire & Wheel Specialist',
-      location: 'Lavington, 987 James Gichuru Rd',
-      phone: '+254 724-2005',
-      email: 'service@tiremasters.co.ke',
-      rating: 4.7,
-      totalServices: 345,
-      activeContracts: 3,
-      pricing: 'Standard',
-      specialties: ['Tire Rotation', 'Alignment', 'Balancing', 'New Tires']
-    },
-    {
-      id: 'SP-006',
-      name: 'City Auto Inspection',
-      type: 'Vehicle Inspection',
-      location: 'CBD, 147 Haile Selassie Ave',
-      phone: '+254 725-2006',
-      email: 'inspections@cityauto.co.ke',
-      rating: 4.8,
-      totalServices: 423,
-      activeContracts: 2,
-      pricing: 'Standard',
-      specialties: ['Safety Inspection', 'Emissions', 'Pre-Purchase', 'Diagnostics']
+  useEffect(() => {
+    fetchPartners();
+  }, []);
+
+  const fetchPartners = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await api.getAllPartnersAdmin();
+      if (response.success && response.data) {
+        setPartners(response.data.partners || []);
+      }
+    } catch (err) {
+      setError('Failed to load service partners');
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
   const filteredPartners = partners.filter(partner =>
     partner.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    partner.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    partner.location.toLowerCase().includes(searchQuery.toLowerCase())
+    partner.contact_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (partner.address?.city || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const getPricingColor = (pricing: string) => {
@@ -108,6 +52,38 @@ export function ServicePartnersManager() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Service Partners</h1>
+          <p className="text-slate-600">Loading partners...</p>
+        </div>
+        <Card>
+          <CardContent className="py-8">
+            <div className="animate-pulse space-y-4">
+              <div className="h-10 bg-slate-200 rounded"></div>
+              <div className="h-10 bg-slate-200 rounded"></div>
+              <div className="h-10 bg-slate-200 rounded"></div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Service Partners</h1>
+          <p className="text-red-600">{error}</p>
+          <Button onClick={fetchPartners} className="mt-4">Retry</Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -115,9 +91,9 @@ export function ServicePartnersManager() {
           <h1 className="text-3xl font-bold mb-2">Service Partners</h1>
           <p className="text-slate-600">Manage your network of trusted service providers</p>
         </div>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Partner
+        <Button onClick={fetchPartners}>
+          <Search className="h-4 w-4 mr-2" />
+          Refresh
         </Button>
       </div>
 
@@ -146,96 +122,115 @@ export function ServicePartnersManager() {
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">23</div>
-            <p className="text-sm text-slate-600">Active Contracts</p>
+            <div className="text-2xl font-bold">
+              {partners.filter(p => p.is_active).length}
+            </div>
+            <p className="text-sm text-slate-600">Active Partners</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">4.8</div>
+            <div className="text-2xl font-bold">
+              {partners.length > 0
+                ? (partners.reduce((sum, p) => sum + (p.rating || 0), 0) / partners.length).toFixed(1)
+                : '0.0'}
+            </div>
             <p className="text-sm text-slate-600">Avg. Rating</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">2,214</div>
+            <div className="text-2xl font-bold">
+              {partners.reduce((sum, p) => sum + (p.total_services || 0), 0).toLocaleString()}
+            </div>
             <p className="text-sm text-slate-600">Total Services</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Partners Grid */}
-      <div className="grid md:grid-cols-2 gap-6">
-        {filteredPartners.map((partner) => (
-          <Card key={partner.id} className="hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="text-lg">{partner.name}</CardTitle>
-                  <CardDescription>{partner.type}</CardDescription>
+      {filteredPartners.length === 0 ? (
+        <Card>
+          <CardContent className="text-center py-8">
+            <p className="text-slate-500">No service partners found</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid md:grid-cols-2 gap-6">
+          {filteredPartners.map((partner) => (
+            <Card key={partner.id} className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <CardTitle className="text-lg">{partner.name}</CardTitle>
+                    <CardDescription>{partner.contact_name || 'No contact name'}</CardDescription>
+                  </div>
+                  <Badge className={getPricingColor('Standard')}>
+                    Standard
+                  </Badge>
                 </div>
-                <Badge className={getPricingColor(partner.pricing)}>
-                  {partner.pricing}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2 text-slate-600">
-                  <MapPin className="h-4 w-4" />
-                  <span>{partner.location}</span>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <MapPin className="h-4 w-4" />
+                    <span>
+                      {partner.address?.street || ''}
+                      {partner.address?.city ? `, ${partner.address.city}` : ''}
+                    </span>
+                  </div>
+                  {partner.phone && (
+                    <div className="flex items-center gap-2 text-slate-600">
+                      <Phone className="h-4 w-4" />
+                      <span>{partner.phone}</span>
+                    </div>
+                  )}
+                  {partner.email && (
+                    <div className="flex items-center gap-2 text-slate-600">
+                      <Mail className="h-4 w-4" />
+                      <span>{partner.email}</span>
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-2 text-slate-600">
-                  <Phone className="h-4 w-4" />
-                  <span>{partner.phone}</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-600">
-                  <Mail className="h-4 w-4" />
-                  <span>{partner.email}</span>
-                </div>
-              </div>
 
-              <div className="pt-4 border-t space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600">Rating</span>
-                  <div className="flex items-center gap-1">
-                    <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                    <span className="font-semibold">{partner.rating}</span>
+                <div className="pt-4 border-t space-y-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-600">Rating</span>
+                    <div className="flex items-center gap-1">
+                      <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                      <span className="font-semibold">{partner.rating.toFixed(1)}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-600">Total Services</span>
+                    <span className="font-semibold">{partner.total_services}</span>
                   </div>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600">Total Services</span>
-                  <span className="font-semibold">{partner.totalServices}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600">Active Contracts</span>
-                  <span className="font-semibold">{partner.activeContracts}</span>
-                </div>
-              </div>
 
-              <div className="pt-4 border-t">
-                <p className="text-sm text-slate-600 mb-2">Specialties</p>
-                <div className="flex flex-wrap gap-2">
-                  {partner.specialties.map((specialty) => (
-                    <Badge key={specialty} variant="outline" className="text-xs">
-                      {specialty}
-                    </Badge>
-                  ))}
+                <div className="pt-4 border-t">
+                  <p className="text-sm text-slate-600 mb-2">Services Offered</p>
+                  <div className="flex flex-wrap gap-2">
+                    {(partner.services_offered || []).map((specialty, index) => (
+                      <Badge key={index} variant="outline" className="text-xs">
+                        {specialty}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex gap-2 pt-4">
-                <Button variant="outline" className="flex-1" size="sm">
-                  View Details
-                </Button>
-                <Button variant="outline" size="sm">
-                  Contact
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                <div className="flex gap-2 pt-4">
+                  <Button variant="outline" className="flex-1" size="sm">
+                    View Details
+                  </Button>
+                  <Button variant="outline" size="sm">
+                    Contact
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Filter, MapPin, Phone, Navigation, CheckCircle2, Clock } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
@@ -6,6 +6,8 @@ import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
+import { api } from '@/services/api';
+import type { Assignment } from '@/services/api';
 
 interface MyAssignmentsProps {
   employeeData: {
@@ -14,87 +16,66 @@ interface MyAssignmentsProps {
   };
 }
 
+interface AssignmentDisplay {
+  id: string;
+  customer: string;
+  phone: string;
+  service: string;
+  vehicle: string;
+  pickupLocation: string;
+  serviceLocation: string;
+  date: string;
+  time: string;
+  status: string;
+  estimatedDuration: string;
+  specialInstructions?: string;
+  price: string;
+}
+
 export function MyAssignments({ employeeData }: MyAssignmentsProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [assignments, setAssignments] = useState<AssignmentDisplay[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const assignments = [
-    {
-      id: 'A-1001',
-      customer: 'Kwame Asante',
-      phone: '+254 712-0101',
-      service: 'Premium Car Wash',
-      vehicle: 'Tesla Model 3 (2023)',
-      pickupLocation: '123 Kenyatta Ave, Nairobi CBD',
-      serviceLocation: 'Premium Auto Spa',
-      date: 'Jan 26, 2026',
-      time: '10:30 AM',
-      status: 'in-progress',
-      estimatedDuration: '45 min',
-      specialInstructions: 'Customer prefers eco-friendly products',
-      price: 'KES 4,500'
-    },
-    {
-      id: 'A-1007',
-      customer: 'Ngozi Adeyemi',
-      phone: '+254 723-0107',
-      service: 'Oil Change',
-      vehicle: 'Honda Civic (2021)',
-      pickupLocation: '789 Moi Ave, Westlands',
-      serviceLocation: 'Quick Lube Express',
-      date: 'Jan 26, 2026',
-      time: '1:00 PM',
-      status: 'scheduled',
-      estimatedDuration: '60 min',
-      specialInstructions: 'Need synthetic oil',
-      price: 'KES 7,500'
-    },
-    {
-      id: 'A-1012',
-      customer: 'Kofi Mensah',
-      phone: '+254 734-0112',
-      service: 'Tire Rotation',
-      vehicle: 'Ford F-150 (2022)',
-      pickupLocation: '456 Uhuru Hwy, Kilimani',
-      serviceLocation: 'Tire Masters Pro',
-      date: 'Jan 26, 2026',
-      time: '3:30 PM',
-      status: 'scheduled',
-      estimatedDuration: '40 min',
-      specialInstructions: 'Check tire pressure',
-      price: 'KES 4,000'
-    },
-    {
-      id: 'A-0998',
-      customer: 'Amina Okonkwo',
-      phone: '+254 745-0098',
-      service: 'Full Detailing',
-      vehicle: 'BMW X5 (2023)',
-      pickupLocation: '321 Waiyaki Way, Lavington',
-      serviceLocation: 'Elite Auto Care',
-      date: 'Jan 25, 2026',
-      time: '2:00 PM',
-      status: 'completed',
-      estimatedDuration: '120 min',
-      specialInstructions: 'Interior leather treatment requested',
-      price: 'KES 22,500'
-    },
-    {
-      id: 'A-0995',
-      customer: 'Chinedu Eze',
-      phone: '+254 756-0095',
-      service: 'Vehicle Inspection',
-      vehicle: 'Toyota Camry (2020)',
-      pickupLocation: '654 Ngong Rd, Karen',
-      serviceLocation: 'City Auto Inspection',
-      date: 'Jan 25, 2026',
-      time: '9:00 AM',
-      status: 'completed',
-      estimatedDuration: '90 min',
-      specialInstructions: 'Pre-purchase inspection',
-      price: 'KES 8,500'
+  const fetchAssignments = async () => {
+    try {
+      const statusParam = statusFilter === 'all' ? undefined : statusFilter;
+      const response = await api.getMyAssignments(statusParam);
+      if (response.success && response.data) {
+        const mapped = response.data.assignments.map(a => {
+          const appt = a.appointment;
+          return {
+            id: `A-${appt.id}`,
+            customer: appt.customer?.name || 'Unknown Customer',
+            phone: appt.customer?.phone || 'N/A',
+            service: appt.service?.name || 'N/A',
+            vehicle: appt.vehicle ? `${appt.vehicle.make} ${appt.vehicle.model} (${appt.vehicle.year})` : 'N/A',
+            pickupLocation: appt.notes ? appt.notes.split('\n')[0] || 'TBD' : 'TBD',
+            serviceLocation: appt.service ? appt.service.name : 'Standard Service Center',
+            date: new Date(appt.appointment_date).toLocaleDateString('en-KE', { month: 'short', day: 'numeric', year: 'numeric' }),
+            time: new Date(appt.appointment_date).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' }),
+            status: a.status || 'pending',
+            estimatedDuration: appt.service ? `${appt.service.duration} min` : 'N/A',
+            specialInstructions: appt.notes,
+            price: appt.total_amount ? `KES ${appt.total_amount.toLocaleString()}` : 'N/A',
+          };
+        });
+        setAssignments(mapped);
+      } else {
+        setError(response.message || 'Failed to load assignments');
+      }
+    } catch (err) {
+      setError('Failed to load assignments. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
-  ];
+  };
+
+  useEffect(() => {
+    fetchAssignments();
+  }, [statusFilter]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -128,7 +109,7 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
   const activeAssignments = filteredAssignments.filter(a => a.status !== 'completed');
   const completedAssignments = filteredAssignments.filter(a => a.status === 'completed');
 
-  const AssignmentCard = ({ assignment }: { assignment: typeof assignments[0] }) => (
+  const AssignmentCard = ({ assignment }: { assignment: AssignmentDisplay }) => (
     <Card className="hover:shadow-lg transition-shadow">
       <CardHeader>
         <div className="flex items-start justify-between">
@@ -217,6 +198,25 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
       </CardContent>
     </Card>
   );
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Clock className="h-6 w-6 text-slate-400 animate-spin" />
+        <span className="ml-2 text-slate-500">Loading assignments...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <p className="text-slate-500">{error}</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
