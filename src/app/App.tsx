@@ -391,8 +391,7 @@ export default function App() {
                 </Button>
                 <Button 
                   size="lg" 
-                  variant="outline" 
-                  className="border-white text-white hover:bg-white/5 hover:scale-105 transition-all duration-200 px-10 py-6 text-lg font-bold"
+                  className="bg-white text-slate-900 hover:bg-slate-100 px-10 py-6 text-lg font-bold"
                 >
                   View Pricing
                 </Button>
