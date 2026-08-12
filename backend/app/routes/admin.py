@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from sqlalchemy.orm import joinedload
 from app import db
 from app.models import (User, Service, Vehicle, Appointment,
                      ServiceHistory, Notification, Admin, PaymentMethod, DiscountCode)
@@ -131,7 +132,11 @@ def get_all_appointments():
         if cached is not None:
             return jsonify(cached), 200
 
-        query = Appointment.query
+        query = Appointment.query.options(
+            joinedload(Appointment.vehicle),
+            joinedload(Appointment.service),
+            joinedload(Appointment.customer),
+        )
         
         if status:
             query = query.filter_by(status=status)

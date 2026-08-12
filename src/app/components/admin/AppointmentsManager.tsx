@@ -1,12 +1,33 @@
 import { useState } from 'react';
-import { Search, Filter, Download, Eye, Edit, Trash2, Phone, Mail } from 'lucide-react';
+import { Search, Filter, Download, Eye, Edit, Trash2, Phone, Mail, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
-import { useAllAppointmentsAdmin } from '@/hooks/useApi';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/app/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/app/components/ui/alert-dialog';
+import { Textarea } from '@/app/components/ui/textarea';
+import { Label } from '@/app/components/ui/label';
+import { toast } from 'sonner';
+import { useAllAppointmentsAdmin, useUpdateAppointment, useCancelAppointment } from '@/hooks/useApi';
 import type { Appointment, User, Vehicle, Service } from '@/services/api';
 
 interface AppointmentRow extends Appointment {
@@ -20,8 +41,21 @@ interface AppointmentRow extends Appointment {
 export function AppointmentsManager() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedAppointment, setSelectedAppointment] = useState<AppointmentRow | null>(null);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    status: '',
+    notes: '',
+    appointment_date: '',
+    total_amount: '',
+    payment_status: '',
+  });
 
   const { data: rawAppointments = [], isLoading: loading, error, refetch } = useAllAppointmentsAdmin(statusFilter !== 'all' ? statusFilter : undefined);
+  const updateMutation = useUpdateAppointment();
+  const cancelMutation = useCancelAppointment();
 
   const appointments: AppointmentRow[] = (rawAppointments || []).map((apt: Appointment) => {
     const customer = apt.customer as User | undefined;
@@ -50,6 +84,8 @@ export function AppointmentsManager() {
         return 'bg-slate-100 text-slate-800 border-slate-200';
       case 'cancelled':
         return 'bg-red-100 text-red-800 border-red-200';
+      case 'rescheduled':
+        return 'bg-purple-100 text-purple-800 border-purple-200';
       default:
         return 'bg-slate-100 text-slate-800 border-slate-200';
     }
@@ -69,6 +105,69 @@ export function AppointmentsManager() {
     
     return matchesSearch && matchesStatus;
   });
+
+  const handleView = (appointment: AppointmentRow) => {
+    setSelectedAppointment(appointment);
+    setViewDialogOpen(true);
+  };
+
+  const handleEdit = (appointment: AppointmentRow) => {
+    setSelectedAppointment(appointment);
+    setEditForm({
+      status: appointment.status,
+      notes: appointment.notes || '',
+      appointment_date: appointment.appointment_date ? appointment.appointment_date.slice(0, 16) : '',
+      total_amount: appointment.total_amount?.toString() || '',
+      payment_status: appointment.payment_status,
+    });
+    setEditDialogOpen(true);
+  };
+
+  const handleDelete = (appointment: AppointmentRow) => {
+    setSelectedAppointment(appointment);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!selectedAppointment) return;
+    try {
+      const response = await cancelMutation.mutateAsync(selectedAppointment.id);
+      if (response.success) {
+        toast.success('Appointment deleted successfully');
+        setDeleteDialogOpen(false);
+        setSelectedAppointment(null);
+      } else {
+        toast.error(response.message || 'Failed to delete appointment');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to delete appointment');
+    }
+  };
+
+  const submitEdit = async () => {
+    if (!selectedAppointment) return;
+    try {
+      const response = await updateMutation.mutateAsync({
+        id: selectedAppointment.id,
+        data: {
+          status: editForm.status as Appointment['status'],
+          notes: editForm.notes,
+          appointment_date: editForm.appointment_date ? new Date(editForm.appointment_date).toISOString() : undefined,
+          total_amount: editForm.total_amount ? parseFloat(editForm.total_amount) : undefined,
+          payment_status: editForm.payment_status as Appointment['payment_status'],
+        },
+      });
+      if (response.success) {
+        toast.success('Appointment updated successfully');
+        setEditDialogOpen(false);
+        setSelectedAppointment(null);
+      } else {
+        toast.error(response.message || 'Failed to update appointment');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update appointment');
+    }
+  };
 
   if (loading) {
     return (
@@ -135,6 +234,7 @@ export function AppointmentsManager() {
                 <SelectItem value="in-progress">In Progress</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
                 <SelectItem value="cancelled">Cancelled</SelectItem>
+                <SelectItem value="rescheduled">Rescheduled</SelectItem>
               </SelectContent>
             </Select>
             <Button variant="outline" onClick={refetch}>
@@ -210,13 +310,13 @@ export function AppointmentsManager() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" size="sm">
+                          <Button variant="ghost" size="sm" onClick={() => handleView(appointment)}>
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm">
+                          <Button variant="ghost" size="sm" onClick={() => handleEdit(appointment)}>
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm">
+                          <Button variant="ghost" size="sm" onClick={() => handleDelete(appointment)}>
                             <Trash2 className="h-4 w-4 text-red-500" />
                           </Button>
                         </div>
@@ -229,6 +329,178 @@ export function AppointmentsManager() {
           )}
         </CardContent>
       </Card>
+
+      {/* View Appointment Dialog */}
+      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Appointment Details</DialogTitle>
+            <DialogDescription>
+              Appointment #{selectedAppointment?.id}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedAppointment && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm font-medium text-slate-500">Customer</p>
+                  <p className="font-medium">{selectedAppointment.customer_name}</p>
+                  <p className="text-sm text-slate-600">{selectedAppointment.customer_email}</p>
+                  {selectedAppointment.customer_phone && (
+                    <p className="text-sm text-slate-600">{selectedAppointment.customer_phone}</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-500">Service</p>
+                  <p className="font-medium">{selectedAppointment.service_name}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-500">Vehicle</p>
+                  <p className="font-medium">{selectedAppointment.vehicle_info}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-500">Date & Time</p>
+                  <p className="font-medium">{new Date(selectedAppointment.appointment_date).toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-500">Status</p>
+                  <Badge className={getStatusColor(selectedAppointment.status)}>
+                    {getStatusLabel(selectedAppointment.status)}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-500">Price</p>
+                  <p className="font-medium">
+                    {selectedAppointment.total_amount ? `KES ${Number(selectedAppointment.total_amount).toLocaleString()}` : '-'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-500">Payment Status</p>
+                  <p className="font-medium capitalize">{selectedAppointment.payment_status}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-500">Created</p>
+                  <p className="font-medium">{new Date(selectedAppointment.created_at).toLocaleString()}</p>
+                </div>
+              </div>
+              {selectedAppointment.notes && (
+                <div>
+                  <p className="text-sm font-medium text-slate-500">Notes</p>
+                  <p className="text-sm text-slate-700 bg-slate-50 p-3 rounded-md">{selectedAppointment.notes}</p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewDialogOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Appointment Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Appointment</DialogTitle>
+            <DialogDescription>
+              Update appointment #{selectedAppointment?.id}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedAppointment && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <Select value={editForm.status} onValueChange={(value) => setEditForm({ ...editForm, status: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="scheduled">Scheduled</SelectItem>
+                    <SelectItem value="confirmed">Confirmed</SelectItem>
+                    <SelectItem value="in-progress">In Progress</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                    <SelectItem value="rescheduled">Rescheduled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="appointment_date">Date & Time</Label>
+                <Input
+                  id="appointment_date"
+                  type="datetime-local"
+                  value={editForm.appointment_date}
+                  onChange={(e) => setEditForm({ ...editForm, appointment_date: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="total_amount">Total Amount (KES)</Label>
+                <Input
+                  id="total_amount"
+                  type="number"
+                  step="0.01"
+                  value={editForm.total_amount}
+                  onChange={(e) => setEditForm({ ...editForm, total_amount: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="payment_status">Payment Status</Label>
+                <Select value={editForm.payment_status} onValueChange={(value) => setEditForm({ ...editForm, payment_status: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select payment status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="refunded">Refunded</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="notes">Notes</Label>
+                <Textarea
+                  id="notes"
+                  value={editForm.notes}
+                  onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                  rows={3}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={updateMutation.isPending}>
+              Cancel
+            </Button>
+            <Button onClick={submitEdit} disabled={updateMutation.isPending}>
+              {updateMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Appointment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete appointment #{selectedAppointment?.id}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancelMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={cancelMutation.isPending}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {cancelMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

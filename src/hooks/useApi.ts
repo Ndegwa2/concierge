@@ -222,6 +222,8 @@ export function useUpdateAppointment() {
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.appointments });
       queryClient.invalidateQueries({ queryKey: queryKeys.appointment(id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.allAppointmentsAdmin });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
     },
   });
 }
@@ -233,6 +235,8 @@ export function useCancelAppointment() {
     mutationFn: api.cancelAppointment.bind(api),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.appointments });
+      queryClient.invalidateQueries({ queryKey: queryKeys.allAppointmentsAdmin });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
     },
   });
 }

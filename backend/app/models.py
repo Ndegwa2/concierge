@@ -149,7 +149,7 @@ class Appointment(db.Model):
     partner = db.relationship('ServicePartner', backref='appointments', lazy=True)
     
     def to_dict(self):
-        return {
+        result = {
             'id': self.id,
             'user_id': self.user_id,
             'vehicle_id': self.vehicle_id,
@@ -163,6 +163,22 @@ class Appointment(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
+
+        if self.vehicle:
+            result['vehicle'] = self.vehicle.to_dict()
+
+        if self.service:
+            result['service'] = self.service.to_dict()
+
+        if self.customer:
+            result['customer'] = {
+                'id': self.customer.id,
+                'name': self.customer.name,
+                'phone': self.customer.phone,
+                'email': self.customer.email,
+            }
+
+        return result
 
 class ServiceHistory(db.Model):
     __tablename__ = 'service_history'

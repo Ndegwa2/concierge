@@ -138,7 +138,7 @@ export interface Appointment {
   service_id: number;
   partner_id?: number;
   appointment_date: string;
-  status: 'scheduled' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled';
+  status: 'scheduled' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled' | 'rescheduled';
   notes?: string;
   total_amount?: number;
   payment_status: 'pending' | 'paid' | 'refunded';
