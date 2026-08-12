@@ -62,6 +62,7 @@ export default function App() {
   const handleCloseBooking = () => {
     setCurrentView('home');
     setSelectedService(undefined);
+    refetchAppointments();
   };
 
   const handleLogin = (type: 'customer' | 'admin' | 'employee') => {

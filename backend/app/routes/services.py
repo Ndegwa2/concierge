@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
 from app.models import Service, DiscountCode
 from app.utils.decorators import admin_required, role_required
+from app.utils.cache import cache_get, cache_set, cache_delete, cache_delete_pattern, REDIS_LONG_TTL
 from datetime import datetime, timezone
 
 services_bp = Blueprint('services', __name__)
@@ -11,6 +12,11 @@ services_bp = Blueprint('services', __name__)
 def get_services():
     """Get all active services"""
     try:
+        cache_key = f"services:all:{request.args.get('category','')}:{request.args.get('min_price','')}:{request.args.get('max_price','')}:{request.args.get('search','')}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         # Get query parameters
         category = request.args.get('category')
         min_price = request.args.get('min_price')
@@ -35,13 +41,24 @@ def get_services():
         # Get services
         services = query.all()
         
-        return jsonify({
+        result = jsonify({
             'success': True,
             'data': {
                 'services': [service.to_dict() for service in services],
                 'count': len(services)
             }
         }), 200
+
+        response = result[0]
+        cache_set(cache_key, {
+            'success': True,
+            'data': {
+                'services': [service.to_dict() for service in services],
+                'count': len(services)
+            }
+        }, REDIS_LONG_TTL)
+
+        return result
         
     except Exception as e:
         return jsonify({
@@ -202,6 +219,8 @@ def create_service():
         db.session.add(service)
         db.session.commit()
         
+        cache_delete_pattern("services:*")
+        
         return jsonify({
             'success': True,
             'message': 'Service created successfully',
@@ -253,6 +272,7 @@ def update_service(service_id):
             service.is_active = data['is_active']
         
         db.session.commit()
+        cache_delete_pattern("services:*")
         
         return jsonify({
             'success': True,
@@ -286,6 +306,7 @@ def delete_service(service_id):
         
         db.session.delete(service)
         db.session.commit()
+        cache_delete_pattern("services:*")
         
         return jsonify({
             'success': True,

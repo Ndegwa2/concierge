@@ -25,6 +25,14 @@ services:
         fromDatabase:
           name: autoconcierge-postgres-read
           property: connectionString
+      - key: REDIS_URL
+        fromAddOn:
+          name: autoconcierge-redis
+          property: connectionString
+      - key: RATELIMIT_STORAGE_URI
+        fromAddOn:
+          name: autoconcierge-redis
+          property: connectionString
       - key: JWT_SECRET_KEY
         generateValue: true
       - key: SECRET_KEY
@@ -59,6 +67,13 @@ databases:
     plan: standard-0
     readReplica: true
     # This is a read-only replica of autoconcierge-postgres
+
+# Redis (managed cache)
+# Used for session storage, rate limiting, and query caching
+# https://render.com/docs/redis
+addOns:
+  - name: autoconcierge-redis
+    plan: free
 
 # Notes:
 # 1. PostgreSQL is provisioned automatically via the databases section above.

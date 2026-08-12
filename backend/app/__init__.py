@@ -23,6 +23,16 @@ limiter = Limiter(
     storage_uri=os.environ.get("RATELIMIT_STORAGE_URI", "memory://"),
 )
 
+def get_user_from_token():
+    from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+    try:
+        verify_jwt_in_request()
+        user_id = get_jwt_identity()
+        from app.models import User
+        return User.query.get(user_id)
+    except Exception:
+        return None
+
 # Token blacklist table for persistent logout
 class TokenBlocklist(db.Model):
     __tablename__ = 'token_blocklist'
@@ -72,6 +82,10 @@ def create_app(config_class=None):
     jwt.init_app(app)
     CORS(app)
     csrf.init_app(app)
+    
+    # Initialize Redis cache
+    from app.utils.cache import init_redis
+    init_redis(app)
     
     # JWT default error handlers
     @jwt.expired_token_loader

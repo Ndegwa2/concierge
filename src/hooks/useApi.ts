@@ -13,6 +13,7 @@ export const queryKeys = {
   service: (id: number) => ['services', id] as const,
   appointments: ['appointments'] as const,
   appointment: (id: number) => ['appointments', id] as const,
+  allAppointmentsAdmin: ['admin', 'appointments'] as const,
   vehicles: ['vehicles'] as const,
   vehicle: (id: number) => ['vehicles', id] as const,
   employees: ['employees'] as const,
@@ -206,6 +207,8 @@ export function useCreateAppointment() {
     mutationFn: api.createAppointment.bind(api),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.appointments });
+      queryClient.invalidateQueries({ queryKey: queryKeys.allAppointmentsAdmin });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
     },
   });
 }
@@ -318,6 +321,17 @@ export function useAdminDashboard() {
     queryFn: async () => {
       const response = await api.getAdminDashboard();
       return response.success ? response.data : null;
+    },
+    enabled: api.isAuthenticated(),
+  });
+}
+
+export function useAllAppointmentsAdmin(status?: string) {
+  return useQuery({
+    queryKey: [...queryKeys.allAppointmentsAdmin, status],
+    queryFn: async () => {
+      const response = await api.getAllAppointmentsAdmin(status);
+      return response.success ? response.data?.appointments ?? [] : [];
     },
     enabled: api.isAuthenticated(),
   });

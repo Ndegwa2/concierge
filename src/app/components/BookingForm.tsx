@@ -7,8 +7,7 @@ import { Label } from '@/app/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { Textarea } from '@/app/components/ui/textarea';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
-import type { Service, Vehicle } from '@/services/api';
+import { useServices, useVehicles, useCreateAppointment } from '@/hooks/useApi';
 
 interface BookingFormProps {
   selectedService?: string;
@@ -16,12 +15,6 @@ interface BookingFormProps {
 }
 
 export function BookingForm({ selectedService, onClose }: BookingFormProps) {
-  const [services, setServices] = useState<Service[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [isLoadingServices, setIsLoadingServices] = useState(true);
-  const [isLoadingVehicles, setIsLoadingVehicles] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  
   const [formData, setFormData] = useState({
     service_id: selectedService ? parseInt(selectedService) : 0,
     vehicle_id: 0,
@@ -29,61 +22,33 @@ export function BookingForm({ selectedService, onClose }: BookingFormProps) {
     notes: ''
   });
 
+  const { data: services = [], isLoading: servicesLoading } = useServices();
+  const { data: vehicles = [], isLoading: vehiclesLoading } = useVehicles();
+  const createAppointmentMutation = useCreateAppointment();
+
   useEffect(() => {
-    loadServices();
-    loadVehicles();
   }, []);
-
-  const loadServices = async () => {
-    try {
-      const response = await api.getServices();
-      if (response.success && response.data?.services) {
-        setServices(response.data.services);
-      }
-    } catch (error) {
-      console.error('Failed to load services:', error);
-      toast.error('Failed to load services');
-    } finally {
-      setIsLoadingServices(false);
-    }
-  };
-
-  const loadVehicles = async () => {
-    try {
-      const response = await api.getVehicles();
-      if (response.success && response.data?.vehicles) {
-        setVehicles(response.data.vehicles);
-      }
-    } catch (error) {
-      console.error('Failed to load vehicles:', error);
-      toast.error('Failed to load your vehicles');
-    } finally {
-      setIsLoadingVehicles(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.service_id) {
       toast.error('Please select a service');
       return;
     }
-    
+
     if (!formData.vehicle_id) {
       toast.error('Please select a vehicle');
       return;
     }
-    
+
     if (!formData.appointment_date) {
       toast.error('Please select a date and time');
       return;
     }
 
-    setIsSubmitting(true);
-    
     try {
-      const response = await api.createAppointment({
+      const response = await createAppointmentMutation.mutateAsync({
         vehicle_id: formData.vehicle_id,
         service_id: formData.service_id,
         appointment_date: new Date(formData.appointment_date).toISOString(),
@@ -99,8 +64,6 @@ export function BookingForm({ selectedService, onClose }: BookingFormProps) {
     } catch (error) {
       console.error('Booking error:', error);
       toast.error('Failed to create booking. Please try again.');
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -119,13 +82,13 @@ export function BookingForm({ selectedService, onClose }: BookingFormProps) {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="service">Service Type</Label>
-            <Select 
-              value={formData.service_id.toString()} 
+            <Select
+              value={formData.service_id.toString()}
               onValueChange={(value) => setFormData({ ...formData, service_id: parseInt(value) })}
-              disabled={isLoadingServices}
+              disabled={servicesLoading}
             >
               <SelectTrigger id="service">
-                <SelectValue placeholder={isLoadingServices ? "Loading services..." : "Select a service"} />
+                <SelectValue placeholder={servicesLoading ? "Loading services..." : "Select a service"} />
               </SelectTrigger>
               <SelectContent>
                 {services.map((service) => (
@@ -147,13 +110,13 @@ export function BookingForm({ selectedService, onClose }: BookingFormProps) {
               <Car className="h-4 w-4" />
               Select Vehicle
             </Label>
-            <Select 
-              value={formData.vehicle_id.toString()} 
+            <Select
+              value={formData.vehicle_id.toString()}
               onValueChange={(value) => setFormData({ ...formData, vehicle_id: parseInt(value) })}
-              disabled={isLoadingVehicles}
+              disabled={vehiclesLoading}
             >
               <SelectTrigger id="vehicle">
-                <SelectValue placeholder={isLoadingVehicles ? "Loading vehicles..." : "Select a vehicle"} />
+                <SelectValue placeholder={vehiclesLoading ? "Loading vehicles..." : "Select a vehicle"} />
               </SelectTrigger>
               <SelectContent>
                 {vehicles.length === 0 ? (
@@ -183,9 +146,9 @@ export function BookingForm({ selectedService, onClose }: BookingFormProps) {
               <Calendar className="h-4 w-4" />
               Preferred Date & Time
             </Label>
-            <Input 
-              id="date" 
-              type="datetime-local" 
+            <Input
+              id="date"
+              type="datetime-local"
               value={formData.appointment_date}
               onChange={(e) => setFormData({ ...formData, appointment_date: e.target.value })}
               required
@@ -195,8 +158,8 @@ export function BookingForm({ selectedService, onClose }: BookingFormProps) {
 
           <div className="space-y-2">
             <Label htmlFor="notes">Additional Notes (Optional)</Label>
-            <Textarea 
-              id="notes" 
+            <Textarea
+              id="notes"
               placeholder="Any special instructions or concerns..."
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
@@ -205,12 +168,12 @@ export function BookingForm({ selectedService, onClose }: BookingFormProps) {
           </div>
 
           <div className="flex gap-3 pt-4">
-            <Button 
-              type="submit" 
-              className="flex-1" 
-              disabled={isSubmitting || vehicles.length === 0}
+            <Button
+              type="submit"
+              className="flex-1"
+              disabled={createAppointmentMutation.isPending || vehicles.length === 0}
             >
-              {isSubmitting ? (
+              {createAppointmentMutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Booking...
@@ -219,12 +182,12 @@ export function BookingForm({ selectedService, onClose }: BookingFormProps) {
                 'Confirm Booking'
               )}
             </Button>
-            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
+            <Button type="button" variant="outline" onClick={onClose} disabled={createAppointmentMutation.isPending}>
               Cancel
             </Button>
           </div>
-          
-          {vehicles.length === 0 && !isLoadingVehicles && (
+
+          {vehicles.length === 0 && !vehiclesLoading && (
             <p className="text-xs text-amber-600 text-center mt-2">
               Please add a vehicle in your profile before booking.
             </p>

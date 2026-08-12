@@ -5,6 +5,7 @@ from app.models import Appointment, User, Vehicle, Service, DiscountCode, Invoic
 from app.utils.decorators import admin_required, role_required, get_current_user, get_current_user_id, is_admin
 from app.utils.invoice import generate_invoice_pdf
 from app.utils.email import send_email_with_attachment
+from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_SHORT_TTL
 from datetime import datetime, timedelta, timezone
 import logging
 
@@ -20,6 +21,11 @@ def get_appointments():
     try:
         current_user = get_current_user()
         
+        cache_key = f"appointments:{current_user['id']}:{current_user['role']}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+        
         if current_user['role'] == 'admin':
             # Admin gets all appointments
             appointments = Appointment.query.all()
@@ -30,13 +36,17 @@ def get_appointments():
             # Regular user gets their own appointments
             appointments = Appointment.query.filter_by(user_id=current_user['id']).all()
         
-        return jsonify({
+        result = {
             'success': True,
             'data': {
                 'appointments': [appointment.to_dict() for appointment in appointments],
                 'count': len(appointments)
             }
-        }), 200
+        }
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({
@@ -250,6 +260,11 @@ def create_appointment():
         db.session.add(appointment)
         db.session.commit()
         
+        cache_delete_pattern("appointments:*")
+        cache_delete_pattern("admin:appointments:*")
+        cache_delete_pattern("admin:dashboard:*")
+        cache_delete_pattern("employee:dashboard:*")
+        
         logger.info(f"[{request_id}] Appointment created: {appointment.id} by user {current_user['id']}")
         
         return jsonify({
@@ -346,6 +361,11 @@ def update_appointment(appointment_id):
         
         db.session.commit()
 
+        cache_delete_pattern("appointments:*")
+        cache_delete_pattern("admin:appointments:*")
+        cache_delete_pattern("admin:dashboard:*")
+        cache_delete_pattern("employee:dashboard:*")
+
         if original_status != 'completed' and appointment.status == 'completed':
             try:
                 _auto_send_invoice(appointment)
@@ -392,6 +412,10 @@ def delete_appointment(appointment_id):
         
         db.session.delete(appointment)
         db.session.commit()
+        
+        cache_delete_pattern("appointments:*")
+        cache_delete_pattern("admin:appointments:*")
+        cache_delete_pattern("admin:dashboard:*")
         
         return jsonify({
             'success': True,

@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
 from app.models import Vehicle, User
 from app.utils.decorators import get_current_user
+from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_SHORT_TTL
 
 vehicles_bp = Blueprint('vehicles', __name__)
 
@@ -12,21 +13,29 @@ def get_vehicles():
     """Get user's vehicles"""
     try:
         current_user = get_current_user()
-        
+
+        cache_key = f"vehicles:{current_user['id']}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         if current_user['role'] == 'admin':
             # Admin gets all vehicles
             vehicles = Vehicle.query.all()
         else:
             # Regular user gets their own vehicles
             vehicles = Vehicle.query.filter_by(user_id=current_user['id']).all()
-        
-        return jsonify({
+
+        result = {
             'success': True,
             'data': {
                 'vehicles': [vehicle.to_dict() for vehicle in vehicles],
                 'count': len(vehicles)
             }
-        }), 200
+        }
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({
@@ -98,6 +107,7 @@ def create_vehicle():
         
         db.session.add(vehicle)
         db.session.commit()
+        cache_delete_pattern("vehicles:*")
         
         return jsonify({
             'success': True,
@@ -163,6 +173,7 @@ def update_vehicle(vehicle_id):
             vehicle.is_active = data['is_active']
         
         db.session.commit()
+        cache_delete_pattern("vehicles:*")
         
         return jsonify({
             'success': True,
@@ -203,6 +214,7 @@ def delete_vehicle(vehicle_id):
         
         db.session.delete(vehicle)
         db.session.commit()
+        cache_delete_pattern("vehicles:*")
         
         return jsonify({
             'success': True,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Search, Filter, Download, Eye, Edit, Trash2, Phone, Mail } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
@@ -6,7 +6,7 @@ import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
-import { api } from '@/services/api';
+import { useAllAppointmentsAdmin } from '@/hooks/useApi';
 import type { Appointment, User, Vehicle, Service } from '@/services/api';
 
 interface AppointmentRow extends Appointment {
@@ -18,44 +18,24 @@ interface AppointmentRow extends Appointment {
 }
 
 export function AppointmentsManager() {
-  const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  useEffect(() => {
-    fetchAppointments();
-  }, []);
+  const { data: rawAppointments = [], isLoading: loading, error, refetch } = useAllAppointmentsAdmin(statusFilter !== 'all' ? statusFilter : undefined);
 
-  const fetchAppointments = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api.getAllAppointmentsAdmin();
-      if (response.success && response.data) {
-        const enriched = (response.data.appointments || []).map((apt: Appointment) => {
-          const customer = apt.customer as User | undefined;
-          const vehicle = apt.vehicle as Vehicle | undefined;
-          const service = apt.service as Service | undefined;
-          return {
-            ...apt,
-            customer_name: customer?.name || `Customer #${apt.user_id}`,
-            customer_phone: customer?.phone || '',
-            customer_email: customer?.email || '',
-            vehicle_info: vehicle ? `${vehicle.make} ${vehicle.model} (${vehicle.year})` : `Vehicle #${apt.vehicle_id}`,
-            service_name: service?.name || `Service #${apt.service_id}`,
-          };
-        });
-        setAppointments(enriched);
-      }
-    } catch (err) {
-      setError('Failed to load appointments');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const appointments: AppointmentRow[] = (rawAppointments || []).map((apt: Appointment) => {
+    const customer = apt.customer as User | undefined;
+    const vehicle = apt.vehicle as Vehicle | undefined;
+    const service = apt.service as Service | undefined;
+    return {
+      ...apt,
+      customer_name: customer?.name || `Customer #${apt.user_id}`,
+      customer_phone: customer?.phone || '',
+      customer_email: customer?.email || '',
+      vehicle_info: vehicle ? `${vehicle.make} ${vehicle.model} (${vehicle.year})` : `Vehicle #${apt.vehicle_id}`,
+      service_name: service?.name || `Service #${apt.service_id}`,
+    };
+  });
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -115,8 +95,8 @@ export function AppointmentsManager() {
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold mb-2">Appointments Manager</h1>
-          <p className="text-red-600">{error}</p>
-          <Button onClick={fetchAppointments} className="mt-4">Retry</Button>
+          <p className="text-red-600">{error instanceof Error ? error.message : String(error)}</p>
+          <Button onClick={refetch} className="mt-4">Retry</Button>
         </div>
       </div>
     );
@@ -157,7 +137,7 @@ export function AppointmentsManager() {
                 <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={fetchAppointments}>
+            <Button variant="outline" onClick={refetch}>
               <Download className="h-4 w-4 mr-2" />
               Refresh
             </Button>

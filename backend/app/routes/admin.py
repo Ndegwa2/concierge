@@ -4,6 +4,7 @@ from app import db
 from app.models import (User, Service, Vehicle, Appointment,
                      ServiceHistory, Notification, Admin, PaymentMethod, DiscountCode)
 from app.utils.decorators import admin_required, role_required, get_current_user
+from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_SHORT_TTL
 from datetime import datetime, timezone
 
 admin_bp = Blueprint('admin', __name__)
@@ -14,6 +15,11 @@ admin_bp = Blueprint('admin', __name__)
 def get_dashboard():
     """Get admin dashboard statistics"""
     try:
+        cache_key = "admin:dashboard:stats"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         current_user = get_current_user()
         
         # Calculate statistics
@@ -35,7 +41,7 @@ def get_dashboard():
         # Recent appointments
         recent_appointments = Appointment.query.order_by(Appointment.appointment_date.desc()).limit(5).all()
         
-        return jsonify({
+        result = {
             'success': True,
             'data': {
                 'statistics': {
@@ -49,7 +55,11 @@ def get_dashboard():
                 },
                 'recent_appointments': [appointment.to_dict() for appointment in recent_appointments]
             }
-        }), 200
+        }
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({
@@ -116,6 +126,11 @@ def get_all_appointments():
     """Get all appointments"""
     try:
         status = request.args.get('status')
+        cache_key = f"admin:appointments:{status or 'all'}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         query = Appointment.query
         
         if status:
@@ -123,13 +138,17 @@ def get_all_appointments():
         
         appointments = query.all()
         
-        return jsonify({
+        result = {
             'success': True,
             'data': {
                 'appointments': [appointment.to_dict() for appointment in appointments],
                 'count': len(appointments)
             }
-        }), 200
+        }
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({
@@ -183,6 +202,7 @@ def create_notification():
         
         db.session.add(notification)
         db.session.commit()
+        cache_delete_pattern("notifications:*")
         
         return jsonify({
             'success': True,

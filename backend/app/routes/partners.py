@@ -9,6 +9,7 @@ from flask_jwt_extended import jwt_required
 from app import db
 from app.models import ServicePartner, Service, Appointment
 from app.utils.decorators import admin_required, role_required, get_current_user
+from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_LONG_TTL
 from datetime import datetime, timezone
 
 partners_bp = Blueprint('partners', __name__)
@@ -29,6 +30,11 @@ def get_all_partners():
         location = request.args.get('location')
         min_rating = request.args.get('min_rating')
         search = request.args.get('search')
+
+        cache_key = f"partners:all:{service_type or 'all'}:{location or 'all'}:{min_rating or 'all'}:{search or 'all'}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
         
         # Build query
         query = ServicePartner.query.filter_by(is_active=True)
@@ -60,13 +66,17 @@ def get_all_partners():
         
         partners = query.order_by(ServicePartner.rating.desc()).all()
         
-        return jsonify({
+        result = {
             'success': True,
             'data': {
                 'partners': [partner.to_dict() for partner in partners],
                 'count': len(partners)
             }
-        }), 200
+        }
+
+        cache_set(cache_key, result, REDIS_LONG_TTL)
+
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({
@@ -152,6 +162,7 @@ def create_partner():
         
         db.session.add(partner)
         db.session.commit()
+        cache_delete_pattern("partners:*")
         
         return jsonify({
             'success': True,
@@ -302,6 +313,7 @@ def update_partner(partner_id):
             partner.is_active = data['is_active']
         
         db.session.commit()
+        cache_delete_pattern("partners:*")
         
         return jsonify({
             'success': True,
@@ -337,6 +349,7 @@ def delete_partner(partner_id):
         # Soft delete - mark as inactive
         partner.is_active = False
         db.session.commit()
+        cache_delete_pattern("partners:*")
         
         return jsonify({
             'success': True,
@@ -368,6 +381,7 @@ def activate_partner(partner_id):
         
         partner.is_active = True
         db.session.commit()
+        cache_delete_pattern("partners:*")
         
         return jsonify({
             'success': True,
@@ -410,6 +424,7 @@ def update_partner_services(partner_id):
         
         partner.services_offered = data['services']
         db.session.commit()
+        cache_delete_pattern("partners:*")
         
         return jsonify({
             'success': True,
@@ -459,6 +474,7 @@ def update_partner_rating(partner_id):
         
         partner.rating = rating
         db.session.commit()
+        cache_delete_pattern("partners:*")
         
         return jsonify({
             'success': True,

@@ -13,3 +13,4 @@ marshmallow==3.20.2
 Flask-Compress==1.14
 fpdf2==2.7.6
 psycopg2-binary==2.9.9
+redis==5.2.1

@@ -8,6 +8,7 @@ from flask_jwt_extended import jwt_required
 from app import db
 from app.models import User, Employee, EmployeeDocument, Appointment, Assignment, Service
 from app.utils.decorators import admin_required, employee_required, role_required, get_current_user
+from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_SHORT_TTL
 from datetime import datetime, timezone
 from io import StringIO
 import csv
@@ -900,6 +901,11 @@ def get_employee_dashboard():
     """Get employee dashboard statistics"""
     try:
         current_user = get_current_user()
+        cache_key = f"employee:dashboard:{current_user['id']}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         employee = Employee.query.filter_by(user_id=current_user['id']).first()
         
         if not employee:
@@ -926,7 +932,7 @@ def get_employee_dashboard():
             db.func.date(Assignment.assigned_at) == today
         ).count()
         
-        return jsonify({
+        result = {
             'success': True,
             'data': {
                 'employee': employee.to_dict(),
@@ -938,7 +944,11 @@ def get_employee_dashboard():
                     'rating': float(employee.rating) if employee.rating else 0.0
                 }
             }
-        }), 200
+        }
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({
@@ -955,6 +965,11 @@ def get_my_assignments():
     """Get employee's assignments"""
     try:
         current_user = get_current_user()
+        cache_key = f"employee:assignments:{current_user['id']}:{status or 'all'}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         employee = Employee.query.filter_by(user_id=current_user['id']).first()
         
         if not employee:
@@ -995,13 +1010,17 @@ def get_my_assignments():
                 }
             })
         
-        return jsonify({
+        result = {
             'success': True,
             'data': {
                 'assignments': enriched_assignments,
                 'count': len(enriched_assignments)
             }
-        }), 200
+        }
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({
@@ -1086,6 +1105,11 @@ def update_assignment_status(assignment_id):
             assignment.notes = data['notes']
         
         db.session.commit()
+
+        cache_delete_pattern(f"employee:assignments:{employee.user_id}:*")
+        cache_delete_pattern(f"employee:dashboard:{employee.user_id}")
+        cache_delete_pattern("admin:dashboard:*")
+        cache_delete_pattern("appointments:*")
         
         return jsonify({
             'success': True,
