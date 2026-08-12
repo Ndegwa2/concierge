@@ -1,9 +1,19 @@
 import { useState, useEffect } from 'react';
-import { Search, Star, MapPin, Phone, Mail } from 'lucide-react';
+import { Search, Star, MapPin, Phone, Mail, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/app/components/ui/dialog';
+import { Label } from '@/app/components/ui/label';
+import { toast } from 'sonner';
 import { api } from '@/services/api';
 import type { ServicePartner } from '@/services/api';
 
@@ -12,6 +22,10 @@ export function ServicePartnersManager() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedPartner, setSelectedPartner] = useState<ServicePartner | null>(null);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [partnerStats, setPartnerStats] = useState<{ total_appointments: number; completed_appointments: number } | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   useEffect(() => {
     fetchPartners();
@@ -31,6 +45,31 @@ export function ServicePartnersManager() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleViewDetails = async (partner: ServicePartner) => {
+    setSelectedPartner(partner);
+    setDetailDialogOpen(true);
+    setLoadingDetails(true);
+    setPartnerStats(null);
+    try {
+      const response = await api.getPartnerAdmin(partner.id);
+      if (response.success && response.data) {
+        setPartnerStats(response.data.statistics || null);
+      } else {
+        toast.error(response.message || 'Failed to load partner details');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to load partner details');
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
+  const handleContact = (partner: ServicePartner) => {
+    setSelectedPartner(partner);
+    setDetailDialogOpen(true);
+    setPartnerStats(null);
   };
 
   const filteredPartners = partners.filter(partner =>
@@ -219,10 +258,10 @@ export function ServicePartnersManager() {
                 </div>
 
                 <div className="flex gap-2 pt-4">
-                  <Button variant="outline" className="flex-1" size="sm">
+                  <Button variant="outline" className="flex-1" size="sm" onClick={() => handleViewDetails(partner)}>
                     View Details
                   </Button>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" onClick={() => handleContact(partner)}>
                     Contact
                   </Button>
                 </div>
@@ -231,6 +270,93 @@ export function ServicePartnersManager() {
           ))}
         </div>
       )}
+
+      {/* Partner Detail Dialog */}
+      <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{selectedPartner?.name}</DialogTitle>
+            <DialogDescription>
+              {selectedPartner?.contact_name || 'Service Partner Details'}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedPartner && (
+            <div className="space-y-4">
+              {loadingDetails ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">Contact Name</p>
+                      <p className="font-medium">{selectedPartner.contact_name || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">Phone</p>
+                      <p className="font-medium">{selectedPartner.phone || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">Email</p>
+                      <p className="font-medium">{selectedPartner.email || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">Rating</p>
+                      <p className="font-medium">{selectedPartner.rating.toFixed(1)}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-sm font-medium text-slate-500">Address</p>
+                      <p className="font-medium">
+                        {selectedPartner.address?.street || ''}
+                        {selectedPartner.address?.city ? `, ${selectedPartner.address.city}` : ''}
+                        {selectedPartner.address?.country ? `, ${selectedPartner.address.country}` : ''}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">Total Services</p>
+                      <p className="font-medium">{selectedPartner.total_services}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">Status</p>
+                      <Badge className={selectedPartner.is_active ? 'bg-green-100 text-green-800 border-green-200' : 'bg-slate-100 text-slate-800 border-slate-200'}>
+                        {selectedPartner.is_active ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {partnerStats && (
+                    <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                      <div>
+                        <p className="text-sm font-medium text-slate-500">Total Appointments</p>
+                        <p className="font-semibold">{partnerStats.total_appointments}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-500">Completed Appointments</p>
+                        <p className="font-semibold">{partnerStats.completed_appointments}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="pt-4 border-t">
+                    <p className="text-sm font-medium text-slate-500 mb-2">Services Offered</p>
+                    <div className="flex flex-wrap gap-2">
+                      {(selectedPartner.services_offered || []).map((specialty, index) => (
+                        <Badge key={index} variant="outline" className="text-xs">
+                          {specialty}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailDialogOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

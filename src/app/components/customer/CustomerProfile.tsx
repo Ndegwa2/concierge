@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Car, Calendar, Crown, Mail, Phone, MapPin, Clock, CheckCircle2, XCircle, Plus, Edit2, Trash2, Shield, Award, Gauge } from 'lucide-react';
+import { User, Car, Calendar, Crown, Mail, Phone, MapPin, Clock, CheckCircle2, XCircle, Plus, Edit2, Trash2, Shield, Award, Gauge, LogOut } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
@@ -187,7 +187,7 @@ function VehicleFormModal({
   );
 }
 
-export function CustomerProfile() {
+export function CustomerProfile({ onLogout }: { onLogout?: () => void } = {}) {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const { data: appointments = [], isLoading: appointmentsLoading } = useAppointments();
   const { data: vehicles = [], isLoading: vehiclesLoading, refetch: refetchVehicles } = useVehicles();
@@ -290,11 +290,19 @@ export function CustomerProfile() {
     <div className="min-h-screen bg-slate-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        {/* Page Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900">My Profile</h1>
-          <p className="text-slate-600 mt-1">Manage your account, vehicles, and service history</p>
-        </div>
+         {/* Page Header */}
+         <div className="mb-8 flex items-center justify-between">
+           <div>
+             <h1 className="text-3xl font-bold text-slate-900">My Profile</h1>
+             <p className="text-slate-600 mt-1">Manage your account, vehicles, and service history</p>
+           </div>
+           {onLogout && (
+             <Button variant="outline" size="sm" onClick={onLogout}>
+               <LogOut className="h-4 w-4 mr-2" />
+               Logout
+             </Button>
+           )}
+         </div>
 
         {/* Main Layout: Sidebar + Content */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

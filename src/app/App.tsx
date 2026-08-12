@@ -13,9 +13,9 @@ import {
   Headphones,
   Package
 } from 'lucide-react';
+import { JobGallery } from '@/app/components/JobGallery';
 import { DetailedServiceCard } from '@/app/components/DetailedServiceCard';
 import { BookingForm } from '@/app/components/BookingForm';
-import { AppointmentList } from '@/app/components/AppointmentList';
 import { HowItWorks } from '@/app/components/HowItWorks';
 import { Header } from '@/app/components/Header';
 import { LoginModal } from '@/app/components/LoginModal';
@@ -23,6 +23,8 @@ import { SignUpModal } from '@/app/components/SignUpModal';
 import { AdminDashboard } from '@/app/components/admin/AdminDashboard';
 import { EmployeeDashboard } from '@/app/components/employee/EmployeeDashboard';
 import { CustomerProfile } from '@/app/components/customer/CustomerProfile';
+import { CustomerDashboard } from '@/app/components/customer/CustomerDashboard';
+import { CustomerAppointments } from '@/app/components/CustomerAppointments';
 import { VehicleReturnConfirmation, ConfirmationData } from '@/app/components/VehicleReturnConfirmation';
 import { ConfirmationSuccessModal } from '@/app/components/ConfirmationSuccessModal';
 import { Button } from '@/app/components/ui/button';
@@ -32,16 +34,17 @@ import { toast, Toaster } from 'sonner';
 import { services } from '@/app/data/services';
 import { useAppointments, useProfile } from '@/hooks/useApi';
 import { api } from '@/services/api';
+import type { Appointment } from '@/services/api';
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<'home' | 'booking' | 'appointments' | 'how-it-works' | 'profile'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'booking' | 'appointments' | 'dashboard' | 'profile' | 'gallery'>('home');
   const [selectedService, setSelectedService] = useState<string>();
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [signupModalOpen, setSignupModalOpen] = useState(false);
   const [userType, setUserType] = useState<'customer' | 'admin' | 'employee' | null>(null);
   const [confirmationModalOpen, setConfirmationModalOpen] = useState(false);
   const [successModalOpen, setSuccessModalOpen] = useState(false);
-  const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [lastSubmittedRating, setLastSubmittedRating] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0);
@@ -73,8 +76,13 @@ export default function App() {
   };
 
   const handleSignUp = (user: any) => {
-    setUserType('customer');
-    toast.success('Account created successfully!');
+    if (user.requires_approval) {
+      setUserType(null);
+      toast.success('Application submitted! Please wait for admin approval.');
+    } else {
+      setUserType('customer');
+      toast.success('Account created successfully!');
+    }
   };
 
   const handleLogout = () => {
@@ -94,7 +102,7 @@ export default function App() {
     setLoginModalOpen(true);
   };
 
-  const handleConfirmReturn = (appointment: any) => {
+  const handleConfirmReturn = (appointment: Appointment) => {
     setSelectedAppointment(appointment);
     setConfirmationModalOpen(true);
   };
@@ -127,15 +135,9 @@ export default function App() {
   };
 
   const handleNavigate = (view: string) => {
-    if (view === 'appointments' && userType !== 'customer') {
+    if ((view === 'appointments' || view === 'dashboard' || view === 'profile') && userType !== 'customer') {
       setLoginModalOpen(true);
-      toast.error('Please login to view your appointments');
-      return;
-    }
-    
-    if (view === 'profile' && userType !== 'customer') {
-      setLoginModalOpen(true);
-      toast.error('Please login to view your profile');
+      toast.error('Please login to access this page');
       return;
     }
     
@@ -157,7 +159,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if ((currentView === 'appointments' || currentView === 'booking' || currentView === 'profile') && userType !== 'customer') {
+    if ((currentView === 'appointments' || currentView === 'booking' || currentView === 'profile' || currentView === 'dashboard') && userType !== 'customer') {
       setCurrentView('home');
       setLoginModalOpen(true);
       toast.error('Please login to access this page');
@@ -206,6 +208,7 @@ export default function App() {
         onNavigate={handleNavigate}
         onLoginClick={() => setLoginModalOpen(true)}
         onProfileClick={() => handleNavigate('profile')}
+        onLogoutClick={handleLogout}
         isLoggedIn={userType === 'customer'}
       />
 
@@ -227,15 +230,11 @@ export default function App() {
       {currentView === 'home' && (
         <main className="flex-1">
           {/* Hero Section */}
-          <section className="relative h-[600px] flex items-center overflow-hidden">
-            <div className="absolute inset-0 z-0">
-              <img 
-                src="/images/hero/luxury-car-concierge.jpg" 
-                alt="Luxury Car Concierge" 
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-slate-900/70" />
-            </div>
+          <section className="relative h-[600px] flex items-center overflow-hidden bg-slate-900">
+            <div className="absolute inset-0 z-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-700" />
+            <div className="absolute inset-0 z-0 opacity-20" style={{
+              backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(255,255,255,0.1) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(255,255,255,0.08) 0%, transparent 40%)'
+            }} />
             
             <div className="container mx-auto px-4 relative z-10 text-white">
               <div className="max-w-3xl">
@@ -267,7 +266,7 @@ export default function App() {
                   <Button 
                     size="lg" 
                     variant="outline" 
-                    className="border-white text-white hover:bg-white/10 px-8 py-6 text-lg"
+                    className="border-white text-white hover:bg-white/5 hover:scale-105 transition-all duration-200 px-8 py-6 text-lg"
                     onClick={() => {
                       const element = document.getElementById('how-it-works-section');
                       element?.scrollIntoView({ behavior: 'smooth' });
@@ -398,7 +397,7 @@ export default function App() {
                 <Button 
                   size="lg" 
                   variant="outline" 
-                  className="border-white text-white hover:bg-white/10 px-10 py-6 text-lg font-bold"
+                  className="border-white text-white hover:bg-white/5 hover:scale-105 transition-all duration-200 px-10 py-6 text-lg font-bold"
                 >
                   View Pricing
                 </Button>
@@ -429,48 +428,9 @@ export default function App() {
               </p>
             </div>
 
-            {appointmentsLoading ? (
-              <div className="animate-pulse space-y-4">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="h-32 bg-slate-200 rounded-xl" />
-                ))}
-              </div>
-            ) : (
-              <Tabs defaultValue="upcoming" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 mb-8 h-12">
-                  <TabsTrigger value="upcoming" className="text-base">
-                    Upcoming Services ({upcomingAppointments.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="completed" className="text-base">
-                    Past Services ({completedAppointments.length})
-                  </TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="upcoming" className="mt-0">
-                  <AppointmentList
-                    appointments={upcomingAppointments}
-                    onConfirmReturn={handleConfirmReturn}
-                    onCancel={() => refetchAppointments()}
-                  />
-                </TabsContent>
-                
-                <TabsContent value="completed" className="mt-0">
-                  <AppointmentList
-                    appointments={completedAppointments}
-                    onConfirmReturn={handleConfirmReturn}
-                    onCancel={() => refetchAppointments()}
-                  />
-                </TabsContent>
-              </Tabs>
-            )}
-
-            <div className="mt-12 p-8 border rounded-2xl bg-white text-center shadow-sm">
-              <h3 className="text-xl font-bold mb-2">Need something else?</h3>
-              <p className="text-slate-500 mb-6">Schedule a custom service or request a consultation</p>
-              <Button size="lg" onClick={() => handleBookService('')}>
-                Book New Service
-              </Button>
-            </div>
+            <CustomerAppointments
+              onConfirmReturn={handleConfirmReturn}
+            />
           </div>
 
           {/* Vehicle Return Confirmation Modal */}
@@ -495,10 +455,24 @@ export default function App() {
         </main>
       )}
 
+      {/* Dashboard View */}
+      {currentView === 'dashboard' && (
+        <main className="flex-1">
+          <CustomerDashboard onLogout={handleLogout} />
+        </main>
+      )}
+
       {/* Profile View */}
       {currentView === 'profile' && (
         <main className="flex-1">
-          <CustomerProfile />
+          <CustomerProfile onLogout={handleLogout} />
+        </main>
+      )}
+
+      {/* Gallery View */}
+      {currentView === 'gallery' && (
+        <main className="flex-1">
+          <JobGallery />
         </main>
       )}
 

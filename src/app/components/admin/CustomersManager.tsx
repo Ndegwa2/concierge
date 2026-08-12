@@ -1,11 +1,21 @@
 import { useState, useEffect } from 'react';
-import { Search, Eye, Mail, Phone, Car } from 'lucide-react';
+import { Search, Eye, Mail, Phone, Car, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/app/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/app/components/ui/dialog';
+import { Label } from '@/app/components/ui/label';
+import { toast } from 'sonner';
 import { api } from '@/services/api';
 import type { User, Vehicle } from '@/services/api';
 
@@ -21,6 +31,10 @@ export function CustomersManager() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerRow | null>(null);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [customerDetails, setCustomerDetails] = useState<User | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   useEffect(() => {
     fetchCustomers();
@@ -55,6 +69,25 @@ export function CustomersManager() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleView = async (customer: CustomerRow) => {
+    setSelectedCustomer(customer);
+    setViewDialogOpen(true);
+    setLoadingDetails(true);
+    setCustomerDetails(null);
+    try {
+      const response = await api.getUser(customer.id);
+      if (response.success && response.data) {
+        setCustomerDetails(response.data.user);
+      } else {
+        toast.error(response.message || 'Failed to load customer details');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to load customer details');
+    } finally {
+      setLoadingDetails(false);
     }
   };
 
@@ -238,7 +271,7 @@ export function CustomersManager() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="sm">
+                        <Button variant="ghost" size="sm" onClick={() => handleView(customer)}>
                           <Eye className="h-4 w-4" />
                         </Button>
                       </TableCell>
@@ -250,6 +283,69 @@ export function CustomersManager() {
           )}
         </CardContent>
       </Card>
+
+      {/* View Customer Dialog */}
+      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Customer Details</DialogTitle>
+            <DialogDescription>
+              Customer #{selectedCustomer?.id}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedCustomer && (
+            <div className="space-y-4">
+              {loadingDetails ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                </div>
+              ) : customerDetails ? (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">Name</p>
+                    <p className="font-medium">{customerDetails.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">Email</p>
+                    <p className="font-medium">{customerDetails.email}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">Phone</p>
+                    <p className="font-medium">{customerDetails.phone || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">Address</p>
+                    <p className="font-medium">{customerDetails.address || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">Role</p>
+                    <p className="font-medium capitalize">{customerDetails.role}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">Status</p>
+                    <Badge className={getStatusColor(customerDetails.is_active ? 'active' : 'inactive')}>
+                      {getStatusLabel(customerDetails.is_active ? 'active' : 'inactive')}
+                    </Badge>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">Created</p>
+                    <p className="font-medium">{new Date(customerDetails.created_at).toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">Updated</p>
+                    <p className="font-medium">{new Date(customerDetails.updated_at).toLocaleString()}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">No additional details available.</p>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewDialogOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

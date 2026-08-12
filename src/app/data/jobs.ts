@@ -1,0 +1,20 @@
+export const galleryImages = [
+  '/gallery/IMG_0467.jpg',
+  '/gallery/IMG_6126.jpg',
+  '/gallery/IMG_6130.jpg',
+  '/gallery/IMG_6132.jpg',
+  '/gallery/IMG_6882.jpg',
+  '/gallery/IMG_6883.jpg',
+  '/gallery/IMG_6884.jpg',
+  '/gallery/IMG_6897.jpg',
+  '/gallery/IMG_6898.jpg',
+  '/gallery/IMG_6906.jpg',
+  '/gallery/IMG_6913.jpg',
+  '/gallery/IMG_6914.jpg',
+  '/gallery/IMG_6915.jpg',
+  '/gallery/IMG_6945.jpg',
+  '/gallery/IMG_6965.jpg',
+  '/gallery/IMG_6972.jpg',
+  '/gallery/IMG_6976.jpg',
+  '/gallery/IMG_7653.jpg'
+];

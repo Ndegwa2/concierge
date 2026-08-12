@@ -4,7 +4,6 @@ export const services = [
   {
     icon: ClipboardCheck,
     title: 'Vehicle Maintenance & Inspection',
-    image: '/images/services/maintenance-inspection.jpg',
     features: [
       'Routine vehicle health checks and preventive maintenance coordination',
       'Scheduled service reminders and maintenance planning',
@@ -16,7 +15,6 @@ export const services = [
   {
     icon: Wrench,
     title: 'Garage & Repair Management',
-    image: '/images/services/garage-repair.jpg',
     features: [
       'Vehicle delivery to and collection from approved garages',
       'Repair quotation sourcing and comparison',
@@ -28,7 +26,6 @@ export const services = [
   {
     icon: Droplets,
     title: 'Car Wash & Detailing Services',
-    image: '/images/services/car-wash-detailing.jpg',
     features: [
       'Standard exterior and interior car wash coordination',
       'Premium detailing services (interior, exterior, engine bay)',
@@ -39,7 +36,6 @@ export const services = [
   {
     icon: MapPin,
     title: 'Pick-Up & Drop-Off Services',
-    image: '/images/services/pickup-dropoff.jpg',
     features: [
       'Door-to-door vehicle collection and return',
       'Secure handling and insured vehicle transportation',

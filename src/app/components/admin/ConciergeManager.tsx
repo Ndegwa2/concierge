@@ -1,14 +1,38 @@
 import { useState, useEffect } from 'react';
-import { Search, Edit, Trash2, Phone, Mail, MapPin, Star } from 'lucide-react';
+import { Search, Edit, Trash2, Phone, Mail, MapPin, Star, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/app/components/ui/avatar';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/app/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/app/components/ui/alert-dialog';
+import { Textarea } from '@/app/components/ui/textarea';
+import { Label } from '@/app/components/ui/label';
+import { toast } from 'sonner';
 import { api } from '@/services/api';
+import type { User, EmployeeProfile } from '@/services/api';
 
 interface ConciergeRow {
   id: string;
+  user_id: number;
   name: string;
   email: string;
   phone: string;
@@ -24,6 +48,19 @@ export function ConciergeManager() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedConcierge, setSelectedConcierge] = useState<ConciergeRow | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    location: '',
+    status: 'active',
+    specialties: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchConcierges();
@@ -37,6 +74,7 @@ export function ConciergeManager() {
       if (response.success && response.data) {
         const mapped = (response.data.employees || []).map((item: any) => ({
           id: item.employee?.employee_id || String(item.id),
+          user_id: item.id,
           name: item.name,
           email: item.email,
           phone: item.phone || '',
@@ -67,9 +105,76 @@ export function ConciergeManager() {
   };
 
   const getStatusColor = (status: string) => {
-    return status === 'active' 
-      ? 'bg-green-100 text-green-800 border-green-200' 
+    return status === 'active'
+      ? 'bg-green-100 text-green-800 border-green-200'
       : 'bg-slate-100 text-slate-800 border-slate-200';
+  };
+
+  const handleEdit = (concierge: ConciergeRow) => {
+    setSelectedConcierge(concierge);
+    setEditForm({
+      name: concierge.name,
+      email: concierge.email,
+      phone: concierge.phone,
+      location: concierge.location,
+      status: concierge.status,
+      specialties: Array.isArray(concierge.specialties) ? concierge.specialties.join(', ') : '',
+    });
+    setEditDialogOpen(true);
+  };
+
+  const handleDelete = (concierge: ConciergeRow) => {
+    setSelectedConcierge(concierge);
+    setDeleteDialogOpen(true);
+  };
+
+  const submitEdit = async () => {
+    if (!selectedConcierge) return;
+    setSaving(true);
+    try {
+      const payload: Partial<EmployeeProfile> & { name?: string; email?: string; phone?: string } = {
+        status: editForm.status,
+        location: editForm.location,
+        specialties: editForm.specialties.split(',').map(s => s.trim()).filter(Boolean),
+      };
+      if (editForm.name) payload.name = editForm.name;
+      if (editForm.email) payload.email = editForm.email;
+      if (editForm.phone) payload.phone = editForm.phone;
+
+      const response = await api.updateEmployee(selectedConcierge.user_id, payload);
+      if (response.success) {
+        toast.success('Concierge updated successfully');
+        setEditDialogOpen(false);
+        setSelectedConcierge(null);
+        fetchConcierges();
+      } else {
+        toast.error(response.message || 'Failed to update concierge');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update concierge');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!selectedConcierge) return;
+    setDeleting(true);
+    try {
+      const response = await api.deactivateEmployee(selectedConcierge.user_id);
+      if (response.success) {
+        toast.success('Concierge deleted successfully');
+        setDeleteDialogOpen(false);
+        setSelectedConcierge(null);
+        fetchConcierges();
+      } else {
+        toast.error(response.message || 'Failed to delete concierge');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to delete concierge');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   if (loading) {
@@ -239,11 +344,11 @@ export function ConciergeManager() {
                 </div>
 
                 <div className="flex gap-2 pt-4">
-                  <Button variant="outline" className="flex-1" size="sm">
+                  <Button variant="outline" className="flex-1" size="sm" onClick={() => handleEdit(concierge)}>
                     <Edit className="h-4 w-4 mr-2" />
                     Edit
                   </Button>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" onClick={() => handleDelete(concierge)}>
                     <Trash2 className="h-4 w-4 text-red-500" />
                   </Button>
                 </div>
@@ -252,6 +357,107 @@ export function ConciergeManager() {
           ))}
         </div>
       )}
+
+      {/* Edit Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Concierge</DialogTitle>
+            <DialogDescription>
+              Update details for {selectedConcierge?.name}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedConcierge && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Full Name</Label>
+                <Input
+                  id="name"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone</Label>
+                <Input
+                  id="phone"
+                  value={editForm.phone}
+                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="location">Location</Label>
+                <Input
+                  id="location"
+                  value={editForm.location}
+                  onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <Select value={editForm.status} onValueChange={(value) => setEditForm({ ...editForm, status: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="specialties">Specialties</Label>
+                <Textarea
+                  id="specialties"
+                  value={editForm.specialties}
+                  onChange={(e) => setEditForm({ ...editForm, specialties: e.target.value })}
+                  rows={2}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={submitEdit} disabled={saving}>
+              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Concierge</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedConcierge?.name}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={deleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Menu, X, Car, User, Calendar } from 'lucide-react';
+import { Menu, X, Car, User, Calendar, LayoutDashboard, LogOut, Image } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { usePermission } from '@/hooks/usePermission';
 
@@ -8,10 +8,11 @@ interface HeaderProps {
   onNavigate: (view: string) => void;
   onLoginClick?: () => void;
   onProfileClick?: () => void;
+  onLogoutClick?: () => void;
   isLoggedIn?: boolean;
 }
 
-export function Header({ currentView, onNavigate, onLoginClick, onProfileClick, isLoggedIn }: HeaderProps) {
+export function Header({ currentView, onNavigate, onLoginClick, onProfileClick, onLogoutClick, isLoggedIn }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { hasPermission, isLoading } = usePermission();
 
@@ -41,6 +42,14 @@ export function Header({ currentView, onNavigate, onLoginClick, onProfileClick, 
               Services
             </button>
             <button
+              onClick={() => onNavigate('dashboard')}
+              className={`hover:text-slate-900 transition-colors ${
+                currentView === 'dashboard' ? 'text-slate-900 font-medium' : 'text-slate-600'
+              }`}
+            >
+              Dashboard
+            </button>
+            <button
               onClick={() => onNavigate('appointments')}
               className={`hover:text-slate-900 transition-colors ${
                 currentView === 'appointments' ? 'text-slate-900 font-medium' : 'text-slate-600'
@@ -54,6 +63,14 @@ export function Header({ currentView, onNavigate, onLoginClick, onProfileClick, 
             >
               How It Works
             </button>
+            <button
+              onClick={() => onNavigate('gallery')}
+              className={`hover:text-slate-900 transition-colors ${
+                currentView === 'gallery' ? 'text-slate-900 font-medium' : 'text-slate-600'
+              }`}
+            >
+              Gallery
+            </button>
             <Button 
               variant="outline" 
               size="sm" 
@@ -62,6 +79,16 @@ export function Header({ currentView, onNavigate, onLoginClick, onProfileClick, 
               <User className="h-4 w-4 mr-2" />
               {isLoggedIn ? 'Profile' : 'Sign In'}
             </Button>
+            {isLoggedIn && onLogoutClick && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={onLogoutClick}
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
+            )}
           </nav>
 
           {/* Mobile Menu Button */}
@@ -92,6 +119,15 @@ export function Header({ currentView, onNavigate, onLoginClick, onProfileClick, 
               </button>
               <button
                 onClick={() => {
+                  onNavigate('dashboard');
+                  setMobileMenuOpen(false);
+                }}
+                className="text-left px-2 py-1 hover:text-slate-900"
+              >
+                Dashboard
+              </button>
+              <button
+                onClick={() => {
                   onNavigate('appointments');
                   setMobileMenuOpen(false);
                 }}
@@ -99,19 +135,34 @@ export function Header({ currentView, onNavigate, onLoginClick, onProfileClick, 
               >
                 My Appointments
               </button>
-              <button
-                onClick={() => {
-                  onNavigate('how-it-works');
-                  setMobileMenuOpen(false);
-                }}
-                className="text-left px-2 py-1 hover:text-slate-900"
-              >
-                How It Works
-              </button>
+                <button
+                  onClick={() => {
+                    onNavigate('how-it-works');
+                    setMobileMenuOpen(false);
+                  }}
+                  className="text-left px-2 py-1 hover:text-slate-900"
+                >
+                  How It Works
+                </button>
+                <button
+                  onClick={() => {
+                    onNavigate('gallery');
+                    setMobileMenuOpen(false);
+                  }}
+                  className="text-left px-2 py-1 hover:text-slate-900"
+                >
+                  Gallery
+                </button>
               <Button variant="outline" size="sm" className="w-fit" onClick={isLoggedIn ? onProfileClick : onLoginClick}>
                 <User className="h-4 w-4 mr-2" />
                 {isLoggedIn ? 'Profile' : 'Sign In'}
               </Button>
+              {isLoggedIn && onLogoutClick && (
+                <Button variant="ghost" size="sm" className="w-fit" onClick={onLogoutClick}>
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Logout
+                </Button>
+              )}
             </nav>
           </div>
         )}
