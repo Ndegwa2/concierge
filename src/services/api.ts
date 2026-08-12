@@ -179,6 +179,57 @@ export interface Assignment {
   updated_at: string;
 }
 
+export interface EmployeeAssignment extends Assignment {
+  appointment: {
+    id: number;
+    user_id: number;
+    vehicle_id: number;
+    service_id: number;
+    appointment_date: string;
+    status: string;
+    notes?: string;
+    total_amount?: number;
+    vehicle?: Vehicle;
+    service?: Service;
+    customer?: { id: number; name: string; phone: string };
+  };
+}
+
+export interface TimeOffRequest {
+  id: number;
+  employee_id: number;
+  request_type: 'vacation' | 'sick' | 'personal' | 'other';
+  start_date: string;
+  end_date: string;
+  reason?: string;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  admin_notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IssueReport {
+  id: number;
+  employee_id: number;
+  appointment_id?: number | null;
+  title: string;
+  description: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  status: 'open' | 'in-progress' | 'resolved' | 'closed';
+  resolution_notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TimeLog {
+  id: number;
+  employee_id: number;
+  action: 'in' | 'out';
+  timestamp: string;
+  notes?: string;
+  created_at: string;
+}
+
 export interface Invoice {
   id: number;
   invoice_number: string;
@@ -519,7 +570,60 @@ class ApiService {
   }
 
   // ============================================================
-  // ADMIN EMPLOYEE MANAGEMENT ENDPOINTS
+  // EMPLOYEE TIME TRACKING ENDPOINTS
+  // ============================================================
+
+  async clockInOut(data: { action: 'in' | 'out'; notes?: string }): Promise<ApiResponse<{ time_log: TimeLog; status: string }>> {
+    return this.request('/employees/clock', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getTimeLogs(): Promise<ApiResponse<{ logs: TimeLog[]; is_clocked_in: boolean; total_hours: number; current_status: string; last_action?: string }>> {
+    return this.request('/employees/time-logs');
+  }
+
+  // ============================================================
+  // EMPLOYEE TIME-OFF ENDPOINTS
+  // ============================================================
+
+  async requestTimeOff(data: {
+    request_type: 'vacation' | 'sick' | 'personal' | 'other';
+    start_date: string;
+    end_date: string;
+    reason?: string;
+  }): Promise<ApiResponse<{ time_off_request: TimeOffRequest }>> {
+    return this.request('/employees/time-off', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getTimeOffRequests(): Promise<ApiResponse<{ requests: TimeOffRequest[]; count: number; pending_count: number }>> {
+    return this.request('/employees/time-off');
+  }
+
+  // ============================================================
+  // EMPLOYEE ISSUE REPORTING ENDPOINTS
+  // ============================================================
+
+  async reportIssue(data: {
+    title: string;
+    description: string;
+    priority?: 'low' | 'medium' | 'high' | 'urgent';
+    appointment_id?: number;
+  }): Promise<ApiResponse<{ issue: IssueReport }>> {
+    return this.request('/employees/issues', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getIssueReports(): Promise<ApiResponse<{ issues: IssueReport[]; count: number; open_count: number }>> {
+    return this.request('/employees/issues');
+  }
+
   // ============================================================
 
   async getEmployees(status?: string, location?: string, search?: string): Promise<ApiResponse<{
@@ -981,6 +1085,32 @@ class ApiService {
       body: JSON.stringify(data),
     });
   }
+
+  async chatWithAI(data: ChatRequest): Promise<ChatResponse> {
+    return this.request<{ response: string }>('/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface ChatRequest {
+  message: string;
+  conversation_history?: ChatMessage[];
+}
+
+export interface ChatResponse {
+  success: boolean;
+  message?: string;
+  data?: {
+    response: string;
+  };
+  error?: string;
 }
 
 // Export singleton instance

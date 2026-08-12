@@ -5,7 +5,7 @@
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
-import type { User, Vehicle, Appointment, ServicePartner, Employee } from '../services/api';
+import type { User, Vehicle, Appointment, ServicePartner, Employee, EmployeeAssignment, TimeOffRequest, IssueReport, TimeLog } from '../services/api';
 
 // Query Keys
 export const queryKeys = {
@@ -24,6 +24,9 @@ export const queryKeys = {
   dashboard: ['dashboard'] as const,
   assignments: ['assignments'] as const,
   schedule: ['schedule'] as const,
+  timeLogs: ['time-logs'] as const,
+  timeOffRequests: ['time-off-requests'] as const,
+  issueReports: ['issue-reports'] as const,
 };
 
 // ============================================================
@@ -260,6 +263,7 @@ export function useMyAssignments(status?: string) {
   return useQuery({
     queryKey: [...queryKeys.assignments, status],
     queryFn: async () => {
+      if (!api.isAuthenticated()) return [];
       const response = await api.getMyAssignments(status);
       return response.success ? response.data?.assignments ?? [] : [];
     },
@@ -311,6 +315,99 @@ export function useUpdateEmployeeProfile() {
       if (data.success && data.data) {
         queryClient.setQueryData(queryKeys.profile, data.data.user);
       }
+    },
+  });
+}
+
+// ============================================================
+// EMPLOYEE TIME TRACKING HOOKS
+// ============================================================
+
+export function useTimeLogs() {
+  return useQuery({
+    queryKey: ['time-logs'],
+    queryFn: async () => {
+      if (!api.isAuthenticated()) return null;
+      const response = await api.getTimeLogs();
+      return response.success ? response.data : null;
+    },
+    enabled: api.isAuthenticated(),
+  });
+}
+
+export function useClockInOut() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ action, notes }: { action: 'in' | 'out'; notes?: string }) =>
+      api.clockInOut({ action, notes }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['time-logs'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+    },
+  });
+}
+
+// ============================================================
+// EMPLOYEE TIME-OFF HOOKS
+// ============================================================
+
+export function useTimeOffRequests() {
+  return useQuery({
+    queryKey: ['time-off-requests'],
+    queryFn: async () => {
+      if (!api.isAuthenticated()) return null;
+      const response = await api.getTimeOffRequests();
+      return response.success ? response.data : null;
+    },
+    enabled: api.isAuthenticated(),
+  });
+}
+
+export function useRequestTimeOff() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: {
+      request_type: 'vacation' | 'sick' | 'personal' | 'other';
+      start_date: string;
+      end_date: string;
+      reason?: string;
+    }) => api.requestTimeOff(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['time-off-requests'] });
+    },
+  });
+}
+
+// ============================================================
+// EMPLOYEE ISSUE REPORTING HOOKS
+// ============================================================
+
+export function useIssueReports() {
+  return useQuery({
+    queryKey: ['issue-reports'],
+    queryFn: async () => {
+      if (!api.isAuthenticated()) return null;
+      const response = await api.getIssueReports();
+      return response.success ? response.data : null;
+    },
+    enabled: api.isAuthenticated(),
+  });
+}
+
+export function useReportIssue() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: {
+      title: string;
+      description: string;
+      priority?: 'low' | 'medium' | 'high' | 'urgent';
+      appointment_id?: number;
+    }) => api.reportIssue(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['issue-reports'] });
     },
   });
 }

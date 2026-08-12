@@ -14,6 +14,7 @@ import {
   Package
 } from 'lucide-react';
 import { JobGallery } from '@/app/components/JobGallery';
+import { HeroSlideshow } from '@/app/components/HeroSlideshow';
 import { DetailedServiceCard } from '@/app/components/DetailedServiceCard';
 import { BookingForm } from '@/app/components/BookingForm';
 import { HowItWorks } from '@/app/components/HowItWorks';
@@ -27,6 +28,7 @@ import { CustomerDashboard } from '@/app/components/customer/CustomerDashboard';
 import { CustomerAppointments } from '@/app/components/CustomerAppointments';
 import { VehicleReturnConfirmation, ConfirmationData } from '@/app/components/VehicleReturnConfirmation';
 import { ConfirmationSuccessModal } from '@/app/components/ConfirmationSuccessModal';
+import { AIChatBox } from '@/app/components/AIChatBox';
 import { Button } from '@/app/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { Badge } from '@/app/components/ui/badge';
@@ -231,11 +233,8 @@ export default function App() {
         <main className="flex-1">
           {/* Hero Section */}
           <section className="relative h-[600px] flex items-center overflow-hidden bg-slate-900">
-            <div className="absolute inset-0 z-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-700" />
-            <div className="absolute inset-0 z-0 opacity-20" style={{
-              backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(255,255,255,0.1) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(255,255,255,0.08) 0%, transparent 40%)'
-            }} />
-            
+            <HeroSlideshow />
+
             <div className="container mx-auto px-4 relative z-10 text-white">
               <div className="max-w-3xl">
                 <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
@@ -265,12 +264,8 @@ export default function App() {
                   </Button>
                   <Button 
                     size="lg" 
-                    variant="outline" 
-                    className="border-white text-white hover:bg-white/5 hover:scale-105 transition-all duration-200 px-8 py-6 text-lg"
-                    onClick={() => {
-                      const element = document.getElementById('how-it-works-section');
-                      element?.scrollIntoView({ behavior: 'smooth' });
-                    }}
+                    className="bg-white text-slate-900 hover:bg-slate-100 px-8 py-6 text-lg"
+                    onClick={() => handleNavigate('how-it-works')}
                   >
                     How It Works
                   </Button>
@@ -560,6 +555,8 @@ export default function App() {
           </div>
         </div>
       </footer>
+      
+      <AIChatBox />
     </div>
   );
 }

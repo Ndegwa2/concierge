@@ -6,10 +6,10 @@ This module handles employee management and employee portal endpoints.
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from app import db
-from app.models import User, Employee, EmployeeDocument, Appointment, Assignment, Service
+from app.models import User, Employee, EmployeeDocument, EmployeeTimeLog, TimeOffRequest, IssueReport, Appointment, Assignment, Service
 from app.utils.decorators import admin_required, employee_required, role_required, get_current_user
 from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_SHORT_TTL
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from io import StringIO
 import csv
 import os
@@ -965,6 +965,10 @@ def get_my_assignments():
     """Get employee's assignments"""
     try:
         current_user = get_current_user()
+        
+        # Query parameters
+        status = request.args.get('status')
+        
         cache_key = f"employee:assignments:{current_user['id']}:{status or 'all'}"
         cached = cache_get(cache_key)
         if cached is not None:
@@ -1276,5 +1280,425 @@ def update_my_profile():
         return jsonify({
             'success': False,
             'message': 'Failed to update profile',
+            'error': str(e)
+        }), 500
+
+
+# ============================================================
+# EMPLOYEE TIME TRACKING & SUPPORT ENDPOINTS
+# ============================================================
+
+@employees_bp.route('/clock', methods=['POST'])
+@jwt_required()
+@employee_required
+def clock_in_out():
+    """Clock in or out for the current employee"""
+    try:
+        current_user = get_current_user()
+        employee = Employee.query.filter_by(user_id=current_user['id']).first()
+
+        if not employee:
+            return jsonify({
+                'success': False,
+                'message': 'Employee profile not found'
+            }), 404
+
+        data = request.get_json()
+        action = data.get('action')
+
+        if action not in ('in', 'out'):
+            return jsonify({
+                'success': False,
+                'message': "Action must be 'in' or 'out'"
+            }), 400
+
+        # Check last time log
+        last_log = EmployeeTimeLog.query.filter_by(
+            employee_id=employee.id
+        ).order_by(EmployeeTimeLog.timestamp.desc()).first()
+
+        if action == 'in':
+            if last_log and last_log.action == 'in' and not last_log.notes.startswith('clocked_out'):
+                # Check if there's a clock-out after the last clock-in
+                has_clock_out = EmployeeTimeLog.query.filter(
+                    EmployeeTimeLog.employee_id == employee.id,
+                    EmployeeTimeLog.timestamp > last_log.timestamp,
+                    EmployeeTimeLog.action == 'out'
+                ).first()
+                if not has_clock_out:
+                    return jsonify({
+                        'success': False,
+                        'message': 'You are already clocked in'
+                    }), 400
+
+            time_log = EmployeeTimeLog()
+            time_log.employee_id = employee.id
+            time_log.action = 'in'
+            time_log.notes = data.get('notes', '')
+
+            # Update employee status to active
+            employee.status = 'active'
+            db.session.add(time_log)
+            db.session.commit()
+
+            cache_delete_pattern(f"employee:time_logs:{employee.id}:*")
+
+            return jsonify({
+                'success': True,
+                'message': 'Clocked in successfully',
+                'data': {
+                    'time_log': time_log.to_dict(),
+                    'status': employee.status
+                }
+            }), 201
+
+        else:  # clock out
+            if not last_log or last_log.action == 'out':
+                has_clock_in = EmployeeTimeLog.query.filter(
+                    EmployeeTimeLog.employee_id == employee.id,
+                    EmployeeTimeLog.action == 'in'
+                ).order_by(EmployeeTimeLog.timestamp.desc()).first()
+                if not has_clock_in:
+                    clock_in_count = EmployeeTimeLog.query.filter_by(
+                        employee_id=employee.id,
+                        action='in'
+                    ).count()
+                    if clock_in_count == 0:
+                        return jsonify({
+                            'success': False,
+                            'message': 'You must clock in first'
+                        }), 400
+
+            # Find the matching clock-in (last 'in' without matching 'out')
+            clock_in_logs = EmployeeTimeLog.query.filter_by(
+                employee_id=employee.id,
+                action='in'
+            ).order_by(EmployeeTimeLog.timestamp.desc()).all()
+
+            matched_clock_in = None
+            for clk_in in clock_in_logs:
+                matching_out = EmployeeTimeLog.query.filter(
+                    EmployeeTimeLog.employee_id == employee.id,
+                    EmployeeTimeLog.action == 'out',
+                    EmployeeTimeLog.timestamp > clk_in.timestamp
+                ).first()
+                if not matching_out:
+                    matched_clock_in = clk_in
+                    break
+
+            if not matched_clock_in:
+                return jsonify({
+                    'success': False,
+                    'message': 'No active clock-in session found'
+                }), 400
+
+            time_log = EmployeeTimeLog()
+            time_log.employee_id = employee.id
+            time_log.action = 'out'
+            time_log.notes = data.get('notes', '')
+            time_log.timestamp = datetime.now(timezone.utc)
+
+            # Update employee status to off-duty
+            employee.status = 'off-duty'
+            db.session.add(time_log)
+            db.session.commit()
+
+            cache_delete_pattern(f"employee:time_logs:{employee.id}:*")
+
+            return jsonify({
+                'success': True,
+                'message': 'Clocked out successfully',
+                'data': {
+                    'time_log': time_log.to_dict(),
+                    'status': employee.status
+                }
+            }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': 'Failed to clock in/out',
+            'error': str(e)
+        }), 500
+
+
+@employees_bp.route('/time-logs', methods=['GET'])
+@jwt_required()
+@employee_required
+def get_time_logs():
+    """Get employee time logs for the current day"""
+    try:
+        current_user = get_current_user()
+        employee = Employee.query.filter_by(user_id=current_user['id']).first()
+
+        if not employee:
+            return jsonify({
+                'success': False,
+                'message': 'Employee profile not found'
+            }), 404
+
+        today = datetime.now(timezone.utc).date()
+        today_start = datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc)
+        today_end = datetime.combine(today + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
+
+        logs = EmployeeTimeLog.query.filter(
+            EmployeeTimeLog.employee_id == employee.id,
+            EmployeeTimeLog.timestamp >= today_start,
+            EmployeeTimeLog.timestamp < today_end
+        ).order_by(EmployeeTimeLog.timestamp).all()
+
+        # Determine clock status
+        is_clocked_in = False
+        last_action = None
+
+        if logs:
+            last_log = logs[-1]
+            if last_log.action == 'in':
+                is_clocked_in = True
+            last_action = last_log.action
+
+        # Calculate total hours today
+        total_seconds = 0
+        clock_in_time = None
+        for log in logs:
+            if log.action == 'in':
+                clock_in_time = log.timestamp
+            elif log.action == 'out' and clock_in_time:
+                total_seconds += (log.timestamp - clock_in_time).total_seconds()
+                clock_in_time = None
+
+        if clock_in_time:
+            total_seconds += (datetime.now(timezone.utc) - clock_in_time).total_seconds()
+
+        total_hours = round(total_seconds / 3600, 2)
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'logs': [log.to_dict() for log in logs],
+                'is_clocked_in': is_clocked_in,
+                'total_hours': total_hours,
+                'current_status': employee.status,
+                'last_action': last_action
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': 'Failed to get time logs',
+            'error': str(e)
+        }), 500
+
+
+@employees_bp.route('/time-off', methods=['POST'])
+@jwt_required()
+@employee_required
+def request_time_off():
+    """Submit a time-off request"""
+    try:
+        current_user = get_current_user()
+        employee = Employee.query.filter_by(user_id=current_user['id']).first()
+
+        if not employee:
+            return jsonify({
+                'success': False,
+                'message': 'Employee profile not found'
+            }), 404
+
+        data = request.get_json()
+
+        required_fields = ['request_type', 'start_date', 'end_date']
+        if not all(key in data for key in required_fields):
+            return jsonify({
+                'success': False,
+                'message': 'Missing required fields',
+                'required': required_fields
+            }), 400
+
+        valid_types = ['vacation', 'sick', 'personal', 'other']
+        if data['request_type'] not in valid_types:
+            return jsonify({
+                'success': False,
+                'message': f'Invalid request_type. Valid options: {valid_types}'
+            }), 400
+
+        try:
+            start_date = datetime.fromisoformat(data['start_date'].replace('Z', '+00:00'))
+            end_date = datetime.fromisoformat(data['end_date'].replace('Z', '+00:00'))
+        except (ValueError, TypeError):
+            return jsonify({
+                'success': False,
+                'message': 'Invalid date format. Use ISO 8601 format.'
+            }), 400
+
+        if end_date < start_date:
+            return jsonify({
+                'success': False,
+                'message': 'End date must be after or equal to start date'
+            }), 400
+
+        time_off = TimeOffRequest()
+        time_off.employee_id = employee.id
+        time_off.request_type = data['request_type']
+        time_off.start_date = start_date
+        time_off.end_date = end_date
+        time_off.reason = data.get('reason', '')
+        time_off.status = 'pending'
+
+        db.session.add(time_off)
+        db.session.commit()
+
+        cache_delete_pattern(f"employee:time_off:{employee.id}:*")
+
+        return jsonify({
+            'success': True,
+            'message': 'Time-off request submitted successfully',
+            'data': {
+                'time_off_request': time_off.to_dict()
+            }
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': 'Failed to submit time-off request',
+            'error': str(e)
+        }), 500
+
+
+@employees_bp.route('/time-off', methods=['GET'])
+@jwt_required()
+@employee_required
+def get_time_off_requests():
+    """Get employee's time-off requests"""
+    try:
+        current_user = get_current_user()
+        employee = Employee.query.filter_by(user_id=current_user['id']).first()
+
+        if not employee:
+            return jsonify({
+                'success': False,
+                'message': 'Employee profile not found'
+            }), 404
+
+        requests = TimeOffRequest.query.filter_by(
+            employee_id=employee.id
+        ).order_by(TimeOffRequest.created_at.desc()).all()
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'requests': [req.to_dict() for req in requests],
+                'count': len(requests),
+                'pending_count': sum(1 for r in requests if r.status == 'pending')
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': 'Failed to get time-off requests',
+            'error': str(e)
+        }), 500
+
+
+@employees_bp.route('/issues', methods=['POST'])
+@jwt_required()
+@employee_required
+def report_issue():
+    """Report an issue"""
+    try:
+        current_user = get_current_user()
+        employee = Employee.query.filter_by(user_id=current_user['id']).first()
+
+        if not employee:
+            return jsonify({
+                'success': False,
+                'message': 'Employee profile not found'
+            }), 404
+
+        data = request.get_json()
+
+        required_fields = ['title', 'description']
+        if not all(key in data for key in required_fields):
+            return jsonify({
+                'success': False,
+                'message': 'Missing required fields',
+                'required': required_fields
+            }), 400
+
+        valid_priorities = ['low', 'medium', 'high', 'urgent']
+        priority = data.get('priority', 'medium')
+        if priority not in valid_priorities:
+            return jsonify({
+                'success': False,
+                'message': f'Invalid priority. Valid options: {valid_priorities}'
+            }), 400
+
+        issue = IssueReport()
+        issue.employee_id = employee.id
+        issue.title = data['title']
+        issue.description = data['description']
+        issue.priority = priority
+        issue.appointment_id = data.get('appointment_id')
+        issue.status = 'open'
+
+        db.session.add(issue)
+        db.session.commit()
+
+        cache_delete_pattern(f"employee:issues:{employee.id}:*")
+
+        return jsonify({
+            'success': True,
+            'message': 'Issue reported successfully',
+            'data': {
+                'issue': issue.to_dict()
+            }
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': 'Failed to report issue',
+            'error': str(e)
+        }), 500
+
+
+@employees_bp.route('/issues', methods=['GET'])
+@jwt_required()
+@employee_required
+def get_issue_reports():
+    """Get employee's reported issues"""
+    try:
+        current_user = get_current_user()
+        employee = Employee.query.filter_by(user_id=current_user['id']).first()
+
+        if not employee:
+            return jsonify({
+                'success': False,
+                'message': 'Employee profile not found'
+            }), 404
+
+        issues = IssueReport.query.filter_by(
+            employee_id=employee.id
+        ).order_by(IssueReport.created_at.desc()).all()
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'issues': [issue.to_dict() for issue in issues],
+                'count': len(issues),
+                'open_count': sum(1 for i in issues if i.status in ('open', 'in-progress'))
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': 'Failed to get issues',
             'error': str(e)
         }), 500

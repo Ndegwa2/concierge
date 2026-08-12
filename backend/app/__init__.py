@@ -161,6 +161,7 @@ def create_app(config_class=None):
     from app.routes.employees import employees_bp
     from app.routes.partners import partners_bp
     from app.routes.monitoring import monitoring_bp
+    from app.routes.ai_chat import ai_chat_bp
     
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     csrf.exempt(auth_bp)  # JWT-based API: no session cookies, CSRF not needed for auth endpoints
@@ -172,10 +173,11 @@ def create_app(config_class=None):
     app.register_blueprint(employees_bp, url_prefix='/api/employees')
     app.register_blueprint(partners_bp, url_prefix='/api/partners')
     app.register_blueprint(monitoring_bp, url_prefix='/api/monitoring')
+    app.register_blueprint(ai_chat_bp, url_prefix='/api/ai')
 
     # JWT-based API: CSRF protection not needed for any API blueprint
     for bp in [services_bp, appointments_bp, invoices_bp, vehicles_bp,
-               admin_bp, employees_bp, partners_bp, monitoring_bp]:
+               admin_bp, employees_bp, partners_bp, monitoring_bp, ai_chat_bp]:
         csrf.exempt(bp)
     
     # Create database tables if they don't exist

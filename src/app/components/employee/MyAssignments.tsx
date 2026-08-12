@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, MapPin, Phone, Navigation, CheckCircle2, Clock } from 'lucide-react';
+import { Search, Filter, MapPin, Phone, Navigation, CheckCircle2, Clock, PauseCircle, AlertCircle, XCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
+import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { api } from '@/services/api';
+import { useUpdateAssignmentStatus } from '@/hooks/useApi';
 import type { Assignment } from '@/services/api';
 
 interface MyAssignmentsProps {
@@ -18,6 +20,7 @@ interface MyAssignmentsProps {
 
 interface AssignmentDisplay {
   id: string;
+  assignmentId: number;
   customer: string;
   phone: string;
   service: string;
@@ -27,9 +30,15 @@ interface AssignmentDisplay {
   date: string;
   time: string;
   status: string;
+  statusValue: string;
   estimatedDuration: string;
   specialInstructions?: string;
   price: string;
+  appointmentId: number;
+  vehicleInfo: { make: string; model: string; year: number; color?: string } | null;
+  serviceInfo: { name: string; duration: number } | null;
+  notes: string;
+  customerPhone: string;
 }
 
 export function MyAssignments({ employeeData }: MyAssignmentsProps) {
@@ -38,6 +47,7 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
   const [assignments, setAssignments] = useState<AssignmentDisplay[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const updateStatusMutation = useUpdateAssignmentStatus();
 
   const fetchAssignments = async () => {
     try {
@@ -48,6 +58,7 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
           const appt = a.appointment;
           return {
             id: `A-${appt.id}`,
+            assignmentId: a.id,
             customer: appt.customer?.name || 'Unknown Customer',
             phone: appt.customer?.phone || 'N/A',
             service: appt.service?.name || 'N/A',
@@ -60,6 +71,12 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
             estimatedDuration: appt.service ? `${appt.service.duration} min` : 'N/A',
             specialInstructions: appt.notes,
             price: appt.total_amount ? `KES ${appt.total_amount.toLocaleString()}` : 'N/A',
+            appointmentId: appt.id,
+            vehicleInfo: appt.vehicle || null,
+            serviceInfo: appt.service || null,
+            notes: appt.notes || '',
+            customerPhone: appt.customer?.phone || '',
+            statusValue: a.status || 'pending',
           };
         });
         setAssignments(mapped);
@@ -77,14 +94,37 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
     fetchAssignments();
   }, [statusFilter]);
 
+  const handleStatusChange = async (assignmentId: number, newStatus: string, notes?: string) => {
+    try {
+      await updateStatusMutation.mutateAsync({ id: assignmentId, status: newStatus, notes });
+      fetchAssignments();
+    } catch {
+      // Error handled by mutation
+    }
+  };
+
+  const handleNavigate = (address: string) => {
+    const url = `https://maps.google.com/maps?q=${encodeURIComponent(address)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleCallCustomer = (phone: string) => {
+    if (phone && phone !== 'N/A') {
+      window.location.href = `tel:${phone}`;
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'in-progress':
         return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'assigned':
       case 'scheduled':
         return 'bg-green-100 text-green-800 border-green-200';
       case 'completed':
         return 'bg-slate-100 text-slate-800 border-slate-200';
+      case 'cancelled':
+        return 'bg-red-100 text-red-800 border-red-200';
       default:
         return 'bg-slate-100 text-slate-800 border-slate-200';
     }
@@ -167,30 +207,68 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
         </div>
 
         <div className="flex gap-2">
-          {assignment.status === 'scheduled' && (
+          {assignment.statusValue === 'assigned' && (
             <>
-              <Button className="flex-1" size="sm">
+              <Button
+                className="flex-1"
+                size="sm"
+                onClick={() => handleStatusChange(assignment.assignmentId, 'in-progress')}
+                disabled={updateStatusMutation.isPending}
+              >
                 <Navigation className="h-4 w-4 mr-2" />
                 Start Service
               </Button>
-              <Button variant="outline" size="sm">
-                Call Customer
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleCallCustomer(assignment.customerPhone)}
+              >
+                <Phone className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => handleStatusChange(assignment.assignmentId, 'cancelled')}
+                disabled={updateStatusMutation.isPending}
+              >
+                <XCircle className="h-4 w-4" />
               </Button>
             </>
           )}
-          {assignment.status === 'in-progress' && (
+          {assignment.statusValue === 'in-progress' && (
             <>
-              <Button className="flex-1" size="sm">
+              <Button
+                className="flex-1"
+                size="sm"
+                onClick={() => handleStatusChange(assignment.assignmentId, 'completed')}
+                disabled={updateStatusMutation.isPending}
+              >
                 <CheckCircle2 className="h-4 w-4 mr-2" />
-                Complete Service
+                Complete
               </Button>
-              <Button variant="outline" size="sm">
-                Update Status
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleCallCustomer(assignment.customerPhone)}
+              >
+                <Phone className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => handleStatusChange(assignment.assignmentId, 'cancelled')}
+                disabled={updateStatusMutation.isPending}
+              >
+                <XCircle className="h-4 w-4" />
               </Button>
             </>
           )}
-          {assignment.status === 'completed' && (
-            <Button variant="outline" className="flex-1" size="sm">
+          {assignment.statusValue === 'completed' && (
+            <Button
+              variant="outline"
+              className="flex-1"
+              size="sm"
+            >
               View Details
             </Button>
           )}

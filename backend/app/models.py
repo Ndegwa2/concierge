@@ -646,6 +646,104 @@ class DiscountCode(db.Model):
         }
 
 
+class EmployeeTimeLog(db.Model):
+    """Time log model for employee clock-in/out tracking"""
+    __tablename__ = 'employee_time_logs'
+    __table_args__ = (CheckConstraint("action IN ('in', 'out')"),)
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    employee_id = db.Column(db.BigInteger, db.ForeignKey('employees.id', ondelete='CASCADE'), nullable=False, index=True)
+    action = db.Column(db.String(10), nullable=False)
+    timestamp = db.Column(db.DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+
+    employee = db.relationship('Employee', backref='time_logs', lazy=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'employee_id': self.employee_id,
+            'action': self.action,
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class TimeOffRequest(db.Model):
+    """Time-off request model for employee leave requests"""
+    __tablename__ = 'time_off_requests'
+    __table_args__ = (
+        CheckConstraint("status IN ('pending', 'approved', 'rejected', 'cancelled')"),
+        CheckConstraint("request_type IN ('vacation', 'sick', 'personal', 'other')"),
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    employee_id = db.Column(db.BigInteger, db.ForeignKey('employees.id', ondelete='CASCADE'), nullable=False, index=True)
+    request_type = db.Column(db.String(20), nullable=False)
+    start_date = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
+    end_date = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
+    reason = db.Column(db.Text)
+    status = db.Column(db.String(20), default='pending', nullable=False, index=True)
+    admin_notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+    updated_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    employee = db.relationship('Employee', backref='time_off_requests', lazy=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'employee_id': self.employee_id,
+            'request_type': self.request_type,
+            'start_date': self.start_date.isoformat() if self.start_date else None,
+            'end_date': self.end_date.isoformat() if self.end_date else None,
+            'reason': self.reason,
+            'status': self.status,
+            'admin_notes': self.admin_notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class IssueReport(db.Model):
+    """Issue report model for employees to report problems"""
+    __tablename__ = 'issue_reports'
+    __table_args__ = (
+        CheckConstraint("priority IN ('low', 'medium', 'high', 'urgent')"),
+        CheckConstraint("status IN ('open', 'in-progress', 'resolved', 'closed')"),
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    employee_id = db.Column(db.BigInteger, db.ForeignKey('employees.id', ondelete='CASCADE'), nullable=False, index=True)
+    appointment_id = db.Column(db.BigInteger, db.ForeignKey('appointments.id', ondelete='SET NULL'), index=True)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    priority = db.Column(db.String(20), default='medium', nullable=False, index=True)
+    status = db.Column(db.String(20), default='open', nullable=False, index=True)
+    resolution_notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+    updated_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    employee = db.relationship('Employee', backref='issue_reports', lazy=True)
+    appointment = db.relationship('Appointment', backref='issue_reports', lazy=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'employee_id': self.employee_id,
+            'appointment_id': self.appointment_id,
+            'title': self.title,
+            'description': self.description,
+            'priority': self.priority,
+            'status': self.status,
+            'resolution_notes': self.resolution_notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class Invoice(db.Model):
     __tablename__ = 'invoices'
     __table_args__ = (CheckConstraint("status IN ('draft', 'sent', 'paid', 'void')"),)
