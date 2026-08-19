@@ -1,6 +1,9 @@
 from flask import Blueprint, request, jsonify, current_app
 import os
 from google import genai
+from app import limiter
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from app.models import User
 
 ai_chat_bp = Blueprint('ai_chat', __name__)
 
@@ -33,6 +36,8 @@ def get_genai_client():
 
 
 @ai_chat_bp.route('/chat', methods=['POST'])
+@jwt_required()
+@limiter.limit("10 per minute")
 def chat():
     try:
         data = request.get_json()
@@ -56,6 +61,15 @@ def chat():
                 'success': False,
                 'message': 'Message is too long. Please keep it under 2000 characters.'
             }), 400
+        
+        current_user_id = get_jwt_identity()
+        user = User.query.get(current_user_id)
+        
+        if not user:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid user session'
+            }), 401
         
         conversation_history = data.get('conversation_history', [])
         

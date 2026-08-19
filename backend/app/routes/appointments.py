@@ -30,8 +30,12 @@ def get_appointments():
             # Admin gets all appointments
             appointments = Appointment.query.all()
         elif current_user['role'] == 'employee':
-            # Employee gets assigned appointments (will implement with Assignment model)
-            appointments = Appointment.query.all()
+            # Employee gets only assigned appointments
+            appointments = Appointment.query.join(Assignment).filter(
+                Assignment.employee_id == Employee.query.filter_by(
+                    user_id=current_user['id']
+                ).with_entities(Employee.id).scalar_subquery()
+            ).all()
         else:
             # Regular user gets their own appointments
             appointments = Appointment.query.filter_by(user_id=current_user['id']).all()

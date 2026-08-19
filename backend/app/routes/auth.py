@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity, get_jwt
 from app import db, limiter
-from app.models import User, Admin, Employee, AuditLog
+from app.models import User, Employee, AuditLog
 from datetime import datetime, timedelta, timezone
 import re
 import logging
@@ -366,52 +366,47 @@ def admin_login():
     request_id = g.get('request_id', 'unknown')
     try:
         data = request.get_json()
-        
-        # Validate input
+
         if not all(key in data for key in ['email', 'password']):
             return jsonify({
                 'success': False,
                 'message': 'Email and password are required'
             }), 400
-        
+
         email = data['email'].lower().strip()
-        
-        # Find admin by email
-        admin = Admin.query.filter_by(email=email).first()
-        
-        # Check if admin exists and password is correct
-        if not admin or not admin.check_password(data['password']):
-            log_audit('LOGIN', 'Admin', None, status='failed', error_message='Invalid admin credentials')
+
+        user = User.query.filter_by(email=email, role='admin').first()
+
+        if not user or not user.check_password(data['password']):
+            log_audit('LOGIN', 'User', None, status='failed', error_message='Invalid admin credentials', user_id=None, admin_id=None)
             return jsonify({
                 'success': False,
                 'message': 'Invalid admin credentials'
             }), 401
-        
-        # Create tokens (expiry from global JWT config; admins get the short default too)
+
         access_token = create_access_token(
-            identity=str(admin.id),
-            additional_claims={'role': admin.role}
+            identity=str(user.id),
+            additional_claims={'role': user.role}
         )
         refresh_token = create_refresh_token(
-            identity=str(admin.id),
-            additional_claims={'role': admin.role}
+            identity=str(user.id),
+            additional_claims={'role': user.role}
         )
-        
-        # Log audit
-        log_audit('LOGIN', 'Admin', admin.id, new_values={'login_method': 'admin_portal'}, admin_id=admin.id)
-        
+
+        log_audit('LOGIN', 'User', user.id, new_values={'login_method': 'admin_portal'}, user_id=user.id, admin_id=user.id)
+
         return jsonify({
             'success': True,
             'message': 'Admin login successful',
             'data': {
                 'access_token': access_token,
                 'refresh_token': refresh_token,
-                'user': admin.to_dict()
+                'user': user.to_dict()
             }
         }), 200
-        
+
     except Exception as e:
-        log_audit('LOGIN', 'Admin', None, status='failed', error_message='Internal error')
+        log_audit('LOGIN', 'User', None, status='failed', error_message='Internal error', user_id=None, admin_id=None)
         logger.error(f"[{request_id}] Admin login error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
@@ -559,31 +554,24 @@ def change_password():
             }), 400
         
         # Get user
-        if current_user['role'] == 'admin':
-            user = Admin.query.get(current_user['id'])
-        else:
-            user = User.query.get(current_user['id'])
-        
+        user = User.query.get(current_user['id'])
+
         if not user:
             return jsonify({
                 'success': False,
                 'message': 'User not found'
             }), 404
-        
-        # Verify current password
+
         if not user.check_password(data['current_password']):
             return jsonify({
                 'success': False,
                 'message': 'Current password is incorrect'
             }), 401
-        
-        # Update password
+
         user.set_password(data['new_password'])
         db.session.commit()
-        
-        user_id = current_user['id'] if current_user['role'] != 'admin' else None
-        admin_id = current_user['id'] if current_user['role'] == 'admin' else None
-        log_audit('CHANGE_PASSWORD', 'User', user.id, user_id=user_id, admin_id=admin_id)
+
+        log_audit('CHANGE_PASSWORD', 'User', user.id, user_id=user.id, admin_id=user.id if user.is_admin else None)
         
         return jsonify({
             'success': True,
@@ -606,18 +594,14 @@ def verify_token():
     try:
         current_user = get_current_user()
         
-        # Get user details
-        if current_user['role'] == 'admin':
-            user = Admin.query.get(current_user['id'])
-        else:
-            user = User.query.get(current_user['id'])
-        
+        user = User.query.get(current_user['id'])
+
         if not user:
             return jsonify({
                 'success': False,
                 'message': 'User not found'
             }), 404
-        
+
         return jsonify({
             'success': True,
             'message': 'Token is valid',
@@ -640,17 +624,14 @@ def get_profile():
     try:
         current_user = get_current_user()
         
-        if current_user['role'] == 'admin':
-            user = Admin.query.get(current_user['id'])
-        else:
-            user = User.query.get(current_user['id'])
-        
+        user = User.query.get(current_user['id'])
+
         if not user:
             return jsonify({
                 'success': False,
                 'message': 'User not found'
             }), 404
-        
+
         return jsonify({
             'success': True,
             'data': {
@@ -673,11 +654,8 @@ def update_profile():
         current_user = get_current_user()
         data = request.get_json()
         
-        if current_user['role'] == 'admin':
-            user = Admin.query.get(current_user['id'])
-        else:
-            user = User.query.get(current_user['id'])
-        
+        user = User.query.get(current_user['id'])
+
         if not user:
             return jsonify({
                 'success': False,
@@ -730,7 +708,7 @@ def create_admin():
         current_user = get_current_user()
         
         # Only super_admin can create new admin accounts
-        if current_user['role'] != 'super_admin':
+        if current_user['role'] not in ['admin', 'super_admin']:
             return jsonify({
                 'success': False,
                 'message': 'Only Super Admin can create new admin accounts'
@@ -764,29 +742,30 @@ def create_admin():
             }), 400
         
         # Check if admin already exists
-        if Admin.query.filter_by(email=data['email'].lower()).first():
+        if User.query.filter_by(email=data['email'].lower(), is_admin=True).first():
             return jsonify({
                 'success': False,
                 'message': 'Admin with this email already exists'
             }), 409
-        
-        # Create new admin
-        admin = Admin()
-        admin.name = data['name'].strip()
-        admin.email = data['email'].lower().strip()
-        admin.set_password(data['password'])
-        admin.role = data.get('role', 'admin')  # Default to 'admin', can be 'super_admin'
-        
-        db.session.add(admin)
+
+        # Create new admin as a User with admin role
+        user = User()
+        user.name = data['name'].strip()
+        user.email = data['email'].lower().strip()
+        user.set_password(data['password'])
+        user.role = data.get('role', 'admin')
+        user.is_admin = True
+
+        db.session.add(user)
         db.session.commit()
-        
-        log_audit('CREATE_ADMIN', 'Admin', admin.id, new_values={'email': admin.email, 'name': admin.name, 'role': admin.role}, admin_id=current_user['id'])
-        
+
+        log_audit('CREATE_ADMIN', 'User', user.id, new_values={'email': user.email, 'name': user.name, 'role': user.role}, user_id=user.id, admin_id=user.id)
+
         return jsonify({
             'success': True,
             'message': 'Admin account created successfully',
             'data': {
-                'admin': admin.to_dict()
+                'admin': user.to_dict()
             }
         }), 201
         

@@ -7,7 +7,7 @@ from functools import wraps
 from flask import jsonify
 from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request, get_jwt
 
-from app.models import User, Admin, Employee
+from app.models import User, Employee
 
 
 def role_required(*allowed_roles):
@@ -62,7 +62,7 @@ def admin_required(fn):
         
         user_role = current_user.get('role')
         
-        if user_role != 'admin':
+        if user_role not in ['admin', 'super_admin']:
             return jsonify({
                 'success': False,
                 'message': 'Admin access required',
@@ -177,33 +177,21 @@ def owner_or_admin_required(get_resource_user_id):
 
 
 def get_current_user():
-    """
-    Helper function to get the current authenticated user's full record.
-    
-    Returns:
-        dict: User record containing id, email, role, etc.
-        None: If no user is authenticated
-    """
     try:
         verify_jwt_in_request()
         identity = get_jwt_identity()
         claims = get_jwt()
-        
+
         if not identity:
             return None
-        
+
         user_id = str(identity)
         role = claims.get('role')
-        
-        if role == 'admin':
-            admin = Admin.query.get(user_id)
-            if admin:
-                return admin.to_dict()
-        else:
-            user = User.query.get(user_id)
-            if user:
-                return user.to_dict()
-        
+
+        user = User.query.get(user_id)
+        if user:
+            return user.to_dict()
+
         return None
     except Exception:
         return None

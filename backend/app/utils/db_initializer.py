@@ -1,13 +1,16 @@
 from app import db
-from app.models import (User, Service, Vehicle, Admin, DiscountCode)
+from app.models import (User, Service, Vehicle, DiscountCode)
 from datetime import datetime, timezone
+import logging
+
+logger = logging.getLogger(__name__)
 
 def initialize_database():
     """Initialize database with sample data if it doesn't exist"""
     
     # Check if we have any services
     if Service.query.count() == 0:
-        print("Initializing database with sample data...")
+        logger.info("Initializing database with sample data...")
         
         # Create sample services
         services = [
@@ -56,11 +59,13 @@ def initialize_database():
         ]
         db.session.add_all(services)
         
-        # Create sample admin
-        admin = Admin()
+        # Create sample admin user
+        admin = User()
         admin.name = 'Kwame Asante'
         admin.email = 'admin@autoconcierge.com'
         admin.set_password('admin123')
+        admin.role = 'admin'
+        admin.is_admin = True
         db.session.add(admin)
         
         # Create sample users
@@ -176,6 +181,6 @@ def initialize_database():
         db.session.add_all(discounts)
         
         db.session.commit()
-        print("Sample data successfully inserted into the database")
+        logger.info("Sample data successfully inserted into the database")
     else:
-        print("Database already contains data, skipping initialization")
+        logger.info("Database already contains data, skipping initialization")

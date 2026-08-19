@@ -430,6 +430,33 @@ def upload_employee_document(employee_id):
         document_name = request.form.get('document_name', file.filename)
         is_verified = request.form.get('is_verified', 'false').lower() == 'true'
         
+        ALLOWED_EXTENSIONS = {'.pdf', '.jpg', '.jpeg', '.png', '.docx', '.doc'}
+        ALLOWED_MIME_TYPES = {
+            'application/pdf',
+            'image/jpeg',
+            'image/png',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        }
+        
+        ext = os.path.splitext(file.filename)[1].lower()
+        if ext not in ALLOWED_EXTENSIONS:
+            return jsonify({
+                'success': False,
+                'message': f'File type not allowed. Allowed types: {", ".join(ALLOWED_EXTENSIONS)}'
+            }), 400
+        
+        if file.mimetype not in ALLOWED_MIME_TYPES:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid file type detected'
+            }), 400
+        
+        if file.content_length > 10 * 1024 * 1024:
+            return jsonify({
+                'success': False,
+                'message': 'File size exceeds 10MB limit'
+            }), 400
+        
         # Save file to a secure location
         upload_dir = os.path.join(os.getcwd(), 'uploads', 'employee_documents')
         os.makedirs(upload_dir, exist_ok=True)

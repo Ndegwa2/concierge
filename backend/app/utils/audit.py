@@ -73,7 +73,7 @@ def log_audit(
         
     except Exception as e:
         db.session.rollback()
-        print(f"Failed to create audit log: {e}")
+        logger.error(f"Failed to create audit log: {e}")
         return None
 
 
@@ -112,7 +112,7 @@ def track_activity(
         
     except Exception as e:
         db.session.rollback()
-        print(f"Failed to track activity: {e}")
+        logger.error(f"Failed to track activity: {e}")
         return None
 
 

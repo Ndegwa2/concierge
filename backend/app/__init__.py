@@ -59,6 +59,13 @@ def create_app(config_class=None):
             "SECRET_KEY and JWT_SECRET_KEY environment variables must be set "
             "outside of development mode."
         )
+    
+    # Verify encryption key is set in production
+    if not os.environ.get('ENCRYPTION_KEY'):
+        raise RuntimeError(
+            "ENCRYPTION_KEY environment variable must be set in production. "
+            "Generate with: python -c 'import base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())'"
+        )
 
     # HTTPS enforcement in production
     app.config['ENFORCE_HTTPS'] = os.environ.get('ENFORCE_HTTPS', 'False').lower() == 'true'
@@ -91,8 +98,10 @@ def create_app(config_class=None):
     jwt.init_app(app)
 
     # CORS - restrict to configured origins (never wide open in production)
-    cors_origin = os.environ.get('CORS_ORIGIN', '*')
-    cors_origins = [o.strip() for o in cors_origin.split(',') if o.strip()] if cors_origin != '*' else ['*']
+    cors_origin = os.environ.get('CORS_ORIGIN', '')
+    cors_origins = [o.strip() for o in cors_origin.split(',') if o.strip()] if cors_origin else []
+    if not cors_origins:
+        cors_origins = ['http://localhost:5173', 'http://localhost:3000']
     CORS(app, resources={r"/api/*": {"origins": cors_origins}}, supports_credentials=True,
          allow_headers=['Content-Type', 'Authorization'], methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
     csrf.init_app(app)
@@ -194,13 +203,49 @@ def create_app(config_class=None):
     def before_request():
         """Generate request ID for tracking"""
         g.request_id = str(uuid.uuid4())
-    
+
     @app.before_request
     def enforce_https():
         """Redirect HTTP to HTTPS in production."""
         if app.config.get('ENFORCE_HTTPS') and request.url.startswith('http://'):
             return redirect(request.url.replace('http://', 'https://', 1), code=301)
         return None
+
+    @app.before_request
+    def set_rls_context():
+        """Set PostgreSQL session variables for Row-Level Security policies."""
+        if request.method == 'OPTIONS':
+            return None
+
+        try:
+            from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity, get_jwt
+            verify_jwt_in_request(optional=True)
+            identity = get_jwt_identity()
+            claims = get_jwt() if identity else {}
+            if identity:
+                user_id = identity
+                role = claims.get('role', 'customer')
+                db.session.execute(
+                    db.text("SET LOCAL request.user_id = :user_id"),
+                    {'user_id': user_id}
+                )
+                db.session.execute(
+                    db.text("SET LOCAL request.user_role = :role"),
+                    {'role': role}
+                )
+                db.session.execute(
+                    db.text("SET LOCAL request.audit_enabled = 'on'")
+                )
+                db.session.execute(
+                    db.text("SET LOCAL request.ip_address = :ip"),
+                    {'ip': request.remote_addr or 'unknown'}
+                )
+                db.session.execute(
+                    db.text("SET LOCAL request.user_agent = :ua"),
+                    {'ua': request.headers.get('User-Agent', '')[:255]}
+                )
+        except Exception:
+            pass
 
     @app.after_request
     def after_request(response):

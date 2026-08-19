@@ -1,39 +1,98 @@
 from app import db
 from sqlalchemy import func, CheckConstraint
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.types import TypeDecorator, String as SQLString, Date as SQLDate
 import bcrypt
 import uuid
+import os
+import base64
+from cryptography.fernet import Fernet
+
+
+class EncryptedString(TypeDecorator):
+    impl = SQLString
+    cache_ok = True
+
+    def __init__(self, length=255, **kwargs):
+        super().__init__(length=length, **kwargs)
+        key = os.environ.get('ENCRYPTION_KEY')
+        if not key:
+            raise RuntimeError(
+                "ENCRYPTION_KEY environment variable must be set. "
+                "Generate with: python -c 'import base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())'"
+            )
+        self._fernet = Fernet(key.encode() if isinstance(key, str) else key)
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        return self._fernet.encrypt(value.encode()).decode()
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        return self._fernet.decrypt(value.encode()).decode()
+
+
+class EncryptedDate(TypeDecorator):
+    impl = SQLDate
+    cache_ok = True
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        key = os.environ.get('ENCRYPTION_KEY')
+        if not key:
+            raise RuntimeError(
+                "ENCRYPTION_KEY environment variable must be set. "
+                "Generate with: python -c 'import base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())'"
+            )
+        self._fernet = Fernet(key.encode() if isinstance(key, str) else key)
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        return self._fernet.encrypt(value.isoformat().encode()).decode()
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        from datetime import datetime
+        return datetime.strptime(self._fernet.decrypt(value.encode()).decode(), '%Y-%m-%d').date()
+
 
 class User(db.Model):
     __tablename__ = 'users'
-    
+
     id = db.Column(db.BigInteger, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
-    phone = db.Column(db.String(20))
-    address = db.Column(db.String(255))
-    role = db.Column(db.String(20), default='customer')
+    phone = db.Column(EncryptedString(20))
+    address = db.Column(EncryptedString(255))
+    role = db.Column(db.String(20), default='customer', index=True)
+    is_admin = db.Column(db.Boolean, default=False, index=True)
     is_active = db.Column(db.Boolean, default=True, index=True)
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    
+
     vehicles = db.relationship('Vehicle', backref='owner', lazy=True)
     appointments = db.relationship('Appointment', backref='customer', lazy=True)
     payment_methods = db.relationship('PaymentMethod', backref='user', lazy=True)
     notifications = db.relationship('Notification', backref='user', lazy=True)
     service_history = db.relationship('ServiceHistory', backref='customer', lazy=True)
     employee_profile = db.relationship('Employee', backref='user', uselist=False, lazy='joined')
-     
+    audit_logs = db.relationship('AuditLog', back_populates='user', lazy=True, foreign_keys='AuditLog.user_id')
+    admin_audit_logs = db.relationship('AuditLog', back_populates='admin', lazy=True, foreign_keys='AuditLog.admin_id')
+    activities = db.relationship('ActivityTracker', back_populates='user', lazy=True, foreign_keys='ActivityTracker.user_id')
+    admin_activities = db.relationship('ActivityTracker', back_populates='admin', lazy=True, foreign_keys='ActivityTracker.admin_id')
+
     def set_password(self, password):
-        """Hash password using bcrypt"""
         salt = bcrypt.gensalt()
         self.password_hash = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
-    
+
     def check_password(self, password):
-        """Verify password against bcrypt hash"""
         return bcrypt.checkpw(password.encode('utf-8'), self.password_hash.encode('utf-8'))
-    
+
     def to_dict(self, include_employee=False):
         result = {
             'id': self.id,
@@ -42,19 +101,21 @@ class User(db.Model):
             'phone': self.phone,
             'address': self.address,
             'role': self.role,
+            'is_admin': self.is_admin,
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
-        
+
         if include_employee and self.employee_profile:
             result['employee'] = self.employee_profile.to_dict()
-        
+
         return result
+
 
 class Service(db.Model):
     __tablename__ = 'services'
-    
+
     id = db.Column(db.BigInteger, primary_key=True)
     name = db.Column(db.String(100), nullable=False, index=True)
     description = db.Column(db.Text)
@@ -64,10 +125,10 @@ class Service(db.Model):
     is_active = db.Column(db.Boolean, default=True, index=True)
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    
+
     appointments = db.relationship('Appointment', backref='service', lazy=True)
     service_history = db.relationship('ServiceHistory', backref='service', lazy=True)
-    
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -81,9 +142,10 @@ class Service(db.Model):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
+
 class Vehicle(db.Model):
     __tablename__ = 'vehicles'
-    
+
     id = db.Column(db.BigInteger, primary_key=True)
     user_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     make = db.Column(db.String(50), nullable=False, index=True)
@@ -102,10 +164,10 @@ class Vehicle(db.Model):
     is_active = db.Column(db.Boolean, default=True, index=True)
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    
+
     appointments = db.relationship('Appointment', backref='vehicle', lazy=True)
     service_history = db.relationship('ServiceHistory', backref='vehicle', lazy=True)
-    
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -128,10 +190,11 @@ class Vehicle(db.Model):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
+
 class Appointment(db.Model):
     __tablename__ = 'appointments'
     __table_args__ = (CheckConstraint("status IN ('scheduled', 'completed', 'cancelled', 'rescheduled')"),)
-    
+
     id = db.Column(db.BigInteger, primary_key=True)
     user_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     vehicle_id = db.Column(db.BigInteger, db.ForeignKey('vehicles.id', ondelete='CASCADE'), nullable=False, index=True)
@@ -144,10 +207,10 @@ class Appointment(db.Model):
     payment_status = db.Column(db.String(20), default='pending', index=True)
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    
+
     service_history = db.relationship('ServiceHistory', backref='appointment', lazy=True, uselist=False)
     partner = db.relationship('ServicePartner', backref='appointments', lazy=True)
-    
+
     def to_dict(self):
         result = {
             'id': self.id,
@@ -180,10 +243,11 @@ class Appointment(db.Model):
 
         return result
 
+
 class ServiceHistory(db.Model):
     __tablename__ = 'service_history'
     __table_args__ = (CheckConstraint("rating >= 0 AND rating <= 5"),)
-    
+
     id = db.Column(db.BigInteger, primary_key=True)
     user_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     vehicle_id = db.Column(db.BigInteger, db.ForeignKey('vehicles.id', ondelete='CASCADE'), nullable=False, index=True)
@@ -195,7 +259,7 @@ class ServiceHistory(db.Model):
     rating = db.Column(db.Integer)
     review = db.Column(db.Text)
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
-    
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -211,16 +275,17 @@ class ServiceHistory(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
+
 class Notification(db.Model):
     __tablename__ = 'notifications'
-    
+
     id = db.Column(db.BigInteger, primary_key=True)
     user_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     title = db.Column(db.String(100), nullable=False)
     message = db.Column(db.Text)
     is_read = db.Column(db.Boolean, default=False, index=True)
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
-    
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -231,51 +296,19 @@ class Notification(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
-class Admin(db.Model):
-    __tablename__ = 'admins'
-    
-    id = db.Column(db.BigInteger, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
-    password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(20), default='admin')
-    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
-    updated_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    
-    def set_password(self, password):
-        """Hash password using bcrypt"""
-        salt = bcrypt.gensalt()
-        self.password_hash = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
-    
-    def check_password(self, password):
-        """Verify password against bcrypt hash"""
-        return bcrypt.checkpw(password.encode('utf-8'), self.password_hash.encode('utf-8'))
-    
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'name': self.name,
-            'email': self.email,
-            'role': self.role,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
-        }
-
 
 class TimestampMixin:
-    """Mixin for timestamp fields"""
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 class Employee(TimestampMixin, db.Model):
-    """Employee model for concierge staff"""
     __tablename__ = 'employees'
     __table_args__ = (CheckConstraint("status IN ('active', 'off-duty', 'suspended', 'terminated', 'pending', 'rejected')"),
                       CheckConstraint("rating >= 0.00 AND rating <= 5.00"),
                       CheckConstraint("employment_type IN ('full_time', 'part_time', 'contractor')"),
                       CheckConstraint("account_status IN ('active', 'onboarding', 'suspended', 'terminated')"))
-    
+
     id = db.Column(db.BigInteger, primary_key=True)
     user_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, unique=True, index=True)
     employee_id = db.Column(db.String(36), unique=True, nullable=False, index=True, default=lambda: str(uuid.uuid4()))
@@ -285,32 +318,28 @@ class Employee(TimestampMixin, db.Model):
     total_services = db.Column(db.Integer, default=0)
     status = db.Column(db.String(20), default='active', index=True)
     hired_at = db.Column(db.DateTime(timezone=True))
-    
-    # Employment details
+
     department = db.Column(db.String(100), index=True)
     title = db.Column(db.String(100))
     employment_type = db.Column(db.String(20), default='full_time', index=True)
     start_date = db.Column(db.DateTime(timezone=True))
     manager_id = db.Column(db.BigInteger, db.ForeignKey('employees.id', ondelete='SET NULL'), index=True)
-    
-    # Account status for onboarding/offboarding workflow
+
     account_status = db.Column(db.String(20), default='onboarding', index=True)
     exit_notes = db.Column(db.Text)
     offboarding_checklist_completed = db.Column(db.Boolean, default=False)
-    
-    # Compensation & benefits (RBAC-gated fields)
+
     base_salary = db.Column(db.Numeric(10, 2))
     hourly_rate = db.Column(db.Numeric(10, 2))
     pay_frequency = db.Column(db.String(20))
-    bank_account_number = db.Column(db.String(50))
+    bank_account_number = db.Column(EncryptedString(50))
     bank_name = db.Column(db.String(100))
     health_plan_tier = db.Column(db.String(20))
-    
-    # Relationships - use selectin for list views to avoid N+1
+
     assignments = db.relationship('Assignment', backref='assigned_employee', lazy='selectin')
     documents = db.relationship('EmployeeDocument', backref='employee', lazy='selectin')
     manager = db.relationship('Employee', remote_side=[id], backref='subordinates', lazy='joined')
-    
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -339,35 +368,30 @@ class Employee(TimestampMixin, db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
-    
+
     @property
     def specialty_list(self):
-        """Return specialties as a list, handling None case"""
         return self.specialties if isinstance(self.specialties, list) else []
-    
+
     @specialty_list.setter
     def specialty_list(self, value):
-        """Set specialties ensuring it's a list"""
         if value is None:
             self.specialties = []
         elif isinstance(value, list):
             self.specialties = value
         else:
             raise ValueError("Specialties must be a list or None")
-    
+
     def update_rating(self, new_rating):
-        """Update rating with bounds checking"""
         rating_val = float(new_rating)
         if not 0 <= rating_val <= 5:
             raise ValueError("Rating must be between 0 and 5")
         self.rating = round(rating_val, 2)
-    
+
     def increment_services(self):
-        """Atomically increment service count"""
         self.total_services += 1
-    
+
     def set_status(self, new_status):
-        """Set employee status with validation"""
         valid_statuses = ['active', 'off-duty', 'suspended', 'terminated']
         if new_status not in valid_statuses:
             raise ValueError(f"Status must be one of {valid_statuses}")
@@ -375,12 +399,11 @@ class Employee(TimestampMixin, db.Model):
 
 
 class EmployeeDocument(db.Model):
-    """HR Document model for employee documents (ID proof, tax forms, certifications)"""
     __tablename__ = 'employee_documents'
     __table_args__ = (
         CheckConstraint("doc_type IN ('id_proof', 'tax_form', 'certification', 'contract', 'other')"),
     )
-    
+
     id = db.Column(db.BigInteger, primary_key=True)
     employee_id = db.Column(db.BigInteger, db.ForeignKey('employees.id', ondelete='CASCADE'), nullable=False, index=True)
     document_name = db.Column(db.String(255), nullable=False)
@@ -412,10 +435,9 @@ class EmployeeDocument(db.Model):
 
 
 class Assignment(db.Model):
-    """Assignment model linking employees to appointments"""
     __tablename__ = 'assignments'
     __table_args__ = (CheckConstraint("status IN ('assigned', 'in-progress', 'completed', 'cancelled')"),)
-    
+
     id = db.Column(db.BigInteger, primary_key=True)
     appointment_id = db.Column(db.BigInteger, db.ForeignKey('appointments.id', ondelete='CASCADE'), nullable=False, index=True)
     employee_id = db.Column(db.BigInteger, db.ForeignKey('employees.id', ondelete='CASCADE'), nullable=False, index=True)
@@ -426,7 +448,7 @@ class Assignment(db.Model):
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -443,10 +465,9 @@ class Assignment(db.Model):
 
 
 class ServicePartner(db.Model):
-    """Service Partner model for garages, car washes, etc."""
     __tablename__ = 'service_partners'
     __table_args__ = (CheckConstraint("rating >= 0.00 AND rating <= 5.00"),)
-    
+
     id = db.Column(db.BigInteger, primary_key=True)
     name = db.Column(db.String(100), nullable=False, index=True)
     contact_name = db.Column(db.String(100))
@@ -459,7 +480,7 @@ class ServicePartner(db.Model):
     is_active = db.Column(db.Boolean, default=True, index=True)
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -478,13 +499,12 @@ class ServicePartner(db.Model):
 
 
 class AuditLog(db.Model):
-    """Audit Log model for tracking all system activities"""
     __tablename__ = 'audit_logs'
     __table_args__ = (CheckConstraint("status IN ('success', 'failed', 'error')"),)
-    
+
     id = db.Column(db.BigInteger, primary_key=True)
     user_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='SET NULL'), index=True)
-    admin_id = db.Column(db.BigInteger, db.ForeignKey('admins.id', ondelete='SET NULL'), index=True)
+    admin_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='SET NULL'), index=True)
     action = db.Column(db.String(50), nullable=False, index=True)
     entity_type = db.Column(db.String(50), nullable=False, index=True)
     entity_id = db.Column(db.Integer, index=True)
@@ -496,11 +516,10 @@ class AuditLog(db.Model):
     status = db.Column(db.String(20), default='success', index=True)
     error_message = db.Column(db.Text)
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), index=True)
-    
-    # Relationships
-    user = db.relationship('User', backref='audit_logs', lazy=True)
-    admin = db.relationship('Admin', backref='audit_logs', lazy=True)
-    
+
+    user = db.relationship('User', back_populates='audit_logs', lazy=True, foreign_keys=[user_id])
+    admin = db.relationship('User', back_populates='admin_audit_logs', lazy=True, foreign_keys=[admin_id])
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -523,9 +542,8 @@ class AuditLog(db.Model):
 
 
 class SystemMetric(db.Model):
-    """System Metrics model for monitoring system health"""
     __tablename__ = 'system_metrics'
-    
+
     id = db.Column(db.BigInteger, primary_key=True)
     metric_type = db.Column(db.String(50), nullable=False, index=True)
     metric_name = db.Column(db.String(100), nullable=False)
@@ -535,7 +553,7 @@ class SystemMetric(db.Model):
     period_end = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
     extra_data = db.Column(JSONB)
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
-    
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -551,12 +569,11 @@ class SystemMetric(db.Model):
 
 
 class ActivityTracker(db.Model):
-    """Activity Tracker for real-time user activity monitoring"""
     __tablename__ = 'activity_tracker'
-    
+
     id = db.Column(db.BigInteger, primary_key=True)
     user_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='SET NULL'), index=True)
-    admin_id = db.Column(db.BigInteger, db.ForeignKey('admins.id', ondelete='SET NULL'), index=True)
+    admin_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='SET NULL'), index=True)
     activity_type = db.Column(db.String(50), nullable=False, index=True)
     activity_details = db.Column(JSONB)
     session_id = db.Column(db.String(100), index=True)
@@ -564,11 +581,10 @@ class ActivityTracker(db.Model):
     user_agent = db.Column(db.String(255))
     duration_ms = db.Column(db.Integer)
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), index=True)
-    
-    # Relationships
-    user = db.relationship('User', backref='activities', lazy=True)
-    admin = db.relationship('Admin', backref='activities', lazy=True)
-    
+
+    user = db.relationship('User', back_populates='activities', lazy=True, foreign_keys=[user_id])
+    admin = db.relationship('User', back_populates='admin_activities', lazy=True, foreign_keys=[admin_id])
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -585,37 +601,40 @@ class ActivityTracker(db.Model):
             'admin_name': self.admin.name if self.admin else None
         }
 
+
 class PaymentMethod(db.Model):
     __tablename__ = 'payment_methods'
-    
+
     id = db.Column(db.BigInteger, primary_key=True)
     user_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
-    card_number = db.Column(db.String(255), nullable=False)
-    cardholder_name = db.Column(db.String(100), nullable=False)
-    expiry_date = db.Column(db.String(10), nullable=False)
+    payment_token = db.Column(db.String(255))
+    card_brand = db.Column(db.String(50))
     last_four_digits = db.Column(db.String(4))
+    cardholder_name = db.Column(db.String(100))
+    expiry_date = db.Column(db.Date)
     is_default = db.Column(db.Boolean, default=False, index=True)
     is_active = db.Column(db.Boolean, default=True, index=True)
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    
+
     def to_dict(self):
         return {
             'id': self.id,
             'user_id': self.user_id,
-            'card_number': self.card_number,
-            'cardholder_name': self.cardholder_name,
-            'expiry_date': self.expiry_date,
+            'card_brand': self.card_brand,
             'last_four_digits': self.last_four_digits,
+            'cardholder_name': self.cardholder_name,
+            'expiry_date': self.expiry_date.isoformat() if self.expiry_date else None,
             'is_default': self.is_default,
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
+
 class DiscountCode(db.Model):
     __tablename__ = 'discount_codes'
-    
+
     id = db.Column(db.BigInteger, primary_key=True)
     code = db.Column(db.String(20), unique=True, nullable=False, index=True)
     discount_type = db.Column(db.String(20), default='percentage')
@@ -628,7 +647,7 @@ class DiscountCode(db.Model):
     is_active = db.Column(db.Boolean, default=True, index=True)
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -647,7 +666,6 @@ class DiscountCode(db.Model):
 
 
 class EmployeeTimeLog(db.Model):
-    """Time log model for employee clock-in/out tracking"""
     __tablename__ = 'employee_time_logs'
     __table_args__ = (CheckConstraint("action IN ('in', 'out')"),)
 
@@ -672,7 +690,6 @@ class EmployeeTimeLog(db.Model):
 
 
 class TimeOffRequest(db.Model):
-    """Time-off request model for employee leave requests"""
     __tablename__ = 'time_off_requests'
     __table_args__ = (
         CheckConstraint("status IN ('pending', 'approved', 'rejected', 'cancelled')"),
@@ -708,7 +725,6 @@ class TimeOffRequest(db.Model):
 
 
 class IssueReport(db.Model):
-    """Issue report model for employees to report problems"""
     __tablename__ = 'issue_reports'
     __table_args__ = (
         CheckConstraint("priority IN ('low', 'medium', 'high', 'urgent')"),
@@ -747,7 +763,7 @@ class IssueReport(db.Model):
 class Invoice(db.Model):
     __tablename__ = 'invoices'
     __table_args__ = (CheckConstraint("status IN ('draft', 'sent', 'paid', 'void')"),)
-    
+
     id = db.Column(db.BigInteger, primary_key=True)
     invoice_number = db.Column(db.String(50), unique=True, nullable=False, index=True)
     appointment_id = db.Column(db.BigInteger, db.ForeignKey('appointments.id', ondelete='CASCADE'), nullable=False, index=True)
@@ -758,10 +774,10 @@ class Invoice(db.Model):
     sent_at = db.Column(db.DateTime(timezone=True))
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    
+
     appointment = db.relationship('Appointment', backref=db.backref('invoice', uselist=False), lazy=True)
     customer = db.relationship('User', backref='invoices', lazy=True)
-    
+
     def to_dict(self):
         return {
             'id': self.id,

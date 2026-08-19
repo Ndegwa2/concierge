@@ -39,8 +39,6 @@ services:
         generateValue: true
       - key: CORS_ORIGIN
         value: https://auto-concierge-frontend.onrender.com
-      - key: WTF_CSRF_ENABLED
-        value: "False"
 
   # Frontend Static Site
   - type: web
