@@ -6,27 +6,25 @@ import { Label } from '@/app/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { Shield, User as UserIcon, Loader2, Eye, EyeOff, Mail, Lock } from 'lucide-react';
-import { api, API_BASE_URL } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface LoginModalProps {
   open: boolean;
   onClose: () => void;
-  onLogin: (userType: 'customer' | 'admin' | 'employee') => void;
   onSwitchToSignUp: () => void;
 }
 
-export function LoginModal({ open, onClose, onLogin, onSwitchToSignUp }: LoginModalProps) {
+export function LoginModal({ open, onClose, onSwitchToSignUp }: LoginModalProps) {
   const [activeTab, setActiveTab] = useState('customer');
-  
-  // Form states
+  const { login } = useAuth();
+
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerPassword, setCustomerPassword] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [employeeEmail, setEmployeeEmail] = useState('');
   const [employeePassword, setEmployeePassword] = useState('');
-  
-  // UI states
+
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,38 +33,13 @@ export function LoginModal({ open, onClose, onLogin, onSwitchToSignUp }: LoginMo
     e.preventDefault();
     setError(null);
     setIsLoading(true);
-    
+
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: customerEmail.toLowerCase().trim(),
-          password: customerPassword,
-        }),
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        // Store tokens
-        if (data.data.access_token) {
-          localStorage.setItem('auth_token', data.data.access_token);
-          localStorage.setItem('refresh_token', data.data.refresh_token);
-          localStorage.setItem('user', JSON.stringify(data.data.user));
-          api.setTokens(data.data.access_token, data.data.refresh_token);
-        }
-        
-        onLogin('customer');
+      const result = await login(customerEmail.toLowerCase().trim(), customerPassword, 'customer');
+      if (result.success) {
         onClose();
-        
-        // Reset form
-        setCustomerEmail('');
-        setCustomerPassword('');
       } else {
-        setError(data.message || 'Login failed. Please try again.');
+        setError(result.message || 'Login failed. Please try again.');
       }
     } catch (err) {
       setError('Network error. Please check your connection and try again.');
@@ -79,38 +52,13 @@ export function LoginModal({ open, onClose, onLogin, onSwitchToSignUp }: LoginMo
     e.preventDefault();
     setError(null);
     setIsLoading(true);
-    
+
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/admin/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: adminEmail.toLowerCase().trim(),
-          password: adminPassword,
-        }),
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        // Store tokens
-        if (data.data.access_token) {
-          localStorage.setItem('auth_token', data.data.access_token);
-          localStorage.setItem('refresh_token', data.data.refresh_token);
-          localStorage.setItem('user', JSON.stringify(data.data.user));
-          api.setTokens(data.data.access_token, data.data.refresh_token);
-        }
-        
-        onLogin('admin');
+      const result = await login(adminEmail.toLowerCase().trim(), adminPassword, 'admin');
+      if (result.success) {
         onClose();
-        
-        // Reset form
-        setAdminEmail('');
-        setAdminPassword('');
       } else {
-        setError(data.message || 'Admin login failed. Please try again.');
+        setError(result.message || 'Admin login failed. Please try again.');
       }
     } catch (err) {
       setError('Network error. Please check your connection and try again.');
@@ -123,38 +71,13 @@ export function LoginModal({ open, onClose, onLogin, onSwitchToSignUp }: LoginMo
     e.preventDefault();
     setError(null);
     setIsLoading(true);
-    
+
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/employee/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: employeeEmail.toLowerCase().trim(),
-          password: employeePassword,
-        }),
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        // Store tokens
-        if (data.data.access_token) {
-          localStorage.setItem('auth_token', data.data.access_token);
-          localStorage.setItem('refresh_token', data.data.refresh_token);
-          localStorage.setItem('user', JSON.stringify(data.data.user));
-          api.setTokens(data.data.access_token, data.data.refresh_token);
-        }
-        
-        onLogin('employee');
+      const result = await login(employeeEmail.toLowerCase().trim(), employeePassword, 'employee');
+      if (result.success) {
         onClose();
-        
-        // Reset form
-        setEmployeeEmail('');
-        setEmployeePassword('');
       } else {
-        setError(data.message || 'Employee login failed. Please try again.');
+        setError(result.message || 'Employee login failed. Please try again.');
       }
     } catch (err) {
       setError('Network error. Please check your connection and try again.');
@@ -368,7 +291,6 @@ export function LoginModal({ open, onClose, onLogin, onSwitchToSignUp }: LoginMo
           </TabsContent>
         </Tabs>
 
-        {/* Switch to Sign Up */}
         <div className="text-center text-sm text-muted-foreground pt-4 border-t">
           Don't have an account?{' '}
           <button

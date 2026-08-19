@@ -7,12 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { Badge } from '@/app/components/ui/badge';
 import { User, Mail, Phone, MapPin, Lock, Eye, EyeOff, Loader2, CheckCircle2, XCircle, Briefcase, Users } from 'lucide-react';
-import { api, API_BASE_URL } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface SignUpModalProps {
   open: boolean;
   onClose: () => void;
-  onSignUp: (user: any) => void;
   onSwitchToLogin: () => void;
 }
 
@@ -25,9 +24,10 @@ interface PasswordValidation {
 
 type UserRole = 'customer' | 'employee';
 
-export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUpModalProps) {
+export function SignUpModal({ open, onClose, onSwitchToLogin }: SignUpModalProps) {
   const [selectedRole, setSelectedRole] = useState<UserRole>('customer');
-  
+  const { signup } = useAuth();
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -38,156 +38,113 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
     location: '',
     specialties: '',
   });
-  
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
-  
-  // Password validation state
+
   const getPasswordValidation = (password: string): PasswordValidation => ({
     length: password.length >= 8,
     uppercase: /[A-Z]/.test(password),
     lowercase: /[a-z]/.test(password),
     number: /\d/.test(password),
   });
-  
+
   const passwordValidation = getPasswordValidation(formData.password);
   const isPasswordValid = Object.values(passwordValidation).every(Boolean);
-  
-  // Email validation
+
   const isValidEmail = (email: string) => {
     const pattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     return pattern.test(email);
   };
-  
-  // Phone validation (Kenyan format)
+
   const isValidPhone = (phone: string) => {
-    if (!phone) return true; // Phone is optional
+    if (!phone) return true;
     const cleaned = phone.replace(/[\s-]/g, '');
     const pattern = /^(\+254|254|0)[17]\d{8}$/;
     return pattern.test(cleaned);
   };
-  
+
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     setError(null);
   };
-  
+
   const handleBlur = (field: string) => {
     setTouched(prev => ({ ...prev, [field]: true }));
   };
-  
+
   const validateForm = (): boolean => {
-    // Check required fields
     if (!formData.name.trim()) {
       setError('Full name is required');
       return false;
     }
-    
+
     if (!formData.email.trim()) {
       setError('Email is required');
       return false;
     }
-    
+
     if (!isValidEmail(formData.email)) {
       setError('Please enter a valid email address');
       return false;
     }
-    
+
     if (formData.phone && !isValidPhone(formData.phone)) {
       setError('Please enter a valid Kenyan phone number (e.g., 0712345678)');
       return false;
     }
-    
+
     if (!isPasswordValid) {
       setError('Password does not meet the requirements');
       return false;
     }
-    
+
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       return false;
     }
-    
-    // Employee-specific validation
+
     if (selectedRole === 'employee' && !formData.location.trim()) {
       setError('Location is required for employee registration');
       return false;
     }
-    
+
     return true;
   };
-  
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
-    
+
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      const requestBody: any = {
+      const result = await signup({
         name: formData.name.trim(),
         email: formData.email.toLowerCase().trim(),
         password: formData.password,
         role: selectedRole,
         phone: formData.phone.trim() || undefined,
         address: formData.address.trim() || undefined,
-      };
-      
-      // Add employee-specific fields
-      if (selectedRole === 'employee') {
-        requestBody.location = formData.location.trim();
-        requestBody.specialties = formData.specialties 
-          ? formData.specialties.split(',').map(s => s.trim()).filter(Boolean)
-          : [];
-      }
-      
-      const response = await fetch(`${API_BASE_URL}/auth/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
+        ...(selectedRole === 'employee' ? {
+          location: formData.location.trim(),
+          specialties: formData.specialties 
+            ? formData.specialties.split(',').map(s => s.trim()).filter(Boolean)
+            : [],
+        } : {}),
       });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        // For customers: store tokens and auto-login
-        if (data.data.access_token && selectedRole === 'customer') {
-          localStorage.setItem('auth_token', data.data.access_token);
-          localStorage.setItem('refresh_token', data.data.refresh_token);
-          localStorage.setItem('user', JSON.stringify(data.data.user));
-          api.setTokens(data.data.access_token, data.data.refresh_token);
-          onSignUp(data.data.user);
-          onClose();
-        } else if (data.data.requires_approval) {
-          // For employees: show approval message
-          onSignUp({ ...data.data.user, requires_approval: true });
-          onClose();
-        }
-        
-        // Reset form
-        setFormData({
-          name: '',
-          email: '',
-          phone: '',
-          address: '',
-          password: '',
-          confirmPassword: '',
-          location: '',
-          specialties: '',
-        });
-        setTouched({});
-        setSelectedRole('customer');
+
+      if (result.success) {
+        onClose();
       } else {
-        setError(data.message || 'Registration failed. Please try again.');
+        setError(result.message || 'Registration failed. Please try again.');
       }
     } catch (err) {
       setError('Network error. Please check your connection and try again.');
@@ -195,7 +152,7 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
       setIsLoading(false);
     }
   };
-  
+
   const handleClose = () => {
     setFormData({
       name: '',
@@ -212,7 +169,7 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
     setSelectedRole('customer');
     onClose();
   };
-  
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
@@ -222,7 +179,7 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
             Join AutoConcierge for premium vehicle care services
           </DialogDescription>
         </DialogHeader>
-        
+
         <form onSubmit={handleSubmit} className="space-y-4 pt-4">
           {error && (
             <Alert variant="destructive">
@@ -230,8 +187,7 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          
-          {/* Role Selection */}
+
           <div className="space-y-3">
             <Label>I want to join as</Label>
             <div className="grid grid-cols-2 gap-3">
@@ -248,7 +204,7 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
                 <span className="font-medium">Customer</span>
                 <span className="text-xs text-muted-foreground text-center">Book services for your vehicles</span>
               </button>
-              
+
               <button
                 type="button"
                 onClick={() => setSelectedRole('employee')}
@@ -263,18 +219,17 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
                 <span className="text-xs text-muted-foreground text-center">Join our concierge team</span>
               </button>
             </div>
-            
+
             {selectedRole === 'employee' && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-2">
                 <p className="text-sm text-amber-800">
-                  <strong>Note:</strong> Employee accounts require admin approval before activation. 
+                  <strong>Note:</strong> Employee accounts require admin approval before activation.
                   You'll be notified once your account is approved.
                 </p>
               </div>
             )}
           </div>
-          
-          {/* Name Field */}
+
           <div className="space-y-2">
             <Label htmlFor="signup-name">
               Full Name <span className="text-red-500">*</span>
@@ -293,8 +248,7 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
               />
             </div>
           </div>
-          
-          {/* Email Field */}
+
           <div className="space-y-2">
             <Label htmlFor="signup-email">
               Email Address <span className="text-red-500">*</span>
@@ -316,8 +270,7 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
               <p className="text-sm text-red-500">Please enter a valid email address</p>
             )}
           </div>
-          
-          {/* Phone Field */}
+
           <div className="space-y-2">
             <Label htmlFor="signup-phone">Phone Number (Optional)</Label>
             <div className="relative">
@@ -337,11 +290,9 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
               <p className="text-sm text-red-500">Enter a valid Kenyan phone number</p>
             )}
           </div>
-          
-          {/* Employee-specific fields */}
+
           {selectedRole === 'employee' && (
             <>
-              {/* Location Field */}
               <div className="space-y-2">
                 <Label htmlFor="signup-location">
                   Preferred Work Location <span className="text-red-500">*</span>
@@ -360,8 +311,7 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
                   />
                 </div>
               </div>
-              
-              {/* Specialties Field */}
+
               <div className="space-y-2">
                 <Label htmlFor="signup-specialties">Specialties (Optional)</Label>
                 <Input
@@ -376,8 +326,7 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
               </div>
             </>
           )}
-          
-          {/* Address Field - only for customers */}
+
           {selectedRole === 'customer' && (
             <div className="space-y-2">
               <Label htmlFor="signup-address">Address (Optional)</Label>
@@ -395,8 +344,7 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
               </div>
             </div>
           )}
-          
-          {/* Password Field */}
+
           <div className="space-y-2">
             <Label htmlFor="signup-password">
               Password <span className="text-red-500">*</span>
@@ -421,8 +369,7 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
-            
-            {/* Password Requirements */}
+
             {formData.password && (
               <div className="space-y-1 pt-2">
                 <p className="text-sm font-medium text-muted-foreground">Password requirements:</p>
@@ -471,8 +418,7 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
               </div>
             )}
           </div>
-          
-          {/* Confirm Password Field */}
+
           <div className="space-y-2">
             <Label htmlFor="signup-confirm-password">
               Confirm Password <span className="text-red-500">*</span>
@@ -505,8 +451,7 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
               <p className="text-sm text-red-500">Passwords do not match</p>
             )}
           </div>
-          
-          {/* Submit Button */}
+
           <Button type="submit" className="w-full" disabled={isLoading}>
             {isLoading ? (
               <>
@@ -517,8 +462,7 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
               selectedRole === 'customer' ? 'Create Account' : 'Submit Application'
             )}
           </Button>
-          
-          {/* Switch to Login */}
+
           <div className="text-center text-sm text-muted-foreground">
             Already have an account?{' '}
             <button
@@ -529,8 +473,7 @@ export function SignUpModal({ open, onClose, onSignUp, onSwitchToLogin }: SignUp
               Sign In
             </button>
           </div>
-          
-          {/* Terms */}
+
           <p className="text-xs text-center text-muted-foreground">
             By creating an account, you agree to our{' '}
             <a href="/terms" className="text-primary hover:underline">Terms of Service</a>

@@ -12,8 +12,11 @@ interface SignUpData {
   name: string;
   email: string;
   password: string;
+  role: 'customer' | 'employee';
   phone?: string;
   address?: string;
+  location?: string;
+  specialties?: string[];
 }
 
 interface AuthContextType {
@@ -94,7 +97,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const response = await api.register(data);
       
       if (response.success && response.data) {
-        setUser(response.data.user);
+        if (response.data.requires_approval) {
+          api.clearTokens();
+        } else {
+          setUser(response.data.user);
+        }
         return { success: true, message: response.message || 'Registration successful', user: response.data.user };
       }
       

@@ -5,6 +5,7 @@
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import type { User, Vehicle, Appointment, ServicePartner, Employee, EmployeeAssignment, TimeOffRequest, IssueReport, TimeLog } from '../services/api';
 
 // Query Keys
@@ -55,9 +56,10 @@ export function useRegister() {
 
 export function useLogout() {
   const queryClient = useQueryClient();
+  const { logout } = useAuth();
 
   return useMutation({
-    mutationFn: () => api.logout(),
+    mutationFn: logout,
     onSettled: () => {
       queryClient.clear();
     },

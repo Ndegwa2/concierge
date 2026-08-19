@@ -37,20 +37,20 @@ import { services } from '@/app/data/services';
 import { useAppointments, useProfile } from '@/hooks/useApi';
 import { api } from '@/services/api';
 import type { Appointment } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<'home' | 'booking' | 'appointments' | 'dashboard' | 'profile' | 'gallery'>('home');
   const [selectedService, setSelectedService] = useState<string>();
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [signupModalOpen, setSignupModalOpen] = useState(false);
-  const [userType, setUserType] = useState<'customer' | 'admin' | 'employee' | null>(null);
   const [confirmationModalOpen, setConfirmationModalOpen] = useState(false);
   const [successModalOpen, setSuccessModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [lastSubmittedRating, setLastSubmittedRating] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
   const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0);
 
+  const { userType, logout } = useAuth();
   const { data: profile } = useProfile();
   const { data: appointments = [], isLoading: appointmentsLoading, refetch: refetchAppointments } = useAppointments();
 
@@ -70,26 +70,8 @@ export default function App() {
     refetchAppointments();
   };
 
-  const handleLogin = (type: 'customer' | 'admin' | 'employee') => {
-    setIsLoading(true);
-    setUserType(type);
-    setIsLoading(false);
-    toast.success(`Logged in as ${type}`);
-  };
-
-  const handleSignUp = (user: any) => {
-    if (user.requires_approval) {
-      setUserType(null);
-      toast.success('Application submitted! Please wait for admin approval.');
-    } else {
-      setUserType('customer');
-      toast.success('Account created successfully!');
-    }
-  };
-
-  const handleLogout = () => {
-    api.logout();
-    setUserType(null);
+  const handleLogout = async () => {
+    await logout();
     setCurrentView('home');
     toast.info('Logged out successfully');
   };
@@ -217,14 +199,12 @@ export default function App() {
       <LoginModal
         open={loginModalOpen}
         onClose={() => setLoginModalOpen(false)}
-        onLogin={handleLogin}
         onSwitchToSignUp={handleSwitchToSignUp}
       />
 
       <SignUpModal
         open={signupModalOpen}
         onClose={() => setSignupModalOpen(false)}
-        onSignUp={handleSignUp}
         onSwitchToLogin={handleSwitchToLogin}
       />
 

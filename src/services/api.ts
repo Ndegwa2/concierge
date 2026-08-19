@@ -4,8 +4,7 @@
  * This module provides a centralized API service for all backend communication.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-export { API_BASE_URL };
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 // Types
 export interface User {
@@ -33,62 +32,9 @@ export interface EmployeeProfile {
   hired_at?: string;
   created_at: string;
   updated_at: string;
-  // Employment details
-  department?: string;
-  title?: string;
-  employment_type?: 'full_time' | 'part_time' | 'contractor';
-  start_date?: string;
-  manager_id?: number;
-  // Onboarding / Offboarding
-  account_status?: 'active' | 'onboarding' | 'suspended' | 'terminated';
-  exit_notes?: string;
-  offboarding_checklist_completed?: boolean;
-  // Compensation & Benefits (RBAC-gated)
-  base_salary?: number;
-  hourly_rate?: number;
-  pay_frequency?: 'monthly' | 'bi_weekly' | 'weekly';
-  bank_account_number?: string;
-  bank_name?: string;
-  health_plan_tier?: 'basic' | 'standard' | 'premium';
 }
 
 export type Employee = EmployeeProfile;
-
-export interface EmployeeDocument {
-  id: number;
-  employee_id: number;
-  document_name: string;
-  doc_type: 'id_proof' | 'tax_form' | 'certification' | 'contract' | 'other';
-  file_name?: string;
-  file_size?: number;
-  mime_type?: string;
-  is_verified?: boolean;
-  verified_at?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface RegisterEmployeeData {
-  name: string;
-  email: string;
-  password: string;
-  location: string;
-  phone?: string;
-  address?: string;
-  specialties?: string[];
-  status?: string;
-  department?: string;
-  title?: string;
-  employment_type?: 'full_time' | 'part_time' | 'contractor';
-  start_date?: string;
-  account_status?: string;
-  base_salary?: number;
-  hourly_rate?: number;
-  pay_frequency?: string;
-  bank_account_number?: string;
-  bank_name?: string;
-  health_plan_tier?: string;
-}
 
 export interface RegisterData {
   name: string;
@@ -138,7 +84,7 @@ export interface Appointment {
   service_id: number;
   partner_id?: number;
   appointment_date: string;
-  status: 'scheduled' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled' | 'rescheduled';
+  status: 'scheduled' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled';
   notes?: string;
   total_amount?: number;
   payment_status: 'pending' | 'paid' | 'refunded';
@@ -177,57 +123,6 @@ export interface Assignment {
   notes?: string;
   created_at: string;
   updated_at: string;
-}
-
-export interface EmployeeAssignment extends Assignment {
-  appointment: {
-    id: number;
-    user_id: number;
-    vehicle_id: number;
-    service_id: number;
-    appointment_date: string;
-    status: string;
-    notes?: string;
-    total_amount?: number;
-    vehicle?: Vehicle;
-    service?: Service;
-    customer?: { id: number; name: string; phone: string };
-  };
-}
-
-export interface TimeOffRequest {
-  id: number;
-  employee_id: number;
-  request_type: 'vacation' | 'sick' | 'personal' | 'other';
-  start_date: string;
-  end_date: string;
-  reason?: string;
-  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
-  admin_notes?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface IssueReport {
-  id: number;
-  employee_id: number;
-  appointment_id?: number | null;
-  title: string;
-  description: string;
-  priority: 'low' | 'medium' | 'high' | 'urgent';
-  status: 'open' | 'in-progress' | 'resolved' | 'closed';
-  resolution_notes?: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface TimeLog {
-  id: number;
-  employee_id: number;
-  action: 'in' | 'out';
-  timestamp: string;
-  notes?: string;
-  created_at: string;
 }
 
 export interface Invoice {
@@ -329,16 +224,7 @@ class ApiService {
         headers,
       });
 
-      let data: ApiResponse<T>;
-      try {
-        data = await response.json();
-      } catch {
-        data = {
-          success: false,
-          message: response.statusText || 'Invalid response from server',
-          error: `HTTP ${response.status}: ${response.statusText}`,
-        };
-      }
+      const data = await response.json();
 
       // Handle token expiration / missing JWT
       const method = (options.method || 'GET').toUpperCase();
@@ -386,12 +272,7 @@ class ApiService {
         }),
       });
 
-      let data: ApiResponse<any>;
-      try {
-        data = await response.json();
-      } catch {
-        return false;
-      }
+      const data = await response.json();
 
       if (data.success && data.data?.access_token) {
         this.setTokens(data.data.access_token);
@@ -443,7 +324,7 @@ class ApiService {
       body: JSON.stringify(userData),
     });
 
-    if (response.success && response.data) {
+    if (response.success && response.data && response.data.access_token) {
       this.setTokens(response.data.access_token, response.data.refresh_token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
     }
@@ -569,61 +450,47 @@ class ApiService {
     });
   }
 
-  // ============================================================
-  // EMPLOYEE TIME TRACKING ENDPOINTS
-  // ============================================================
-
-  async clockInOut(data: { action: 'in' | 'out'; notes?: string }): Promise<ApiResponse<{ time_log: TimeLog; status: string }>> {
+  async clockInOut({ action, notes }: { action: 'in' | 'out'; notes?: string }): Promise<ApiResponse<{
+    time_log: any;
+    status: string;
+  }>> {
     return this.request('/employees/clock', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ action, notes }),
     });
   }
 
-  async getTimeLogs(): Promise<ApiResponse<{ logs: TimeLog[]; is_clocked_in: boolean; total_hours: number; current_status: string; last_action?: string }>> {
+  async getTimeLogs(): Promise<ApiResponse<{
+    logs: any[];
+    is_clocked_in: boolean;
+    total_hours: number;
+    current_status: string;
+    last_action: string | null;
+  }>> {
     return this.request('/employees/time-logs');
   }
-
-  // ============================================================
-  // EMPLOYEE TIME-OFF ENDPOINTS
-  // ============================================================
 
   async requestTimeOff(data: {
     request_type: 'vacation' | 'sick' | 'personal' | 'other';
     start_date: string;
     end_date: string;
     reason?: string;
-  }): Promise<ApiResponse<{ time_off_request: TimeOffRequest }>> {
+  }): Promise<ApiResponse<{ time_off_request: any }>> {
     return this.request('/employees/time-off', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async getTimeOffRequests(): Promise<ApiResponse<{ requests: TimeOffRequest[]; count: number; pending_count: number }>> {
+  async getTimeOffRequests(): Promise<ApiResponse<{
+    time_off_requests: any[];
+    count: number;
+  }>> {
     return this.request('/employees/time-off');
   }
 
   // ============================================================
-  // EMPLOYEE ISSUE REPORTING ENDPOINTS
-  // ============================================================
-
-  async reportIssue(data: {
-    title: string;
-    description: string;
-    priority?: 'low' | 'medium' | 'high' | 'urgent';
-    appointment_id?: number;
-  }): Promise<ApiResponse<{ issue: IssueReport }>> {
-    return this.request('/employees/issues', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async getIssueReports(): Promise<ApiResponse<{ issues: IssueReport[]; count: number; open_count: number }>> {
-    return this.request('/employees/issues');
-  }
-
+  // ADMIN EMPLOYEE MANAGEMENT ENDPOINTS
   // ============================================================
 
   async getEmployees(status?: string, location?: string, search?: string): Promise<ApiResponse<{
@@ -641,7 +508,16 @@ class ApiService {
     return this.request(`/employees/admin/employees/${id}`);
   }
 
-  async registerEmployee(data: RegisterEmployeeData): Promise<ApiResponse<{ user: User; employee_id: string }>> {
+  async registerEmployee(data: {
+    name: string;
+    email: string;
+    password: string;
+    location: string;
+    phone?: string;
+    address?: string;
+    specialties?: string[];
+    status?: string;
+  }): Promise<ApiResponse<{ user: User; employee_id: string }>> {
     return this.request('/employees/admin/employees', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -650,7 +526,7 @@ class ApiService {
 
   async updateEmployee(
     id: number,
-    data: Partial<User & EmployeeProfile>
+    data: Partial<User & { location?: string; specialties?: string[]; status?: string }>
   ): Promise<ApiResponse<{ user: User }>> {
     return this.request(`/employees/admin/employees/${id}`, {
       method: 'PUT',
@@ -664,143 +540,10 @@ class ApiService {
     });
   }
 
-  async deleteEmployee(id: number): Promise<ApiResponse<{}>> {
-    return this.request(`/employees/admin/employees/${id}`, {
-      method: 'DELETE',
-    });
-  }
-
   async updateEmployeeStatus(id: number, status: string): Promise<ApiResponse<{ status: string }>> {
     return this.request(`/employees/admin/employees/${id}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status }),
-    });
-  }
-
-  async updateEmployeeAccountStatus(
-    id: number,
-    accountStatus: string,
-    exitNotes?: string
-  ): Promise<ApiResponse<{ account_status: string }>> {
-    return this.request(`/employees/admin/employees/${id}/account-status`, {
-      method: 'PUT',
-      body: JSON.stringify({ account_status: accountStatus, exit_notes: exitNotes }),
-    });
-  }
-
-  async uploadEmployeeDocument(
-    employeeId: number,
-    file: File,
-    docType: string,
-    documentName: string,
-    isVerified: boolean = false
-  ): Promise<ApiResponse<{ document: EmployeeDocument }>> {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('doc_type', docType);
-    formData.append('document_name', documentName);
-    formData.append('is_verified', String(isVerified));
-
-    const headers: HeadersInit = {};
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
-    }
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/employees/admin/employees/${employeeId}/documents`, {
-        method: 'POST',
-        headers,
-        body: formData,
-      });
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Document upload error:', error);
-      return {
-        success: false,
-        message: 'Network error. Please check your connection.',
-        error: String(error),
-      };
-    }
-  }
-
-  async getEmployeeDocuments(employeeId: number): Promise<ApiResponse<{ documents: EmployeeDocument[]; count: number }>> {
-    return this.request(`/employees/admin/employees/${employeeId}/documents`);
-  }
-
-  async deleteEmployeeDocument(employeeId: number, docId: number): Promise<ApiResponse<{}>> {
-    return this.request(`/employees/admin/employees/${employeeId}/documents/${docId}`, {
-      method: 'DELETE',
-    });
-  }
-
-  async downloadEmployeeDocument(documentId: number): Promise<Blob> {
-    const token = this.getToken();
-    const response = await fetch(`${API_BASE_URL}/employees/admin/employees/documents/${documentId}/download`, {
-      headers: {
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-    });
-
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.message || 'Failed to download document');
-    }
-
-    return response.blob();
-  }
-
-  async exportEmployeesCsv(
-    status?: string,
-    location?: string,
-    search?: string
-  ): Promise<Blob> {
-    const params = new URLSearchParams();
-    if (status) params.append('status', status);
-    if (location) params.append('location', location);
-    if (search) params.append('search', search);
-    const query = params.toString();
-
-    const token = this.getToken();
-    const response = await fetch(
-      `${API_BASE_URL}/employees/admin/employees/export/csv?${query}`,
-      {
-        headers: {
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-      }
-    );
-
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.message || 'Failed to export employees');
-    }
-
-    return response.blob();
-  }
-
-  async getDepartments(): Promise<ApiResponse<{ departments: string[] }>> {
-    return this.request('/employees/admin/departments');
-  }
-
-  async getManagers(): Promise<ApiResponse<{ managers: Array<{ id: number; name: string; employee_id: string }> }>> {
-    return this.request('/employees/admin/managers');
-  }
-
-  async getPendingEmployees(): Promise<ApiResponse<{
-    pending_employees: Array<{
-      user: User;
-      employee: EmployeeProfile;
-    }>;
-  }>> {
-    return this.request('/auth/admin/pending-employees');
-  }
-
-  async approveEmployee(userId: number, action: 'approve' | 'reject'): Promise<ApiResponse<{}>> {
-    return this.request(`/auth/admin/approve-employee/${userId}`, {
-      method: 'POST',
-      body: JSON.stringify({ action }),
     });
   }
 
@@ -926,16 +669,6 @@ class ApiService {
     });
   }
 
-  async confirmVehicleReturn(
-    appointmentId: number,
-    data: { service_rating: number; condition_rating: number; review?: string }
-  ): Promise<ApiResponse<{ service_history: any }>> {
-    return this.request(`/appointments/${appointmentId}/confirm-return`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
   // ============================================================
   // ADMIN ENDPOINTS
   // ============================================================
@@ -952,28 +685,12 @@ class ApiService {
     return this.request('/admin/dashboard');
   }
 
-  async getAllAppointmentsAdmin(status?: string): Promise<ApiResponse<{ appointments: Appointment[] }>> {
-    const query = status ? `?status=${status}` : '';
-    return this.request(`/admin/appointments${query}`);
-  }
-
   async getAllUsers(): Promise<ApiResponse<{ users: User[] }>> {
     return this.request('/admin/users');
   }
 
   async getUser(id: number): Promise<ApiResponse<{ user: User }>> {
     return this.request(`/admin/users/${id}`);
-  }
-
-  async getAllEmployeesAdmin(status?: string, location?: string, search?: string): Promise<ApiResponse<{
-    employees: Array<{ user: User; employee: EmployeeProfile }>;
-  }>> {
-    const params = new URLSearchParams();
-    if (status) params.append('status', status);
-    if (location) params.append('location', location);
-    if (search) params.append('search', search);
-    const query = params.toString() ? `?${params.toString()}` : '';
-    return this.request(`/employees/admin/employees${query}`);
   }
 
   // Service Partners Management
@@ -1085,32 +802,6 @@ class ApiService {
       body: JSON.stringify(data),
     });
   }
-
-  async chatWithAI(data: ChatRequest): Promise<ChatResponse> {
-    return this.request<{ response: string }>('/ai/chat', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-}
-
-export interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-export interface ChatRequest {
-  message: string;
-  conversation_history?: ChatMessage[];
-}
-
-export interface ChatResponse {
-  success: boolean;
-  message?: string;
-  data?: {
-    response: string;
-  };
-  error?: string;
 }
 
 // Export singleton instance
