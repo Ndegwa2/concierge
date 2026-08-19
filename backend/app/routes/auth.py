@@ -166,9 +166,9 @@ def register():
         # For customers: auto-login with tokens
         # For employees: return success message about approval
         if role == 'customer':
+            # Token expiry is controlled by global JWT_ACCESS_TOKEN_EXPIRES / JWT_REFRESH_TOKEN_EXPIRES config
             access_token = create_access_token(
-                identity=str(user.id),
-                expires_delta=timedelta(hours=24)
+                identity=str(user.id)
             )
             refresh_token = create_refresh_token(
                 identity=str(user.id)
@@ -245,13 +245,14 @@ def login():
                 'message': 'Account is deactivated. Please contact support.'
             }), 403
         
-        # Create tokens
+        # Create tokens (expiry from global JWT config)
         access_token = create_access_token(
             identity=str(user.id),
-            expires_delta=timedelta(hours=24)
+            additional_claims={'role': user.role}
         )
         refresh_token = create_refresh_token(
-            identity=str(user.id)
+            identity=str(user.id),
+            additional_claims={'role': user.role}
         )
         
         # Log audit
@@ -326,13 +327,14 @@ def employee_login():
                 'message': f'Employee status is {user.employee_profile.status}. Please contact admin.'
             }), 403
         
-        # Create tokens
+        # Create tokens (expiry from global JWT config)
         access_token = create_access_token(
             identity=str(user.id),
-            expires_delta=timedelta(hours=24)
+            additional_claims={'role': user.role}
         )
         refresh_token = create_refresh_token(
-            identity=str(user.id)
+            identity=str(user.id),
+            additional_claims={'role': user.role}
         )
         
         # Log audit
@@ -385,13 +387,14 @@ def admin_login():
                 'message': 'Invalid admin credentials'
             }), 401
         
-        # Create tokens
+        # Create tokens (expiry from global JWT config; admins get the short default too)
         access_token = create_access_token(
             identity=str(admin.id),
-            expires_delta=timedelta(hours=8)  # Shorter expiry for admin
+            additional_claims={'role': admin.role}
         )
         refresh_token = create_refresh_token(
-            identity=str(admin.id)
+            identity=str(admin.id),
+            additional_claims={'role': admin.role}
         )
         
         # Log audit
@@ -418,9 +421,12 @@ def admin_login():
 
 @auth_bp.route('/refresh', methods=['POST'])
 @jwt_required(refresh=True)
+@limiter.limit("10 per minute")  # Rate limit token refresh
 def refresh():
-    """Refresh access token"""
+    """Refresh access token with rotation of the refresh token"""
     try:
+        from app import TokenBlocklist
+
         current_user = get_current_user()
         
         if not current_user:
@@ -433,21 +439,39 @@ def refresh():
         # Token blocklist check is now handled automatically by JWTManager
         # via the token_in_blocklist_loader callback in __init__.py
         
-        # Create new access token
+        # Rotate the refresh token: blacklist the current one and issue a new one
+        jti = get_jwt()['jti']
+        exp = get_jwt().get('exp')
+        expires_at = datetime.fromtimestamp(exp, timezone.utc) if exp else datetime.now(timezone.utc) + timedelta(days=7)
+        
+        blocklist_entry = TokenBlocklist(
+            jti=jti,
+            expires_at=expires_at
+        )
+        db.session.add(blocklist_entry)
+        db.session.commit()
+        
+        # Create new access token + new refresh token (expiry from global JWT config)
         access_token = create_access_token(
             identity=str(current_user['id']),
-            expires_delta=timedelta(hours=24)
+            additional_claims={'role': current_user.get('role', 'customer')}
+        )
+        new_refresh_token = create_refresh_token(
+            identity=str(current_user['id']),
+            additional_claims={'role': current_user.get('role', 'customer')}
         )
         
         return jsonify({
             'success': True,
             'message': 'Token refreshed successfully',
             'data': {
-                'access_token': access_token
+                'access_token': access_token,
+                'refresh_token': new_refresh_token
             }
         }), 200
         
     except Exception as e:
+        db.session.rollback()
         logger.error(f"Token refresh error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
@@ -504,6 +528,7 @@ def logout():
 
 @auth_bp.route('/change-password', methods=['POST'])
 @jwt_required()
+@limiter.limit("5 per minute")  # Rate limit password changes
 def change_password():
     """Change user password"""
     try:

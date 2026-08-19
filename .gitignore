@@ -7,10 +7,11 @@ backend/venv/
 dist/
 build/
 
-# Environment files (keep .env.production but not local .env)
+# Environment files - ALL env files should be gitignored (secrets!)
+# Use deployment platform's env var dashboard (Render, Vercel, etc.)
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # Database files
 *.db

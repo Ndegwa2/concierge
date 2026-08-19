@@ -8,7 +8,7 @@ Your application consists of:
 - **Frontend**: React + Vite + Tailwind CSS (static site)
 - **Backend**: Node.js + Express + SQLite (better-sqlite3)
 - **Database**: SQLite (file-based, stored on persistent disk)
-- **Auth**: Supabase (for frontend), JWT (for backend API)
+- **Auth**: JWT (for backend API)
 
 ---
 

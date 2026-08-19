@@ -37,7 +37,7 @@ A full-featured web application for auto repair shop management with concierge s
 - **Flask-JWT-Extended** - Token management
 
 ### Additional Services
-- **Supabase** - Frontend authentication
+- **JWT** - Authentication tokens
 
 ## Getting Started
 
@@ -117,7 +117,6 @@ auto-concierge/
 │   │   ├── routes/          # API endpoints
 │   │   └── utils/           # Utility functions
 │   └── run.py               # Application entry point
-├── supabase/                # Supabase edge functions
 └── package.json             # Frontend dependencies
 ```
 
@@ -218,5 +217,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Acknowledgments
 
-- Original design: [Figma](https://www.figma.com/design/6c2dkzMEKmGF4cWTAECb5A/auto-concierge)
+- **Backend (Python/Flask)** - REST API and business logic
 - UI Components: [shadcn/ui](https://ui.shadcn.com)

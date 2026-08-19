@@ -10,8 +10,9 @@ app = create_app()
 
 if __name__ == '__main__':
     # Run the application
+    # NOTE: debug defaults to False for security. Set DEBUG=true explicitly for development.
     app.run(
         host=os.environ.get('HOST', '0.0.0.0'),
         port=int(os.environ.get('PORT', 5000)),
-        debug=os.environ.get('DEBUG', 'True').lower() == 'true'
+        debug=os.environ.get('DEBUG', 'False').lower() == 'true'
     )

@@ -5,7 +5,7 @@ This module provides role-based access control decorators for Flask routes.
 """
 from functools import wraps
 from flask import jsonify
-from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
+from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request, get_jwt
 
 from app.models import User, Admin, Employee
 
@@ -187,22 +187,22 @@ def get_current_user():
     try:
         verify_jwt_in_request()
         identity = get_jwt_identity()
+        claims = get_jwt()
         
         if not identity:
             return None
         
-        # Identity is now a string ID
         user_id = str(identity)
+        role = claims.get('role')
         
-        # Try Admin first
-        admin = Admin.query.get(user_id)
-        if admin:
-            return admin.to_dict()
-        
-        # Try Employee/User
-        user = User.query.get(user_id)
-        if user:
-            return user.to_dict()
+        if role == 'admin':
+            admin = Admin.query.get(user_id)
+            if admin:
+                return admin.to_dict()
+        else:
+            user = User.query.get(user_id)
+            if user:
+                return user.to_dict()
         
         return None
     except Exception:

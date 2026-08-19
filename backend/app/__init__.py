@@ -1,4 +1,4 @@
-from flask import Flask, request, g, jsonify
+from flask import Flask, request, g, jsonify, redirect
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
@@ -7,39 +7,30 @@ from flask_compress import Compress
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from sqlalchemy import func
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 db = SQLAlchemy()
 migrate = Migrate()
 jwt = JWTManager()
 compress = Compress()
 csrf = CSRFProtect()
+
+# Rate limiter using Redis in production, memory fallback for dev
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=["200 per day", "50 per hour"],
-    storage_uri=os.environ.get("RATELIMIT_STORAGE_URI", "memory://"),
+    storage_uri=os.environ.get('RATELIMIT_STORAGE_URI', os.environ.get('REDIS_URL', 'memory://'))
 )
-
-def get_user_from_token():
-    from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
-    try:
-        verify_jwt_in_request()
-        user_id = get_jwt_identity()
-        from app.models import User
-        return User.query.get(user_id)
-    except Exception:
-        return None
 
 # Token blacklist table for persistent logout
 class TokenBlocklist(db.Model):
     __tablename__ = 'token_blocklist'
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True)
     jti = db.Column(db.String(36), nullable=False, index=True, unique=True)
-    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
-    expires_at = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
 
 def create_app(config_class=None):
     app = Flask(__name__)
@@ -47,18 +38,37 @@ def create_app(config_class=None):
     # Configuration
     if config_class is None:
         app.config.from_mapping(
-                SECRET_KEY=os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production'),
+                SECRET_KEY=os.environ.get('SECRET_KEY'),
                 SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL'),
                 SQLALCHEMY_TRACK_MODIFICATIONS=False,
-                JWT_SECRET_KEY=os.environ.get('JWT_SECRET_KEY', 'dev-jwt-secret-key-change-in-production'),
-                JWT_ACCESS_TOKEN_EXPIRES=int(os.environ.get('JWT_ACCESS_TOKEN_EXPIRES', 86400)),
-                JWT_REFRESH_TOKEN_EXPIRES=int(os.environ.get('JWT_REFRESH_TOKEN_EXPIRES', 2592000)),
+                JWT_SECRET_KEY=os.environ.get('JWT_SECRET_KEY'),
                 JWT_TOKEN_LOCATION=['headers', 'json'],
                 JWT_REFRESH_JSON_KEY='refresh_token',
-                JWT_VERIFY_SUB=False
+                # Access tokens expire after 30 minutes (short-lived)
+                JWT_ACCESS_TOKEN_EXPIRES=timedelta(minutes=int(os.environ.get('JWT_ACCESS_EXPIRES_MINUTES', 30))),
+                # Refresh tokens expire after 7 days by default (configurable)
+                JWT_REFRESH_TOKEN_EXPIRES=timedelta(days=int(os.environ.get('JWT_REFRESH_EXPIRES_DAYS', 7)))
             )
     else:
         app.config.from_object(config_class)
+
+    # Verify required secrets are set for non-development environments
+    if os.environ.get('FLASK_ENV') != 'development' and \
+       (not app.config.get('SECRET_KEY') or not app.config.get('JWT_SECRET_KEY')):
+        raise RuntimeError(
+            "SECRET_KEY and JWT_SECRET_KEY environment variables must be set "
+            "outside of development mode."
+        )
+
+    # HTTPS enforcement in production
+    app.config['ENFORCE_HTTPS'] = os.environ.get('ENFORCE_HTTPS', 'False').lower() == 'true'
+    app.config['ENVIRONMENT'] = os.environ.get('FLASK_ENV', 'development')
+    app.config['BEHIND_PROXY'] = os.environ.get('BEHIND_PROXY', 'True').lower() == 'true'
+
+    if app.config.get('BEHIND_PROXY'):
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        # Trust X-Forwarded-Proto/For/Host from the upstream proxy (e.g. Render)
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     # Connection pooling options
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
@@ -66,7 +76,6 @@ def create_app(config_class=None):
         'max_overflow': 0,
         'pool_timeout': 30,
         'pool_recycle': 1800,
-        'pool_pre_ping': True,
     }
 
     # Read replica configuration
@@ -80,12 +89,13 @@ def create_app(config_class=None):
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
-    CORS(app)
+
+    # CORS - restrict to configured origins (never wide open in production)
+    cors_origin = os.environ.get('CORS_ORIGIN', '*')
+    cors_origins = [o.strip() for o in cors_origin.split(',') if o.strip()] if cors_origin != '*' else ['*']
+    CORS(app, resources={r"/api/*": {"origins": cors_origins}}, supports_credentials=True,
+         allow_headers=['Content-Type', 'Authorization'], methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
     csrf.init_app(app)
-    
-    # Initialize Redis cache
-    from app.utils.cache import init_redis
-    init_redis(app)
     
     # JWT default error handlers
     @jwt.expired_token_loader
@@ -140,7 +150,7 @@ def create_app(config_class=None):
         jti = jwt_payload["jti"]
         # Check if token is in blocklist and not expired
         return db.session.query(TokenBlocklist.id).filter_by(jti=jti).filter(
-            TokenBlocklist.expires_at > datetime.now(timezone.utc)
+            TokenBlocklist.expires_at > datetime.utcnow()
         ).scalar() is not None
     
     # Email configuration
@@ -161,24 +171,18 @@ def create_app(config_class=None):
     from app.routes.employees import employees_bp
     from app.routes.partners import partners_bp
     from app.routes.monitoring import monitoring_bp
-    from app.routes.ai_chat import ai_chat_bp
     
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     csrf.exempt(auth_bp)  # JWT-based API: no session cookies, CSRF not needed for auth endpoints
+    csrf.exempt(employees_bp)  # JWT-based API: no session cookies, CSRF not needed for employee endpoints
     app.register_blueprint(services_bp, url_prefix='/api/services')
     app.register_blueprint(appointments_bp, url_prefix='/api/appointments')
-    app.register_blueprint(invoices_bp, url_prefix='/api/invoices')
+    app.register_blueprint(invoices_bp, url_prefix='/api/appointments')
     app.register_blueprint(vehicles_bp, url_prefix='/api/vehicles')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
     app.register_blueprint(employees_bp, url_prefix='/api/employees')
     app.register_blueprint(partners_bp, url_prefix='/api/partners')
     app.register_blueprint(monitoring_bp, url_prefix='/api/monitoring')
-    app.register_blueprint(ai_chat_bp, url_prefix='/api/ai')
-
-    # JWT-based API: CSRF protection not needed for any API blueprint
-    for bp in [services_bp, appointments_bp, invoices_bp, vehicles_bp,
-               admin_bp, employees_bp, partners_bp, monitoring_bp, ai_chat_bp]:
-        csrf.exempt(bp)
     
     # Create database tables if they don't exist
     with app.app_context():
@@ -191,10 +195,25 @@ def create_app(config_class=None):
         """Generate request ID for tracking"""
         g.request_id = str(uuid.uuid4())
     
+    @app.before_request
+    def enforce_https():
+        """Redirect HTTP to HTTPS in production."""
+        if app.config.get('ENFORCE_HTTPS') and request.url.startswith('http://'):
+            return redirect(request.url.replace('http://', 'https://', 1), code=301)
+        return None
+
     @app.after_request
     def after_request(response):
-        """Add request ID to response headers"""
+        """Add security headers and request ID to response headers"""
         response.headers['X-Request-ID'] = g.get('request_id', 'unknown')
+        # Security headers
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        # Never cache authenticated responses by default
+        response.headers['Cache-Control'] = 'no-store' if request.path.startswith('/api') and \
+            any(h.startswith('Bearer') for h in request.headers.get('Authorization', '').split()) else response.headers.get('Cache-Control', '')
         return response
     
     # Health check endpoint

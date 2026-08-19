@@ -1448,7 +1448,7 @@ def get_time_logs():
             EmployeeTimeLog.timestamp < today_end
         ).order_by(EmployeeTimeLog.timestamp).all()
 
-        # Determine clock status
+        # Determine clock status by checking all time logs for unmatched clock-ins
         is_clocked_in = False
         last_action = None
 
@@ -1457,6 +1457,21 @@ def get_time_logs():
             if last_log.action == 'in':
                 is_clocked_in = True
             last_action = last_log.action
+
+        if not is_clocked_in:
+            all_logs = EmployeeTimeLog.query.filter_by(
+                employee_id=employee.id
+            ).order_by(EmployeeTimeLog.timestamp.desc()).all()
+            for log in all_logs:
+                if log.action == 'in' and not log.notes.startswith('clocked_out'):
+                    matching_out = EmployeeTimeLog.query.filter(
+                        EmployeeTimeLog.employee_id == employee.id,
+                        EmployeeTimeLog.action == 'out',
+                        EmployeeTimeLog.timestamp > log.timestamp
+                    ).first()
+                    if not matching_out:
+                        is_clocked_in = True
+                        break
 
         # Calculate total hours today
         total_seconds = 0
