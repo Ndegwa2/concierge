@@ -98,10 +98,10 @@ def create_app(config_class=None):
     jwt.init_app(app)
 
     # CORS - restrict to configured origins (never wide open in production)
-    cors_origin = os.environ.get('CORS_ORIGIN', '')
+    cors_origin = os.environ.get('CORS_ORIGIN', os.environ.get('CORS_ORIGINS', ''))
     cors_origins = [o.strip() for o in cors_origin.split(',') if o.strip()] if cors_origin else []
     if not cors_origins:
-        cors_origins = ['http://localhost:5173', 'http://localhost:3000']
+        cors_origins = ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173']
     CORS(app, resources={r"/api/*": {"origins": cors_origins}}, supports_credentials=True,
          allow_headers=['Content-Type', 'Authorization'], methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
     csrf.init_app(app)
@@ -178,20 +178,35 @@ def create_app(config_class=None):
     from app.routes.vehicles import vehicles_bp
     from app.routes.admin import admin_bp
     from app.routes.employees import employees_bp
+    from app.routes.notifications import notifications_bp
     from app.routes.partners import partners_bp
     from app.routes.monitoring import monitoring_bp
+    from app.routes.fleets import fleets_bp
     
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     csrf.exempt(auth_bp)  # JWT-based API: no session cookies, CSRF not needed for auth endpoints
-    csrf.exempt(employees_bp)  # JWT-based API: no session cookies, CSRF not needed for employee endpoints
     app.register_blueprint(services_bp, url_prefix='/api/services')
+    csrf.exempt(services_bp)  # JWT-based API
     app.register_blueprint(appointments_bp, url_prefix='/api/appointments')
+    csrf.exempt(appointments_bp)  # JWT-based API
     app.register_blueprint(invoices_bp, url_prefix='/api/appointments')
+    csrf.exempt(invoices_bp)  # JWT-based API
     app.register_blueprint(vehicles_bp, url_prefix='/api/vehicles')
+    csrf.exempt(vehicles_bp)  # JWT-based API
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
+    csrf.exempt(admin_bp)  # JWT-based API
     app.register_blueprint(employees_bp, url_prefix='/api/employees')
+    csrf.exempt(employees_bp)  # JWT-based API: no session cookies, CSRF not needed for employee endpoints
+    app.register_blueprint(notifications_bp, url_prefix='/api/notifications')
+    csrf.exempt(notifications_bp)  # JWT-based API
     app.register_blueprint(partners_bp, url_prefix='/api/partners')
+    csrf.exempt(partners_bp)  # JWT-based API
     app.register_blueprint(monitoring_bp, url_prefix='/api/monitoring')
+    app.register_blueprint(fleets_bp, url_prefix='/api/fleets')
+    csrf.exempt(fleets_bp)  # JWT-based API
+    
+    from app.utils.notifications import start_scheduler
+    start_scheduler(app)
     
     # Create database tables if they don't exist
     with app.app_context():

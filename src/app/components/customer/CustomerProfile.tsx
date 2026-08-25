@@ -46,7 +46,7 @@ function VehicleFormModal({
   open: boolean;
   onClose: () => void;
   vehicle?: Vehicle;
-  onSubmit: (data: Partial<Vehicle>) => void;
+  onSubmit: (data: Partial<Vehicle>) => Promise<void>;
 }) {
   const [formData, setFormData] = useState({
     make: vehicle?.make || '',
@@ -85,7 +85,7 @@ function VehicleFormModal({
         year: formData.year ? Number(formData.year) : undefined,
         odometer: formData.odometer ? Number(formData.odometer) : undefined,
       };
-      onSubmit(data);
+      await onSubmit(data);
       onClose();
     } finally {
       setIsSubmitting(false);
@@ -384,7 +384,7 @@ export function CustomerProfile({ onLogout }: { onLogout?: () => void } = {}) {
               </Card>
             </div>
 
-            {/* Vehicle Registration Form */}
+            {/* Vehicle Registration */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -396,76 +396,10 @@ export function CustomerProfile({ onLogout }: { onLogout?: () => void } = {}) {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={(e) => { e.preventDefault(); handleAddVehicle(); }} className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label htmlFor="sidebar-make" className="text-xs">Make *</Label>
-                      <Input
-                        id="sidebar-make"
-                        placeholder="e.g., Toyota"
-                        className="h-9"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="sidebar-model" className="text-xs">Model *</Label>
-                      <Input
-                        id="sidebar-model"
-                        placeholder="e.g., Camry"
-                        className="h-9"
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label htmlFor="sidebar-year" className="text-xs">Year</Label>
-                      <Input
-                        id="sidebar-year"
-                        type="number"
-                        placeholder="2024"
-                        className="h-9"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="sidebar-color" className="text-xs">Color</Label>
-                      <Input
-                        id="sidebar-color"
-                        placeholder="e.g., Black"
-                        className="h-9"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="sidebar-plate" className="text-xs">License Plate</Label>
-                    <Input
-                      id="sidebar-plate"
-                      placeholder="e.g., KCA 123A"
-                      className="h-9"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="sidebar-vin" className="text-xs">VIN</Label>
-                    <Input
-                      id="sidebar-vin"
-                      placeholder="Vehicle Identification Number"
-                      className="h-9"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="sidebar-odometer" className="text-xs">Mileage (km)</Label>
-                    <Input
-                      id="sidebar-odometer"
-                      type="number"
-                      placeholder="e.g., 50000"
-                      className="h-9"
-                    />
-                  </div>
-                  <Button type="submit" className="w-full" size="sm">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Vehicle
-                  </Button>
-                </form>
+                <Button type="button" className="w-full" size="sm" onClick={handleAddVehicle}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Vehicle
+                </Button>
               </CardContent>
             </Card>
           </div>

@@ -3,7 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.orm import joinedload
 from app import db
 from app.models import (User, Service, Vehicle, Appointment,
-                     ServiceHistory, Notification, Admin, PaymentMethod, DiscountCode)
+                     ServiceHistory, Notification, PaymentMethod, DiscountCode)
 from app.utils.decorators import admin_required, role_required, get_current_user
 from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_SHORT_TTL
 from datetime import datetime, timezone
@@ -203,6 +203,7 @@ def create_notification():
         notification.user_id = data['user_id']
         notification.title = data['title']
         notification.message = data['message']
+        notification.notification_type = data.get('notification_type', 'info')
         notification.is_read = False
         
         db.session.add(notification)

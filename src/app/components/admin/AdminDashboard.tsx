@@ -7,7 +7,10 @@ import {
   Car,
   LogOut,
   Menu,
-  X
+  X,
+  Truck,
+  FileText,
+  BarChart3
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { DashboardOverview } from './DashboardOverview';
@@ -17,13 +20,18 @@ import { CustomersManager } from './CustomersManager';
 import { ServicePartnersManager } from './ServicePartnersManager';
 import { PendingEmployeesManager } from './PendingEmployeesManager';
 import { EmployeesManager } from './EmployeesManager';
+import { FleetCommandCenter } from './FleetCommandCenter';
+import { FleetBilling } from './FleetBilling';
+import { FleetAnalytics } from './FleetAnalytics';
 
 interface AdminDashboardProps {
   onLogout: () => void;
 }
 
+type Section = 'overview' | 'appointments' | 'concierges' | 'employees' | 'customers' | 'partners' | 'pending-requests' | 'fleet' | 'fleet-billing' | 'fleet-analytics';
+
 export function AdminDashboard({ onLogout }: AdminDashboardProps) {
-  const [currentSection, setCurrentSection] = useState<'overview' | 'appointments' | 'concierges' | 'employees' | 'customers' | 'partners' | 'pending-requests'>('overview');
+  const [currentSection, setCurrentSection] = useState<Section>('overview');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const storedUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
@@ -31,7 +39,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const displayName = user?.name || 'Admin';
   const displayEmail = user?.email || 'admin@autoconcierge.co.ke';
 
-  const navigation = [
+  const navigation: { id: Section; name: string; icon: typeof LayoutDashboard }[] = [
     { id: 'overview', name: 'Overview', icon: LayoutDashboard },
     { id: 'appointments', name: 'Appointments', icon: Calendar },
     { id: 'concierges', name: 'Concierge Staff', icon: Users },
@@ -39,6 +47,9 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
     { id: 'customers', name: 'Customers', icon: Users },
     { id: 'partners', name: 'Service Partners', icon: Car },
     { id: 'pending-requests', name: 'Concierge Requests', icon: Users },
+    { id: 'fleet', name: 'Fleet Command', icon: Truck },
+    { id: 'fleet-billing', name: 'Fleet Billing', icon: FileText },
+    { id: 'fleet-analytics', name: 'Fleet Analytics', icon: BarChart3 },
   ];
 
   return (
@@ -92,7 +103,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 <button
                   key={item.id}
                   onClick={() => {
-                    setCurrentSection(item.id as any);
+                    setCurrentSection(item.id);
                     setSidebarOpen(false);
                   }}
                   className={`
@@ -120,6 +131,9 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
           {currentSection === 'customers' && <CustomersManager />}
           {currentSection === 'partners' && <ServicePartnersManager />}
           {currentSection === 'pending-requests' && <PendingEmployeesManager />}
+          {currentSection === 'fleet' && <FleetCommandCenter />}
+          {currentSection === 'fleet-billing' && <FleetBilling />}
+          {currentSection === 'fleet-analytics' && <FleetAnalytics />}
         </main>
       </div>
 

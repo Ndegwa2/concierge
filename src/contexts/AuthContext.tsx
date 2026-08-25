@@ -5,10 +5,9 @@
  * Supports JWT authentication with role-based access control.
  */
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { api } from '../services/api';
-import type { User } from '../services/api';
+import { api, type User, type RegisterData } from '../services/api';
 
-interface SignUpData {
+interface SignUpData extends RegisterData {
   name: string;
   email: string;
   password: string;

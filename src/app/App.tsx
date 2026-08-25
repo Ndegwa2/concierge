@@ -39,8 +39,11 @@ import { api } from '@/services/api';
 import type { Appointment } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 
+import { PricingPage } from '@/app/components/PricingPage';
+import { POSTerminal } from '@/app/components/POSTerminal';
+
 export default function App() {
-  const [currentView, setCurrentView] = useState<'home' | 'booking' | 'appointments' | 'dashboard' | 'profile' | 'gallery'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'booking' | 'appointments' | 'dashboard' | 'profile' | 'gallery' | 'pricing' | 'pos'>('home');
   const [selectedService, setSelectedService] = useState<string>();
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [signupModalOpen, setSignupModalOpen] = useState(false);
@@ -139,6 +142,36 @@ export default function App() {
     } else {
       setCurrentView(view as any);
       window.scrollTo(0, 0);
+    }
+  };
+
+  const handleFooterLink = (action: string) => {
+    switch (action) {
+      case 'services':
+        handleNavigate('home');
+        setTimeout(() => {
+          document.getElementById('services-section')?.scrollIntoView({ behavior: 'smooth' });
+        }, currentView === 'home' ? 0 : 100);
+        break;
+      case 'appointments':
+        handleNavigate('appointments');
+        break;
+      case 'how-it-works':
+        handleNavigate('how-it-works');
+        break;
+      case 'pricing':
+        handleNavigate('pricing');
+        break;
+      case 'privacy':
+      case 'terms':
+      case 'cookies':
+        toast.info('This page is coming soon.');
+        break;
+      case 'pos-login':
+        toast.info('POS Login portal coming soon.');
+        break;
+      default:
+        toast.info('Coming soon');
     }
   };
 
@@ -316,7 +349,7 @@ export default function App() {
           </section>
 
           {/* Services Section */}
-          <section className="py-20 container mx-auto px-4">
+          <section id="services-section" className="py-20 container mx-auto px-4">
             <div className="text-center mb-16">
               <Badge variant="outline" className="mb-4 py-1 px-4 text-sm font-medium border-slate-300">Our Expertise</Badge>
               <h2 className="text-4xl font-bold mb-4 tracking-tight">Auto Concierge Services</h2>
@@ -372,6 +405,7 @@ export default function App() {
                 <Button 
                   size="lg" 
                   className="bg-white text-slate-900 hover:bg-slate-100 px-10 py-6 text-lg font-bold"
+                  onClick={() => handleNavigate('pricing')}
                 >
                   View Pricing
                 </Button>
@@ -450,8 +484,19 @@ export default function App() {
         </main>
       )}
 
+      {/* Pricing View */}
+      {currentView === 'pricing' && (
+        <PricingPage onNavigate={handleNavigate} />
+      )}
+
+      {/* POS Terminal View */}
+      {currentView === 'pos' && (
+        <POSTerminal onClose={() => setCurrentView('home')} />
+      )}
+
       {/* Footer */}
-      <footer className="bg-slate-900 text-white py-16">
+      {currentView !== 'pricing' && currentView !== 'pos' && (
+        <footer className="bg-slate-900 text-white py-16">
         <div className="container mx-auto px-4">
           <div className="grid md:grid-cols-4 gap-12 mb-12">
             <div className="space-y-4">
@@ -480,22 +525,23 @@ export default function App() {
             <div>
               <h3 className="font-bold text-lg mb-6">Our Services</h3>
               <ul className="space-y-4 text-slate-400 text-sm">
-                <li className="hover:text-white transition-colors cursor-pointer">Premium Car Wash</li>
-                <li className="hover:text-white transition-colors cursor-pointer">Oil Change & Fluids</li>
-                <li className="hover:text-white transition-colors cursor-pointer">Mechanical Repairs</li>
-                <li className="hover:text-white transition-colors cursor-pointer">Vehicle Inspection</li>
-                <li className="hover:text-white transition-colors cursor-pointer">Tire & Wheel Care</li>
+                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('services')}>Premium Car Wash</li>
+                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('services')}>Oil Change & Fluids</li>
+                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('services')}>Mechanical Repairs</li>
+                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('services')}>Vehicle Inspection</li>
+                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('services')}>Tire & Wheel Care</li>
               </ul>
             </div>
             
             <div>
               <h3 className="font-bold text-lg mb-6">Quick Links</h3>
               <ul className="space-y-4 text-slate-400 text-sm">
-                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleNavigate('home')}>Services</li>
-                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleNavigate('appointments')}>My Appointments</li>
-                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleNavigate('how-it-works')}>How It Works</li>
-                <li className="hover:text-white transition-colors cursor-pointer">Pricing Plans</li>
-                <li className="hover:text-white transition-colors cursor-pointer">Safety & Insurance</li>
+                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('services')}>Services</li>
+                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('appointments')}>My Appointments</li>
+                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('how-it-works')}>How It Works</li>
+                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('pricing')}>Pricing Plans</li>
+                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => setCurrentView('pos')}>POS Terminal</li>
+                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => toast.info('Coming soon')}>Safety & Insurance</li>
               </ul>
             </div>
             
@@ -523,9 +569,9 @@ export default function App() {
               © {new Date().getFullYear()} AutoConcierge. All rights reserved. Built with passion for car care.
             </div>
             <div className="flex gap-6 text-sm text-slate-500">
-              <span className="hover:text-white cursor-pointer transition-colors">Privacy Policy</span>
-              <span className="hover:text-white cursor-pointer transition-colors">Terms of Service</span>
-              <span className="hover:text-white cursor-pointer transition-colors">Cookies</span>
+              <span className="hover:text-white cursor-pointer transition-colors" onClick={() => handleFooterLink('privacy')}>Privacy Policy</span>
+              <span className="hover:text-white cursor-pointer transition-colors" onClick={() => handleFooterLink('terms')}>Terms of Service</span>
+              <span className="hover:text-white cursor-pointer transition-colors" onClick={() => handleFooterLink('cookies')}>Cookies</span>
               <div className="flex items-center gap-2 ml-4 px-3 py-1 bg-green-900/30 text-green-400 rounded-full border border-green-800/50">
                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                 <span className="text-xs font-medium">Systems Operational</span>
@@ -534,6 +580,7 @@ export default function App() {
           </div>
         </div>
       </footer>
+      )}
       
       <AIChatBox />
     </div>

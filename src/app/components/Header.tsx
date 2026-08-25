@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Menu, X, Car, User, Calendar, LayoutDashboard, LogOut, Image } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { usePermission } from '@/hooks/usePermission';
+import { NotificationBell } from '@/app/components/NotificationBell';
 
 interface HeaderProps {
   currentView: string;
@@ -42,6 +43,14 @@ export function Header({ currentView, onNavigate, onLoginClick, onProfileClick, 
               Services
             </button>
             <button
+              onClick={() => onNavigate('pricing')}
+              className={`hover:text-slate-900 transition-colors ${
+                currentView === 'pricing' ? 'text-slate-900 font-medium' : 'text-slate-600'
+              }`}
+            >
+              Pricing
+            </button>
+            <button
               onClick={() => onNavigate('dashboard')}
               className={`hover:text-slate-900 transition-colors ${
                 currentView === 'dashboard' ? 'text-slate-900 font-medium' : 'text-slate-600'
@@ -78,18 +87,19 @@ export function Header({ currentView, onNavigate, onLoginClick, onProfileClick, 
             >
               <User className="h-4 w-4 mr-2" />
               {isLoggedIn ? 'Profile' : 'Sign In'}
-            </Button>
-            {isLoggedIn && onLogoutClick && (
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={onLogoutClick}
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                Logout
               </Button>
-            )}
-          </nav>
+              {isLoggedIn && <NotificationBell />}
+              {isLoggedIn && onLogoutClick && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={onLogoutClick}
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Logout
+                </Button>
+              )}
+            </nav>
 
           {/* Mobile Menu Button */}
           <button
@@ -108,24 +118,33 @@ export function Header({ currentView, onNavigate, onLoginClick, onProfileClick, 
         {mobileMenuOpen && (
           <div className="md:hidden py-4 border-t">
             <nav className="flex flex-col gap-4">
-              <button
-                onClick={() => {
-                  onNavigate('home');
-                  setMobileMenuOpen(false);
-                }}
-                className="text-left px-2 py-1 hover:text-slate-900"
-              >
-                Services
-              </button>
-              <button
-                onClick={() => {
-                  onNavigate('dashboard');
-                  setMobileMenuOpen(false);
-                }}
-                className="text-left px-2 py-1 hover:text-slate-900"
-              >
-                Dashboard
-              </button>
+                <button
+                  onClick={() => {
+                    onNavigate('home');
+                    setMobileMenuOpen(false);
+                  }}
+                  className="text-left px-2 py-1 hover:text-slate-900"
+                >
+                  Services
+                </button>
+                <button
+                  onClick={() => {
+                    onNavigate('pricing');
+                    setMobileMenuOpen(false);
+                  }}
+                  className="text-left px-2 py-1 hover:text-slate-900"
+                >
+                  Pricing
+                </button>
+                <button
+                  onClick={() => {
+                    onNavigate('dashboard');
+                    setMobileMenuOpen(false);
+                  }}
+                  className="text-left px-2 py-1 hover:text-slate-900"
+                >
+                  Dashboard
+                </button>
               <button
                 onClick={() => {
                   onNavigate('appointments');
@@ -157,6 +176,11 @@ export function Header({ currentView, onNavigate, onLoginClick, onProfileClick, 
                 <User className="h-4 w-4 mr-2" />
                 {isLoggedIn ? 'Profile' : 'Sign In'}
               </Button>
+              {isLoggedIn && (
+                <div className="w-fit">
+                  <NotificationBell />
+                </div>
+              )}
               {isLoggedIn && onLogoutClick && (
                 <Button variant="ghost" size="sm" className="w-fit" onClick={onLogoutClick}>
                   <LogOut className="h-4 w-4 mr-2" />

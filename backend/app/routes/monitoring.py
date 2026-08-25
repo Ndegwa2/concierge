@@ -242,19 +242,15 @@ def get_online_users():
         result = []
         for user_activity in online_users:
             user_id = user_activity.user_id or user_activity.admin_id
-            is_admin = user_activity.admin_id is not None
-            
-            if is_admin:
-                user = db.session.query(User).get(user_id)
-            else:
-                user = db.session.query(User).get(user_id)
-            
+
+            user = db.session.query(User).get(user_id)
+
             if user:
                 result.append({
                     'user_id': user_id,
                     'name': user.name,
                     'email': user.email,
-                    'role': 'admin' if is_admin else user.role,
+                    'role': user.role,
                     'last_activity': user_activity.last_activity.isoformat()
                 })
         

@@ -8,6 +8,18 @@ logger = logging.getLogger(__name__)
 def initialize_database():
     """Initialize database with sample data if it doesn't exist"""
     
+    with db.engine.connect() as conn:
+        conn.execute(db.text("""
+            ALTER TABLE appointments 
+            ADD COLUMN IF NOT EXISTS reminder_sent BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS overdue_notified BOOLEAN DEFAULT FALSE
+        """))
+        conn.execute(db.text("""
+            ALTER TABLE notifications 
+            ADD COLUMN IF NOT EXISTS notification_type VARCHAR(50) DEFAULT 'info'
+        """))
+        conn.commit()
+
     # Check if we have any services
     if Service.query.count() == 0:
         logger.info("Initializing database with sample data...")
