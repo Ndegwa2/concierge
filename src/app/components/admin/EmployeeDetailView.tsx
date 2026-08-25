@@ -62,8 +62,27 @@ interface DeleteDocConfirm {
 export function EmployeeDetailView({ employee, open, onClose }: EmployeeDetailViewProps) {
   const { hasPermission } = usePermission();
   const canEditCompensation = hasPermission('employees', 'update') || hasPermission('users', 'update');
-  const empUser = employee.user;
-  const empProfile = employee.employee;
+  const empUser: User = employee.user || {
+    id: 0,
+    name: '',
+    email: '',
+    role: 'employee',
+    is_active: true,
+    created_at: '',
+    updated_at: '',
+  };
+  const empProfile: EmployeeProfile = employee.employee || {
+    id: employee.user?.id || 0,
+    user_id: employee.user?.id || 0,
+    employee_id: '',
+    location: '',
+    specialties: [],
+    rating: 0,
+    total_services: 0,
+    status: 'active',
+    created_at: '',
+    updated_at: '',
+  };
 
   const { data: documents = [], isLoading: docsLoading, refetch: refetchDocs } = useEmployeeDocuments(empProfile.id || employee.id);
   const deleteDocumentMutation = useDeleteDocument();
