@@ -9,4 +9,5 @@ export { partnersApi } from './partners';
 export { servicesApi } from './services';
 export { adminApi } from './admin';
 export { aiChatApi } from './aiChat';
+export { paymentsApi } from './payments';
 export * from './types';

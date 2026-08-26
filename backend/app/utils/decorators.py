@@ -7,9 +7,6 @@ from functools import wraps
 from flask import jsonify
 from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request, get_jwt
 
-from app.services.auth.models import User
-from app.services.employees.models import Employee
-
 
 def role_required(*allowed_roles):
     """
@@ -179,6 +176,7 @@ def owner_or_admin_required(get_resource_user_id):
 
 def get_current_user():
     try:
+        from app.services.auth.models import User
         verify_jwt_in_request()
         identity = get_jwt_identity()
         claims = get_jwt()

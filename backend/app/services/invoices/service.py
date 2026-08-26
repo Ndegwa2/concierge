@@ -4,6 +4,7 @@ from app.services.catalog.models import Service
 from app.services.vehicles.models import Vehicle
 from app.services.appointments.models import Appointment
 from app.services.fleets.models import Invoice
+from datetime import datetime, timezone
 
 
 def _generate_invoice_number(appointment_id, created_at=None):

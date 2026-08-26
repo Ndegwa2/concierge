@@ -147,6 +147,9 @@ class Invoice(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    company = db.relationship('Company', backref='invoices', lazy=True)
+    line_items = db.relationship('InvoiceLineItem', backref='invoice', lazy=True, cascade='all, delete-orphan')
+
     def to_dict(self):
         result = {
             'id': self.id,

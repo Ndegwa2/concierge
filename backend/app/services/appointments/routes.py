@@ -260,7 +260,8 @@ def confirm_vehicle_return(appointment_id):
 
 
 def _auto_send_invoice(appointment):
-    from app.utils.invoice import _generate_invoice_number
+    from app.services.invoices.service import _generate_invoice_number
+    from app.services.invoices.pdf_generator import generate_invoice_pdf
     from app.utils.email import send_email_with_attachment
     from datetime import datetime, timezone
 

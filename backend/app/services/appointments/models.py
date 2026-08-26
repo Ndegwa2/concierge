@@ -4,7 +4,10 @@ from sqlalchemy import func, CheckConstraint
 
 class Appointment(db.Model):
     __tablename__ = 'appointments'
-    __table_args__ = (CheckConstraint("status IN ('scheduled', 'confirmed', 'in-progress', 'completed', 'cancelled', 'rescheduled', 'overdue')"),)
+    __table_args__ = (
+        CheckConstraint("status IN ('scheduled', 'confirmed', 'in-progress', 'completed', 'cancelled', 'rescheduled', 'overdue')"),
+        CheckConstraint("payment_status IN ('pending', 'paid', 'refunded', 'failed')"),
+    )
 
     id = db.Column(db.BigInteger, primary_key=True)
     user_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
@@ -20,6 +23,10 @@ class Appointment(db.Model):
     overdue_notified = db.Column(db.Boolean, default=False, index=True)
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    customer = db.relationship('User', backref='appointments', lazy=True)
+    vehicle = db.relationship('Vehicle', backref='appointments', lazy=True)
+    service = db.relationship('Service', backref='appointments', lazy=True)
 
     def to_dict(self):
         result = {

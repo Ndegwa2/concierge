@@ -79,12 +79,13 @@ export interface Appointment {
   status: 'scheduled' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled' | 'overdue';
   notes?: string;
   total_amount?: number;
-  payment_status: 'pending' | 'paid' | 'refunded';
+  payment_status: 'pending' | 'paid' | 'refunded' | 'failed';
   reminder_sent?: boolean;
   overdue_notified?: boolean;
   vehicle?: Vehicle;
   service?: Service;
   customer?: { id: number; name: string; phone: string };
+  invoice?: Invoice;
 }
 
 export interface ServicePartner {
