@@ -6,7 +6,7 @@ This module provides audit logging functionality for tracking all system activit
 from functools import wraps
 from flask import request, g
 from app import db
-from app.models import AuditLog, ActivityTracker
+from app.services.admin.models import AuditLog, ActivityTracker
 from datetime import datetime, timezone
 import time
 import json

@@ -1,5 +1,7 @@
 from app import db
-from app.models import (User, Service, Vehicle, DiscountCode)
+from app.services.auth.models import User
+from app.services.catalog.models import Service, DiscountCode
+from app.services.vehicles.models import Vehicle
 from datetime import datetime, timezone
 import logging
 

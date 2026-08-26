@@ -1,0 +1,12 @@
+export { apiClient, ApiClient } from './client';
+export { authApi } from './auth';
+export { appointmentsApi } from './appointments';
+export { vehiclesApi } from './vehicles';
+export { employeesApi } from './employees';
+export { fleetsApi } from './fleets';
+export { notificationsApi } from './notifications';
+export { partnersApi } from './partners';
+export { servicesApi } from './services';
+export { adminApi } from './admin';
+export { aiChatApi } from './aiChat';
+export * from './types';

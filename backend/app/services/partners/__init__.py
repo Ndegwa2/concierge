@@ -1,0 +1,1 @@
+from .routes import partners_bp

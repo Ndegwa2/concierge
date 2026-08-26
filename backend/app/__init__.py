@@ -169,20 +169,21 @@ def create_app(config_class=None):
     app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
     app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
     app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER') or os.environ.get('MAIL_USERNAME')
-    
+
     # Register blueprints
-    from app.routes.auth import auth_bp
-    from app.routes.services import services_bp
-    from app.routes.appointments import appointments_bp
-    from app.routes.invoices import invoices_bp
-    from app.routes.vehicles import vehicles_bp
-    from app.routes.admin import admin_bp
-    from app.routes.employees import employees_bp
-    from app.routes.notifications import notifications_bp
-    from app.routes.partners import partners_bp
-    from app.routes.monitoring import monitoring_bp
-    from app.routes.fleets import fleets_bp
-    
+    from app.services.auth import auth_bp
+    from app.services.catalog import services_bp
+    from app.services.appointments import appointments_bp
+    from app.services.invoices import invoices_bp
+    from app.services.vehicles import vehicles_bp
+    from app.services.admin import admin_bp
+    from app.services.employees import employees_bp
+    from app.services.notifications import notifications_bp
+    from app.services.partners import partners_bp
+    from app.services.monitoring import monitoring_bp
+    from app.services.fleets import fleets_bp
+    from app.services.ai_chat import ai_chat_bp
+
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     csrf.exempt(auth_bp)  # JWT-based API: no session cookies, CSRF not needed for auth endpoints
     app.register_blueprint(services_bp, url_prefix='/api/services')
@@ -204,8 +205,10 @@ def create_app(config_class=None):
     app.register_blueprint(monitoring_bp, url_prefix='/api/monitoring')
     app.register_blueprint(fleets_bp, url_prefix='/api/fleets')
     csrf.exempt(fleets_bp)  # JWT-based API
+    app.register_blueprint(ai_chat_bp, url_prefix='/api/ai-chat')
+    csrf.exempt(ai_chat_bp)  # JWT-based API
     
-    from app.utils.notifications import start_scheduler
+    from app.services.notifications.scheduler import start_scheduler
     start_scheduler(app)
     
     # Create database tables if they don't exist
