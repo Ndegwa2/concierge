@@ -5,6 +5,7 @@ import { Input } from '@/app/components/ui/input';
 import { Card } from '@/app/components/ui/card';
 import { toast } from 'sonner';
 import { api, ChatMessage } from '@/services/api';
+import { aiChatApi } from '@/services/api/aiChat';
 
 export function AIChatBox() {
   const [isOpen, setIsOpen] = useState(false);
@@ -73,7 +74,7 @@ export function AIChatBox() {
     setHasNewMessages(false);
 
     try {
-      const response = await api.chatWithAI({
+      const response = await aiChatApi.chatWithAI({
         message: trimmedInput,
         conversation_history: updatedMessages.filter(m => m.role !== 'system')
       });

@@ -13,7 +13,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
-import { api } from '@/services/api';
+import { adminApi, appointmentsApi } from '@/services/api';
 import type { Appointment } from '@/services/api';
 
 interface DashboardStats {
@@ -43,8 +43,8 @@ export function DashboardOverview({}: DashboardOverviewProps) {
     setError(null);
     try {
       const [dashboardResponse, appointmentsResponse] = await Promise.all([
-        api.getAdminDashboard(),
-        api.getAllAppointmentsAdmin(),
+        adminApi.getAdminDashboard(),
+        appointmentsApi.getAllAppointmentsAdmin(),
       ]);
 
       if (dashboardResponse.success && dashboardResponse.data) {
@@ -129,7 +129,7 @@ export function DashboardOverview({}: DashboardOverviewProps) {
     {
       title: 'Total Revenue',
       value: `KES ${stats.total_revenue.toLocaleString()}`,
-      change: '+12.5%',
+      change: `${stats.completed_appointments} completed`,
       trend: 'up' as const,
       icon: DollarSign,
       description: 'all time'
@@ -137,7 +137,7 @@ export function DashboardOverview({}: DashboardOverviewProps) {
     {
       title: 'Total Appointments',
       value: stats.total_appointments.toString(),
-      change: '+5',
+      change: `${stats.active_appointments} active`,
       trend: 'up' as const,
       icon: Calendar,
       description: 'all time'
@@ -145,18 +145,18 @@ export function DashboardOverview({}: DashboardOverviewProps) {
     {
       title: 'Total Customers',
       value: stats.total_users.toLocaleString(),
-      change: '+8.2%',
+      change: `${stats.total_vehicles} vehicles`,
       trend: 'up' as const,
       icon: Users,
-      description: 'all time'
+      description: 'registered'
     },
     {
       title: 'Active Appointments',
       value: stats.active_appointments.toString(),
-      change: `${stats.completed_appointments} completed`,
+      change: `${stats.total_services} services`,
       trend: 'up' as const,
       icon: Clock,
-      description: 'currently ongoing'
+      description: 'available'
     }
   ] : [];
 
@@ -232,13 +232,6 @@ export function DashboardOverview({}: DashboardOverviewProps) {
               </div>
               <span className="font-semibold">{stats?.completed_appointments ?? 0}</span>
             </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-red-500" />
-                <span className="text-sm">Issues</span>
-              </div>
-              <span className="font-semibold">0</span>
-            </div>
           </CardContent>
         </Card>
 
@@ -284,17 +277,6 @@ export function DashboardOverview({}: DashboardOverviewProps) {
           </CardContent>
         </Card>
       </div>
-
-      {/* Top Performers - placeholder until we have employee stats endpoint */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Top Performing Concierges</CardTitle>
-          <CardDescription>Based on completed services this month</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-slate-500 text-center py-4">Employee performance data will appear here once available.</p>
-        </CardContent>
-      </Card>
     </div>
   );
 }

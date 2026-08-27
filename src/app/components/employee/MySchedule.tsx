@@ -3,7 +3,7 @@ import { Calendar as CalendarIcon, Clock, MapPin, CheckCircle2 } from 'lucide-re
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
-import { api } from '@/services/api';
+import { employeesApi } from '@/services/api';
 
 interface MyScheduleProps {
   employeeData: {
@@ -39,7 +39,7 @@ export function MySchedule({ employeeData }: MyScheduleProps) {
         const endDate = new Date(startDate);
         endDate.setDate(endDate.getDate() + 6);
 
-        const response = await api.getMySchedule(
+        const response = await employeesApi.getMySchedule(
           startDate.toISOString().split('T')[0],
           endDate.toISOString().split('T')[0]
         );

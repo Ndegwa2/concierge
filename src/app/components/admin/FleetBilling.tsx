@@ -10,7 +10,7 @@ import { Select } from '@/app/components/ui/select';
 import { Label } from '@/app/components/ui/label';
 import { Textarea } from '@/app/components/ui/textarea';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import { fleetsApi } from '@/services/api';
 import { Company, FleetExpense, FleetInvoice, InvoiceLineItem } from '@/services/api';
 
 export function FleetBilling() {
@@ -42,7 +42,7 @@ export function FleetBilling() {
 
   async function loadCompanies() {
     try {
-      const res = await api.getCompanies({ per_page: 100 });
+      const res = await fleetsApi.getCompanies({ per_page: 100 });
       if (res.success && res.data) {
         setCompanies(res.data.companies);
         if (res.data.companies.length > 0) setSelectedCompanyId(res.data.companies[0].id);
@@ -56,7 +56,7 @@ export function FleetBilling() {
 
   async function loadCompanyDetail(id: number) {
     try {
-      const res = await api.getCompany(id);
+      const res = await fleetsApi.getCompany(id);
       if (res.success && res.data) setCompany(res.data.company);
     } catch (e) {
       toast.error('Failed to load company');
@@ -65,7 +65,7 @@ export function FleetBilling() {
 
   async function loadCompanyExpenses(id: number) {
     try {
-      const res = await api.getCompanyExpenses(id);
+      const res = await fleetsApi.getCompanyExpenses(id);
       if (res.success && res.data) setExpenses(res.data.expenses);
     } catch (e) {
       toast.error('Failed to load expenses');
@@ -74,7 +74,7 @@ export function FleetBilling() {
 
   async function loadCompanyInvoices(id: number) {
     try {
-      const res = await api.getCompanyInvoices(id);
+      const res = await fleetsApi.getCompanyInvoices(id);
       if (res.success && res.data) setInvoices(res.data.invoices);
     } catch (e) {
       toast.error('Failed to load invoices');
@@ -85,7 +85,7 @@ export function FleetBilling() {
     e.preventDefault();
     if (!selectedCompanyId) return;
     try {
-      const res = await api.createCompanyExpense(selectedCompanyId, {
+      const res = await fleetsApi.createCompanyExpense(selectedCompanyId, {
         ...expenseForm,
         amount: Number(expenseForm.amount),
         vehicle_id: expenseForm.vehicle_id ? Number(expenseForm.vehicle_id) : undefined,
@@ -121,9 +121,16 @@ export function FleetBilling() {
 
   async function handleGenerateInvoice(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedCompanyId) return;
+    if (!selectedCompanyId) {
+      toast.error('Please select a company');
+      return;
+    }
+    if (lineItems.length === 0) {
+      toast.error('Add at least one line item');
+      return;
+    }
     try {
-      const res = await api.generateFleetInvoice(selectedCompanyId, {
+      const res = await fleetsApi.generateFleetInvoice(selectedCompanyId, {
         period_start: invoiceForm.period_start,
         period_end: invoiceForm.period_end,
         tax_amount: Number(invoiceForm.tax_amount) || 0,
@@ -139,6 +146,8 @@ export function FleetBilling() {
         setInvoiceForm({ period_start: '', period_end: '', tax_amount: '', currency: 'KES', due_date: '', notes: '' });
         toast.success('Invoice draft created');
         loadCompanyInvoices(selectedCompanyId);
+      } else {
+        toast.error(res.message || 'Failed to generate invoice');
       }
     } catch (e) {
       toast.error('Failed to generate invoice');
@@ -147,7 +156,7 @@ export function FleetBilling() {
 
   async function handleSendInvoice(invoice: FleetInvoice) {
     try {
-      const res = await api.sendFleetInvoice(invoice.id);
+      const res = await fleetsApi.sendFleetInvoice(invoice.id);
       if (res.success) {
         toast.success('Invoice sent via email');
         loadCompanyInvoices(selectedCompanyId);
@@ -159,7 +168,7 @@ export function FleetBilling() {
 
   async function handleDownloadPdf(id: number) {
     try {
-      const blob = await api.downloadFleetInvoicePdf(id);
+      const blob = await fleetsApi.downloadFleetInvoicePdf(id);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -175,13 +184,6 @@ export function FleetBilling() {
   const subtotal = lineItems.reduce((s, li) => s + li.total_price, 0);
   const tax = Number(invoiceForm.tax_amount) || 0;
   const total = subtotal + tax;
-  function companyVehicleCount() {
-    if (!selectedCompanyId) return 0;
-    const plates = new Set(expenses.filter(e => e.vehicle_id).map(e => e.vehicle_id));
-    return Math.max(plates.size, 1);
-  }
-
-  const monthlyBase = company ? companyVehicleCount() * 5000 : 0;
 
   const garageExpenses = expenses.filter(e => e.expense_type === 'garage').reduce((s, e) => s + e.amount, 0);
   const driverSurcharges = expenses.filter(e => e.expense_type === 'driver_surcharge').reduce((s, e) => s + e.amount, 0);
@@ -215,10 +217,9 @@ export function FleetBilling() {
             </div>
           )}
           <div className="space-y-2">
-            <div className="flex items-center justify-between"><span className="text-sm text-slate-600">Monthly Base Retainer</span><span className="font-medium">KSh {monthlyBase.toLocaleString()}</span></div>
             <div className="flex items-center justify-between"><span className="text-sm text-slate-600">Garage Expenses</span><span className="font-medium">KSh {garageExpenses.toLocaleString()}</span></div>
             <div className="flex items-center justify-between"><span className="text-sm text-slate-600">Driver Surcharges</span><span className="font-medium">KSh {driverSurcharges.toLocaleString()}</span></div>
-            <div className="border-t pt-2 flex items-center justify-between"><span className="text-sm font-medium">Invoice Total</span><span className="font-bold">KSh {(monthlyBase + garageExpenses + driverSurcharges).toLocaleString()}</span></div>
+            <div className="border-t pt-2 flex items-center justify-between"><span className="text-sm font-medium">Invoice Total</span><span className="font-bold">KSh {(garageExpenses + driverSurcharges).toLocaleString()}</span></div>
           </div>
           <Dialog open={expenseDialogOpen} onOpenChange={setExpenseDialogOpen}>
             <DialogTrigger asChild><Button variant="outline" className="w-full"><Plus className="h-4 w-4 mr-2" />Add Expense</Button></DialogTrigger>
@@ -317,14 +318,7 @@ export function FleetBilling() {
             </Table>
           </div>
 
-          <Card className="p-4 bg-slate-50 border-dashed">
-            <h4 className="font-medium text-sm text-slate-600 mb-2">Payment Options</h4>
-            <div className="flex flex-wrap gap-4 text-sm">
-              <div className="px-3 py-2 bg-white border rounded-md"><span className="font-medium">M-Pesa Paybill:</span> Coming soon</div>
-              <div className="px-3 py-2 bg-white border rounded-md"><span className="font-medium">Bank Transfer:</span> Coming soon</div>
-            </div>
           </Card>
-        </Card>
       </div>
     </div>
   );

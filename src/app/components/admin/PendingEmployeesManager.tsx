@@ -6,7 +6,7 @@ import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/app/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
-import { api } from '@/services/api';
+import { authApi } from '@/services/api';
 import type { User, EmployeeProfile } from '@/services/api';
 
 interface PendingEmployee {
@@ -28,7 +28,7 @@ export function PendingEmployeesManager() {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.getPendingEmployees();
+      const response = await authApi.getPendingEmployees();
       if (response.success && response.data) {
         setPendingEmployees(response.data.pending_employees || []);
       } else {
@@ -44,7 +44,7 @@ export function PendingEmployeesManager() {
 
   const handleApprove = async (userId: number) => {
     try {
-      const response = await api.approveEmployee(userId, 'approve');
+      const response = await authApi.approveEmployee(userId, 'approve');
       if (response.success) {
         await fetchPendingEmployees();
       } else {
@@ -62,7 +62,7 @@ export function PendingEmployeesManager() {
     }
 
     try {
-      const response = await api.approveEmployee(userId, 'reject');
+      const response = await authApi.approveEmployee(userId, 'reject');
       if (response.success) {
         await fetchPendingEmployees();
       } else {
@@ -145,7 +145,7 @@ export function PendingEmployeesManager() {
       </Card>
 
       {/* Stats Overview */}
-      <div className="grid md:grid-cols-4 gap-4">
+      <div className="grid md:grid-cols-2 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="text-2xl font-bold">{pendingEmployees.length}</div>
@@ -156,18 +156,6 @@ export function PendingEmployeesManager() {
           <CardContent className="pt-6">
             <div className="text-2xl font-bold">{filteredEmployees.length}</div>
             <p className="text-sm text-slate-600">Filtered Results</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">0</div>
-            <p className="text-sm text-slate-600">Approved Today</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">0</div>
-            <p className="text-sm text-slate-600">Rejected Today</p>
           </CardContent>
         </Card>
       </div>

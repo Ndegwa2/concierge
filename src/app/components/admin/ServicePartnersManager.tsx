@@ -14,7 +14,7 @@ import {
 } from '@/app/components/ui/dialog';
 import { Label } from '@/app/components/ui/label';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import { partnersApi } from '@/services/api';
 import type { ServicePartner } from '@/services/api';
 
 export function ServicePartnersManager() {
@@ -35,7 +35,7 @@ export function ServicePartnersManager() {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.getAllPartnersAdmin();
+      const response = await partnersApi.getAllPartnersAdmin();
       if (response.success && response.data) {
         setPartners(response.data.partners || []);
       }
@@ -53,7 +53,7 @@ export function ServicePartnersManager() {
     setLoadingDetails(true);
     setPartnerStats(null);
     try {
-      const response = await api.getPartnerAdmin(partner.id);
+      const response = await partnersApi.getPartnerAdmin(partner.id);
       if (response.success && response.data) {
         setPartnerStats(response.data.statistics || null);
       } else {
@@ -77,19 +77,6 @@ export function ServicePartnersManager() {
     partner.contact_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (partner.address?.city || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
-
-  const getPricingColor = (pricing: string) => {
-    switch (pricing) {
-      case 'Budget':
-        return 'bg-green-100 text-green-800 border-green-200';
-      case 'Standard':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'Premium':
-        return 'bg-purple-100 text-purple-800 border-purple-200';
-      default:
-        return 'bg-slate-100 text-slate-800 border-slate-200';
-    }
-  };
 
   if (loading) {
     return (
@@ -204,8 +191,8 @@ export function ServicePartnersManager() {
                     <CardTitle className="text-lg">{partner.name}</CardTitle>
                     <CardDescription>{partner.contact_name || 'No contact name'}</CardDescription>
                   </div>
-                  <Badge className={getPricingColor('Standard')}>
-                    Standard
+                  <Badge className={partner.is_active ? 'bg-green-100 text-green-800 border-green-200' : 'bg-slate-100 text-slate-800 border-slate-200'}>
+                    {partner.is_active ? 'Active' : 'Inactive'}
                   </Badge>
                 </div>
               </CardHeader>

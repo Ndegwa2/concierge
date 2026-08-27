@@ -23,7 +23,7 @@ import { Badge } from '@/app/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import { employeesApi } from '@/services/api';
 import type { User, EmployeeProfile, EmployeeDocument, RegisterEmployeeData } from '@/services/api';
 import { usePermission } from '@/hooks/usePermission';
 
@@ -949,7 +949,7 @@ function DocumentUploader({ employeeId, onUploadSuccess, onUploadError }: Docume
 
     setIsUploading(true);
     try {
-      const response = await api.uploadEmployeeDocument(
+      const response = await employeesApi.uploadEmployeeDocument(
         employeeId,
         selectedFile,
         docType,

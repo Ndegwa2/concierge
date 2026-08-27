@@ -11,7 +11,7 @@ class User(db.Model):
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
-    phone = db.Column(EncryptedString(20))
+    phone = db.Column(EncryptedString(255))
     address = db.Column(EncryptedString(255))
     role = db.Column(db.String(20), default='customer', index=True)
     is_admin = db.Column(db.Boolean, default=False, index=True)

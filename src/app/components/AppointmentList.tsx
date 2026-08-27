@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/ca
 import { Button } from '@/app/components/ui/button';
 import { Clock, MapPin, Calendar, Car, CheckCircle2, Star, Download, Send, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import { appointmentsApi } from '@/services/api';
 import type { Appointment } from '@/services/api';
 
 interface AppointmentListProps {
@@ -60,7 +60,7 @@ export function AppointmentList({
     if (!confirm('Are you sure you want to cancel this appointment?')) return;
     
     try {
-      await api.cancelAppointment(appointment.id);
+      await appointmentsApi.cancelAppointment(appointment.id);
       toast.success('Appointment cancelled successfully');
       onCancel?.(appointment);
     } catch (error) {
@@ -70,7 +70,7 @@ export function AppointmentList({
 
   const handleSendInvoice = async (appointment: Appointment) => {
     try {
-      const response = await api.sendInvoice(appointment.id);
+      const response = await appointmentsApi.sendInvoice(appointment.id);
       if (response.success) {
         toast.success('Invoice sent successfully');
       } else {
@@ -83,7 +83,7 @@ export function AppointmentList({
 
   const handleDownloadInvoice = async (appointment: Appointment) => {
     try {
-      const blob = await api.downloadInvoicePdf(appointment.id);
+      const blob = await appointmentsApi.downloadInvoicePdf(appointment.id);
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;

@@ -4,7 +4,7 @@ import { Card } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/app/components/ui/table';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import { fleetsApi } from '@/services/api';
 
 const COLORS = ['#0f172a', '#334155', '#94a3b8', '#cbd5e1'];
 
@@ -23,18 +23,21 @@ export function FleetAnalytics() {
   async function loadAnalytics() {
     try {
       setLoading(true);
-      const [companiesRes, invoicesRes, expensesRes] = await Promise.all([
-        api.getCompanies({ per_page: 100 }),
-        api.getCompanies({ per_page: 100 }),
-        api.getCompanies({ per_page: 100 }),
-      ]);
+      const companiesRes = await fleetsApi.getCompanies({ per_page: 100 });
 
       const companies = companiesRes.success && companiesRes.data ? companiesRes.data.companies : [];
       const allExpenses: any[] = [];
+      const allInvoices: any[] = [];
       for (const c of companies) {
-        const res = await api.getCompanyExpenses(c.id);
-        if (res.success && res.data) {
-          allExpenses.push(...res.data.expenses.map((e: any) => ({ ...e, company_name: c.name })));
+        const [expensesRes, invoicesRes] = await Promise.all([
+          fleetsApi.getCompanyExpenses(c.id),
+          fleetsApi.getCompanyInvoices(c.id),
+        ]);
+        if (expensesRes.success && expensesRes.data) {
+          allExpenses.push(...expensesRes.data.expenses.map((e: any) => ({ ...e, company_name: c.name })));
+        }
+        if (invoicesRes.success && invoicesRes.data) {
+          allInvoices.push(...invoicesRes.data.invoices.map((i: any) => ({ ...i, company_name: c.name })));
         }
       }
 
@@ -55,11 +58,16 @@ export function FleetAnalytics() {
         return d.getMonth() >= 9 && d.getMonth() <= 11;
       });
 
+      const invoicesQ1 = allInvoices.filter(i => new Date(i.created_at).getMonth() <= 2);
+      const invoicesQ2 = allInvoices.filter(i => { const m = new Date(i.created_at).getMonth(); return m >= 3 && m <= 5; });
+      const invoicesQ3 = allInvoices.filter(i => { const m = new Date(i.created_at).getMonth(); return m >= 6 && m <= 8; });
+      const invoicesQ4 = allInvoices.filter(i => new Date(i.created_at).getMonth() >= 9);
+
       setRevenueData([
-        { name: 'Q1', retail: 0, fleet: q1.reduce((s, e) => s + e.amount, 0), expenses: q1.reduce((s, e) => s + e.amount, 0) },
-        { name: 'Q2', retail: 0, fleet: q2.reduce((s, e) => s + e.amount, 0), expenses: q2.reduce((s, e) => s + e.amount, 0) },
-        { name: 'Q3', retail: 0, fleet: q3.reduce((s, e) => s + e.amount, 0), expenses: q3.reduce((s, e) => s + e.amount, 0) },
-        { name: 'Q4', retail: 0, fleet: q4.reduce((s, e) => s + e.amount, 0), expenses: q4.reduce((s, e) => s + e.amount, 0) },
+        { name: 'Q1', fleet: invoicesQ1.reduce((s, i) => s + i.total_amount, 0), expenses: q1.reduce((s, e) => s + e.amount, 0) },
+        { name: 'Q2', fleet: invoicesQ2.reduce((s, i) => s + i.total_amount, 0), expenses: q2.reduce((s, e) => s + e.amount, 0) },
+        { name: 'Q3', fleet: invoicesQ3.reduce((s, i) => s + i.total_amount, 0), expenses: q3.reduce((s, e) => s + e.amount, 0) },
+        { name: 'Q4', fleet: invoicesQ4.reduce((s, i) => s + i.total_amount, 0), expenses: q4.reduce((s, e) => s + e.amount, 0) },
       ]);
 
       const byType: Record<string, number> = {};
@@ -101,7 +109,7 @@ export function FleetAnalytics() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="p-4">
-          <h3 className="font-semibold mb-4">Quarterly Revenue Split</h3>
+          <h3 className="font-semibold mb-4">Quarterly Revenue vs Expenses</h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={revenueData}>
@@ -110,8 +118,7 @@ export function FleetAnalytics() {
                 <YAxis />
                 <Tooltip formatter={(value: any) => `KSh ${Number(value).toLocaleString()}`} />
                 <Legend />
-                <Line type="monotone" dataKey="retail" stroke="#0f172a" strokeWidth={2} name="Retail Revenue" />
-                <Line type="monotone" dataKey="fleet" stroke="#334155" strokeWidth={2} name="B2B Fleet Retainers" />
+                <Line type="monotone" dataKey="fleet" stroke="#334155" strokeWidth={2} name="B2B Fleet Invoices" />
                 <Line type="monotone" dataKey="expenses" stroke="#ef4444" strokeWidth={2} name="Operational Expenses" />
               </LineChart>
             </ResponsiveContainer>

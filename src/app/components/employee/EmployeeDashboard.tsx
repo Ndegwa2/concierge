@@ -11,7 +11,7 @@ import {
   Wrench
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
-import { api } from '@/services/api';
+import { employeesApi } from '@/services/api';
 import { EmployeeOverview } from './EmployeeOverview';
 import { EmployeeFunctions } from './EmployeeFunctions';
 import { MyAssignments } from './MyAssignments';
@@ -32,7 +32,7 @@ export function EmployeeDashboard({ onLogout }: EmployeeDashboardProps) {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const response = await api.getEmployeeProfile();
+        const response = await employeesApi.getEmployeeProfile();
         if (response.success && response.data) {
           const user = response.data.user;
           const employee = user.employee;

@@ -132,8 +132,8 @@ class Invoice(db.Model):
 
     id = db.Column(db.BigInteger, primary_key=True)
     invoice_number = db.Column(db.String(50), unique=True, nullable=False, index=True)
-    appointment_id = db.Column(db.BigInteger, db.ForeignKey('appointments.id', ondelete='CASCADE'), nullable=False, index=True)
-    user_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    appointment_id = db.Column(db.BigInteger, db.ForeignKey('appointments.id', ondelete='CASCADE'), nullable=True, index=True)
+    user_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=True, index=True)
     company_id = db.Column(db.BigInteger, db.ForeignKey('companies.id', ondelete='SET NULL'), index=True)
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
     status = db.Column(db.String(20), default='draft', nullable=False, index=True)

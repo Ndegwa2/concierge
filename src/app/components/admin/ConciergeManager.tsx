@@ -27,7 +27,7 @@ import {
 import { Textarea } from '@/app/components/ui/textarea';
 import { Label } from '@/app/components/ui/label';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import { employeesApi } from '@/services/api';
 import type { User, EmployeeProfile } from '@/services/api';
 
 interface ConciergeRow {
@@ -70,7 +70,7 @@ export function ConciergeManager() {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.getAllEmployeesAdmin();
+      const response = await employeesApi.getEmployees();
       if (response.success && response.data) {
         const mapped = (response.data.employees || []).map((item: any) => ({
           id: item.employee?.employee_id || String(item.id),
@@ -141,7 +141,7 @@ export function ConciergeManager() {
       if (editForm.email) payload.email = editForm.email;
       if (editForm.phone) payload.phone = editForm.phone;
 
-      const response = await api.updateEmployee(selectedConcierge.user_id, payload);
+      const response = await employeesApi.updateEmployee(selectedConcierge.user_id, payload);
       if (response.success) {
         toast.success('Concierge updated successfully');
         setEditDialogOpen(false);
@@ -161,7 +161,7 @@ export function ConciergeManager() {
     if (!selectedConcierge) return;
     setDeleting(true);
     try {
-      const response = await api.deactivateEmployee(selectedConcierge.user_id);
+      const response = await employeesApi.deactivateEmployee(selectedConcierge.user_id);
       if (response.success) {
         toast.success('Concierge deleted successfully');
         setDeleteDialogOpen(false);
@@ -251,12 +251,6 @@ export function ConciergeManager() {
               {concierges.filter(c => c.status === 'active').length}
             </div>
             <p className="text-sm text-slate-600">Active Now</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">-</div>
-            <p className="text-sm text-slate-600">Services in Progress</p>
           </CardContent>
         </Card>
         <Card>

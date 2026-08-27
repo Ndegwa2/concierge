@@ -35,7 +35,7 @@ import {
 } from '@/app/components/ui/alert-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/app/components/ui/dropdown-menu';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import { employeesApi } from '@/services/api';
 import { useEmployees, useDeleteEmployee, useUpdateEmployeeStatus } from '@/hooks/useApi';
 import { EmployeeForm } from '@/app/components/employee/forms/EmployeeForm';
 import { EmployeeDetailView } from '@/app/components/admin/EmployeeDetailView';
@@ -233,7 +233,7 @@ export function EmployeesManager() {
 
   const handleExportCsv = async () => {
     try {
-      const blob = await api.exportEmployeesCsv(
+      const blob = await employeesApi.exportEmployeesCsv(
         statusFilter !== 'all' ? statusFilter : undefined,
         departmentFilter !== 'all' ? departmentFilter : undefined,
         searchQuery || undefined
@@ -252,14 +252,28 @@ export function EmployeesManager() {
     }
   };
 
-  const handleExportPdf = () => {
-    toast.info('PDF export will be available when the server generates the report');
+  const handleExportPdf = async () => {
+    try {
+      const response = await employeesApi.exportEmployeesPdf();
+      const blob = response instanceof Blob ? response : response.data;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `employees-${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('PDF exported successfully');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to export PDF');
+    }
   };
 
   const handleFormSubmit = async (data: any) => {
     try {
       if (formMode === 'add') {
-        const response = await api.registerEmployee(data);
+        const response = await employeesApi.registerEmployee(data);
         if (response.success) {
           toast.success(`Employee ${data.name} created successfully`);
           refetch();
@@ -267,7 +281,7 @@ export function EmployeesManager() {
           toast.error(response.message || 'Failed to create employee');
         }
       } else if (formMode === 'edit' && editingEmployee) {
-        const response = await api.updateEmployee(editingEmployee.employee?.id || editingEmployee.user.id, data);
+        const response = await employeesApi.updateEmployee(editingEmployee.employee?.id || editingEmployee.user.id, data);
         if (response.success) {
           toast.success(`Employee ${data.name} updated successfully`);
           refetch();
@@ -285,7 +299,7 @@ export function EmployeesManager() {
 
   const handleConfirmDeactivate = async () => {
     try {
-      const response = await api.deactivateEmployee(deleteConfirm.id);
+      const response = await employeesApi.deactivateEmployee(deleteConfirm.id);
       if (response.success) {
         toast.success(`${deactivateConfirm.name} has been deactivated`);
         refetch();

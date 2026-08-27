@@ -1,4 +1,5 @@
 from app import db
+from flask import request, has_request_context
 from app.services.fleets.models import Company, FleetVehicle, FleetExpense, Invoice, InvoiceLineItem
 from datetime import datetime, timezone
 
@@ -232,8 +233,6 @@ def generate_company_invoice(company_id, data):
     invoice_number = _generate_fleet_invoice_number(company.id, period_start)
     invoice = Invoice(
         invoice_number=invoice_number,
-        appointment_id=0,
-        user_id=0,
         company_id=company.id,
         total_amount=total,
         status='draft',
@@ -364,8 +363,6 @@ def bulk_generate_statements(data):
         invoice_number = _generate_fleet_invoice_number(company.id, period_start)
         invoice = Invoice(
             invoice_number=invoice_number,
-            appointment_id=0,
-            user_id=0,
             company_id=company.id,
             total_amount=subtotal,
             status='draft',
@@ -395,16 +392,17 @@ def bulk_generate_statements(data):
 def _generate_fleet_invoice_number(company_id, period_start, created_at=None):
     created_at = created_at or datetime.now(timezone.utc)
     date_part = created_at.strftime('%Y%m%d')
-    seq_part = f"{company_id:04d}"
-    return f"FLEET-{date_part}-{seq_part}"
+    base = f"FLEET-{date_part}-{company_id:04d}"
+    seq = 1
+    candidate = base
+    while Invoice.query.filter_by(invoice_number=candidate).first() is not None:
+        seq += 1
+        candidate = f"{base}-{seq:03d}"
+    return candidate
 
 
 def _has_request():
-    try:
-        from flask import request
-        return True
-    except RuntimeError:
-        return False
+    return has_request_context()
 
 
 def get_current_user_id():

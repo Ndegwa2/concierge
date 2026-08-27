@@ -10,7 +10,7 @@ import { Select } from '@/app/components/ui/select';
 import { Label } from '@/app/components/ui/label';
 import { Textarea } from '@/app/components/ui/textarea';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import { fleetsApi } from '@/services/api';
 import { Company, FleetVehicle, FleetExpense } from '@/services/api';
 
 type Status = 'active' | 'in-service' | 'maintenance-due';
@@ -56,7 +56,7 @@ export function FleetCommandCenter() {
 
   async function loadData() {
     try {
-      const res = await api.getCompanies({ per_page: 100 });
+      const res = await fleetsApi.getCompanies({ per_page: 100 });
       if (res.success && res.data) {
         setCompanies(res.data.companies);
         if (res.data.companies.length > 0) setSelectedCompanyId(res.data.companies[0].id);
@@ -70,7 +70,7 @@ export function FleetCommandCenter() {
 
   async function loadCompanyVehicles(companyId: number) {
     try {
-      const res = await api.getCompanyVehicles(companyId);
+      const res = await fleetsApi.getCompanyVehicles(companyId);
       if (res.success && res.data) setVehicles(res.data.vehicles);
     } catch (e) {
       toast.error('Failed to load vehicles');
@@ -79,7 +79,7 @@ export function FleetCommandCenter() {
 
   async function loadCompanyExpenses(companyId: number) {
     try {
-      const res = await api.getCompanyExpenses(companyId);
+      const res = await fleetsApi.getCompanyExpenses(companyId);
       if (res.success && res.data) setExpenses(res.data.expenses);
     } catch (e) {
       toast.error('Failed to load expenses');
@@ -89,7 +89,7 @@ export function FleetCommandCenter() {
   async function handleAddCompany(e: React.FormEvent) {
     e.preventDefault();
     try {
-      const res = await api.createCompany(companyForm);
+      const res = await fleetsApi.createCompany(companyForm);
       if (res.success && res.data) {
         toast.success('Company added');
         setCompanyDialogOpen(false);
@@ -105,7 +105,7 @@ export function FleetCommandCenter() {
     e.preventDefault();
     if (!selectedCompanyId) return;
     try {
-      const res = await api.createCompanyVehicle(selectedCompanyId, {
+      const res = await fleetsApi.createCompanyVehicle(selectedCompanyId, {
         ...vehicleForm,
         year: vehicleForm.year ? Number(vehicleForm.year) : undefined,
         assigned_employee_id: vehicleForm.assigned_employee_id ? Number(vehicleForm.assigned_employee_id) : undefined,
@@ -125,7 +125,7 @@ export function FleetCommandCenter() {
 
   async function handleDeleteVehicle(id: number) {
     try {
-      await api.deleteFleetVehicle(id);
+      await fleetsApi.deleteFleetVehicle(id);
       toast.success('Vehicle removed');
       if (selectedCompanyId) loadCompanyVehicles(selectedCompanyId);
     } catch (e) {
@@ -137,7 +137,7 @@ export function FleetCommandCenter() {
     e.preventDefault();
     if (!selectedCompanyId) return;
     try {
-      const res = await api.createCompanyExpense(selectedCompanyId, {
+      const res = await fleetsApi.createCompanyExpense(selectedCompanyId, {
         ...expenseForm,
         amount: Number(expenseForm.amount),
         vehicle_id: expenseForm.vehicle_id ? Number(expenseForm.vehicle_id) : undefined,
@@ -167,7 +167,7 @@ export function FleetCommandCenter() {
       return;
     }
     try {
-      await api.createCompanyExpense(selectedCompanyId, {
+      await fleetsApi.createCompanyExpense(selectedCompanyId, {
         expense_type: 'scheduled_service',
         description: `Bulk Service Run - ${desc}`,
         amount,
@@ -187,7 +187,7 @@ export function FleetCommandCenter() {
       const from = new Date();
       from.setMonth(from.getMonth() - 1);
       const to = new Date();
-      await api.generateFleetInvoice(selectedCompanyId, {
+      await fleetsApi.generateFleetInvoice(selectedCompanyId, {
         period_start: from.toISOString().slice(0, 10),
         period_end: to.toISOString().slice(0, 10),
         line_items: companyExpenses.map(e => ({ description: `${e.expense_type}: ${e.description}`, quantity: 1, unit_price: e.amount, total_price: e.amount })),

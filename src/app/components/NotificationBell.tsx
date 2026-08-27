@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Bell, CheckCheck, X } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import { notificationsApi } from '@/services/api';
 import type { Notification } from '@/services/api';
 
 export function NotificationBell() {
@@ -14,7 +14,7 @@ export function NotificationBell() {
   const loadNotifications = async () => {
     setLoading(true);
     try {
-      const response = await api.getNotifications(false);
+      const response = await notificationsApi.getNotifications(false);
       if (response.success && response.data) {
         setNotifications(response.data.notifications);
         setUnreadCount(response.data.unread_count);
@@ -34,7 +34,7 @@ export function NotificationBell() {
 
   const handleMarkRead = async (notificationId: number) => {
     try {
-      await api.markNotificationRead(notificationId);
+      await notificationsApi.markNotificationRead(notificationId);
       setNotifications(prev => prev.filter(n => n.id !== notificationId));
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (e) {
@@ -44,7 +44,7 @@ export function NotificationBell() {
 
   const handleMarkAllRead = async () => {
     try {
-      await api.markAllNotificationsRead();
+      await notificationsApi.markAllNotificationsRead();
       setNotifications([]);
       setUnreadCount(0);
       toast.success('All notifications marked as read');

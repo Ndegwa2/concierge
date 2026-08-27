@@ -1,6 +1,7 @@
 from app import db
 from sqlalchemy import func, CheckConstraint
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import backref
 import uuid
 from app.core.types import EncryptedString
 
@@ -39,6 +40,8 @@ class Employee(db.Model):
     bank_name = db.Column(db.String(100))
     health_plan_tier = db.Column(db.String(20))
 
+    user = db.relationship('User', backref=backref('employee_profile', uselist=False), uselist=False, lazy=True)
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -63,9 +66,7 @@ class Employee(db.Model):
             'pay_frequency': self.pay_frequency,
             'bank_account_number': self.bank_account_number,
             'bank_name': self.bank_name,
-            'health_plan_tier': self.health_plan_tier,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'health_plan_tier': self.health_plan_tier
         }
 
     @property

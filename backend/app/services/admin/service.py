@@ -4,6 +4,7 @@ from app.services.catalog.models import Service, DiscountCode
 from app.services.vehicles.models import Vehicle
 from app.services.appointments.models import Appointment, ServiceHistory
 from app.services.notifications.models import Notification
+from sqlalchemy.orm import joinedload
 from datetime import datetime, timezone
 
 

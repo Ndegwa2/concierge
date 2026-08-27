@@ -20,7 +20,7 @@ import { Input } from '@/app/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { toast } from 'sonner';
 import { useAppointments } from '@/hooks/useApi';
-import { api } from '@/services/api';
+import { appointmentsApi } from '@/services/api';
 import type { Appointment } from '@/services/api';
 
 function formatDate(dateString: string) {
@@ -107,7 +107,7 @@ export function CustomerAppointments({ onConfirmReturn }: { onConfirmReturn?: (a
     if (!confirm('Are you sure you want to cancel this appointment?')) return;
 
     try {
-      await api.cancelAppointment(appointment.id);
+      await appointmentsApi.cancelAppointment(appointment.id);
       toast.success('Appointment cancelled successfully');
       refetchAppointments();
     } catch (error) {
@@ -117,7 +117,7 @@ export function CustomerAppointments({ onConfirmReturn }: { onConfirmReturn?: (a
 
   const handleSendInvoice = async (appointment: Appointment) => {
     try {
-      const response = await api.sendInvoice(appointment.id);
+      const response = await appointmentsApi.sendInvoice(appointment.id);
       if (response.success) {
         toast.success('Invoice sent successfully');
       } else {
@@ -130,7 +130,7 @@ export function CustomerAppointments({ onConfirmReturn }: { onConfirmReturn?: (a
 
   const handleDownloadInvoice = async (appointment: Appointment) => {
     try {
-      const blob = await api.downloadInvoicePdf(appointment.id);
+      const blob = await appointmentsApi.downloadInvoicePdf(appointment.id);
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;

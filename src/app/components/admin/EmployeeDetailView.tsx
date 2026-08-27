@@ -30,7 +30,7 @@ import {
   AlertDialogFooter,
 } from '@/app/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import { employeesApi } from '@/services/api';
 import { useEmployeeDocuments, useDeleteDocument } from '@/hooks/useApi';
 import { usePermission } from '@/hooks/usePermission';
 import type { User, EmployeeProfile, EmployeeDocument } from '@/services/api';
@@ -127,7 +127,7 @@ export function EmployeeDetailView({ employee, open, onClose }: EmployeeDetailVi
 
   const handleDownloadDoc = async (doc: EmployeeDocument) => {
     try {
-      const blob = await api.downloadEmployeeDocument(doc.id);
+      const blob = await employeesApi.downloadEmployeeDocument(empProfile.id, doc.id);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

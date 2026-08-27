@@ -16,7 +16,7 @@ import {
 } from '@/app/components/ui/dialog';
 import { Label } from '@/app/components/ui/label';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import { adminApi, vehiclesApi } from '@/services/api';
 import type { User, Vehicle } from '@/services/api';
 
 interface CustomerRow extends User {
@@ -44,21 +44,18 @@ export function CustomersManager() {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.getAllUsers();
+      const response = await adminApi.getAllUsers();
       if (response.success && response.data) {
         const users = (response.data.users || []).filter((u: User) => u.role === 'customer');
         const enriched = await Promise.all(
           users.map(async (u: User) => {
-            const vehiclesRes = await api.getVehicles();
+            const vehiclesRes = await vehiclesApi.getVehicles();
             const userVehicles = vehiclesRes.success && vehiclesRes.data
               ? vehiclesRes.data.vehicles.filter((v: Vehicle) => v.user_id === u.id)
               : [];
             return {
               ...u,
               vehicles: userVehicles,
-              total_services: 0,
-              total_spent: 0,
-              last_service: undefined,
             };
           })
         );
@@ -78,7 +75,7 @@ export function CustomersManager() {
     setLoadingDetails(true);
     setCustomerDetails(null);
     try {
-      const response = await api.getUser(customer.id);
+      const response = await adminApi.getUser(customer.id);
       if (response.success && response.data) {
         setCustomerDetails(response.data.user);
       } else {
@@ -169,7 +166,7 @@ export function CustomersManager() {
       </Card>
 
       {/* Stats Overview */}
-      <div className="grid md:grid-cols-4 gap-4">
+      <div className="grid md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="text-2xl font-bold">{customers.length}</div>
@@ -186,14 +183,10 @@ export function CustomersManager() {
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">0</div>
-            <p className="text-sm text-slate-600">VIP Customers</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">-</div>
-            <p className="text-sm text-slate-600">Total Revenue</p>
+            <div className="text-2xl font-bold">
+              {customers.reduce((sum, c) => sum + (c.vehicles?.length || 0), 0)}
+            </div>
+            <p className="text-sm text-slate-600">Total Vehicles</p>
           </CardContent>
         </Card>
       </div>

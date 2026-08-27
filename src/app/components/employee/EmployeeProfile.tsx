@@ -5,6 +5,7 @@ import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Avatar, AvatarFallback } from '@/app/components/ui/avatar';
 import { api, type User } from '@/services/api';
+import { employeesApi } from '@/services/api/employees';
 
 interface EmployeeProfileProps {
   employeeData: {
@@ -28,7 +29,7 @@ export function EmployeeProfile({ employeeData }: EmployeeProfileProps) {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const response = await api.getEmployeeProfile();
+        const response = await employeesApi.getEmployeeProfile();
         if (response.success && response.data) {
           setProfile(response.data.user);
         } else {
