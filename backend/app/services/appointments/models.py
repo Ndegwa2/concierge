@@ -97,7 +97,7 @@ class ServiceHistory(db.Model):
 
 class Assignment(db.Model):
     __tablename__ = 'assignments'
-    __table_args__ = (CheckConstraint("status IN ('assigned', 'in-progress', 'completed', 'cancelled')"),)
+    __table_args__ = (CheckConstraint("status IN ('assigned', 'in-progress', 'checklist_pending', 'work_pending', 'submitted', 'verified', 'completed', 'cancelled')"),)
 
     id = db.Column(db.BigInteger, primary_key=True)
     appointment_id = db.Column(db.BigInteger, db.ForeignKey('appointments.id', ondelete='CASCADE'), nullable=False, index=True)

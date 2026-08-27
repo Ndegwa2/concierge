@@ -184,6 +184,7 @@ def create_app(config_class=None):
     from app.services.fleets import fleets_bp
     from app.services.ai_chat import ai_chat_bp
     from app.services.payments import payments_bp
+    from app.services.workflow import workflow_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     csrf.exempt(auth_bp)  # JWT-based API: no session cookies, CSRF not needed for auth endpoints
@@ -210,6 +211,8 @@ def create_app(config_class=None):
     csrf.exempt(ai_chat_bp)  # JWT-based API
     app.register_blueprint(payments_bp, url_prefix='/api/payments')
     csrf.exempt(payments_bp)  # JWT-based API
+    app.register_blueprint(workflow_bp, url_prefix='/api/workflow')
+    csrf.exempt(workflow_bp)  # JWT-based API
 
     from app.services.notifications.scheduler import start_scheduler
     start_scheduler(app)
