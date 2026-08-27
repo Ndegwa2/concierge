@@ -75,8 +75,8 @@ def initialize_database():
         
         # Create sample admin user
         admin = User()
-        admin.name = 'Kwame Asante'
-        admin.email = 'admin@autoconcierge.com'
+        admin.name = 'Sam Ndegwa'
+        admin.email = 'samuel.ndegwa@strathmore.edu'
         admin.set_password('admin123')
         admin.role = 'admin'
         admin.is_admin = True
