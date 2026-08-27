@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, MapPin, Phone, Navigation, CheckCircle2, Clock, PauseCircle, AlertCircle, XCircle } from 'lucide-react';
+import { Search, Filter, Phone, Navigation, CheckCircle2, Clock, XCircle, MapPin } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
-import { Alert, AlertDescription } from '@/app/components/ui/alert';
-import { api } from '@/services/api';
-import { useUpdateAssignmentStatus } from '@/hooks/useApi';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/app/components/ui/dialog';
+import { toast } from 'sonner';
+import { employeesApi, workflowApi } from '@/services/api';
+import { useUpdateAssignmentStatus, useStartAssignment, useSubmitChecklist, useSubmitWorkRecord } from '@/hooks/useApi';
+import { VehicleChecklistForm } from './VehicleChecklistForm';
+import { WorkRecordForm } from './WorkRecordForm';
 import type { Assignment } from '@/services/api';
 
 interface MyAssignmentsProps {
@@ -35,7 +38,7 @@ interface AssignmentDisplay {
   specialInstructions?: string;
   price: string;
   appointmentId: number;
-  vehicleInfo: { make: string; model: string; year: number; color?: string } | null;
+  vehicleInfo: { make: string; model: string; year: number; color?: string; license_plate?: string } | null;
   serviceInfo: { name: string; duration: number } | null;
   notes: string;
   customerPhone: string;
@@ -47,12 +50,17 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
   const [assignments, setAssignments] = useState<AssignmentDisplay[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedAssignment, setSelectedAssignment] = useState<AssignmentDisplay | null>(null);
+  const [workflowStep, setWorkflowStep] = useState<'checklist' | 'workrecord' | null>(null);
   const updateStatusMutation = useUpdateAssignmentStatus();
+  const startMutation = useStartAssignment();
+  const submitChecklistMutation = useSubmitChecklist();
+  const submitWorkRecordMutation = useSubmitWorkRecord();
 
   const fetchAssignments = async () => {
     try {
       const statusParam = statusFilter === 'all' ? undefined : statusFilter;
-      const response = await api.getMyAssignments(statusParam);
+      const response = await employeesApi.getMyAssignments(statusParam);
       if (response.success && response.data) {
         const mapped = response.data.assignments.map(a => {
           const appt = a.appointment;
@@ -117,10 +125,16 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'in-progress':
+      case 'checklist_pending':
+      case 'work_pending':
         return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'assigned':
       case 'scheduled':
         return 'bg-green-100 text-green-800 border-green-200';
+      case 'submitted':
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'verified':
+        return 'bg-purple-100 text-purple-800 border-purple-200';
       case 'completed':
         return 'bg-slate-100 text-slate-800 border-slate-200';
       case 'cancelled':
@@ -146,136 +160,117 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
     return matchesSearch && matchesStatus;
   });
 
-  const activeAssignments = filteredAssignments.filter(a => a.status !== 'completed');
-  const completedAssignments = filteredAssignments.filter(a => a.status === 'completed');
+  const activeAssignments = filteredAssignments.filter(a => a.status !== 'completed' && a.status !== 'cancelled');
+  const completedAssignments = filteredAssignments.filter(a => a.status === 'completed' || a.status === 'cancelled');
 
-  const AssignmentCard = ({ assignment }: { assignment: AssignmentDisplay }) => (
-    <Card className="hover:shadow-lg transition-shadow">
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div>
-            <CardTitle className="text-lg">{assignment.service}</CardTitle>
-            <CardDescription>{assignment.customer} - {assignment.id}</CardDescription>
-          </div>
-          <Badge className={getStatusColor(assignment.status)}>
-            {getStatusLabel(assignment.status)}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-sm">
-            <Clock className="h-4 w-4 text-slate-500" />
-            <span className="font-medium">{assignment.date} at {assignment.time}</span>
-            <span className="text-slate-500">({assignment.estimatedDuration})</span>
-          </div>
-          <div className="text-sm text-slate-600">
-            <p className="font-medium mb-1">Vehicle: {assignment.vehicle}</p>
-          </div>
-        </div>
+  const AssignmentCard = ({ assignment }: { assignment: AssignmentDisplay }) => {
+    const handleContinueWork = () => {
+      setSelectedAssignment(assignment);
+      setWorkflowStep('checklist');
+    };
 
-        <div className="space-y-2 pt-2 border-t">
-          <div className="flex items-start gap-2 text-sm">
-            <MapPin className="h-4 w-4 text-slate-500 mt-0.5" />
+    return (
+      <Card className="hover:shadow-lg transition-shadow">
+        <CardHeader>
+          <div className="flex items-start justify-between">
             <div>
-              <p className="font-medium">Pickup:</p>
-              <p className="text-slate-600">{assignment.pickupLocation}</p>
+              <CardTitle className="text-lg">{assignment.service}</CardTitle>
+              <CardDescription>{assignment.customer} - {assignment.id}</CardDescription>
+            </div>
+            <Badge className={getStatusColor(assignment.status)}>
+              {getStatusLabel(assignment.status)}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm">
+              <Clock className="h-4 w-4 text-slate-500" />
+              <span className="font-medium">{assignment.date} at {assignment.time}</span>
+              <span className="text-slate-500">({assignment.estimatedDuration})</span>
+            </div>
+            <div className="text-sm text-slate-600">
+              <p className="font-medium mb-1">Vehicle: {assignment.vehicle}</p>
             </div>
           </div>
-          <div className="flex items-start gap-2 text-sm">
-            <MapPin className="h-4 w-4 text-slate-500 mt-0.5" />
-            <div>
-              <p className="font-medium">Service Location:</p>
-              <p className="text-slate-600">{assignment.serviceLocation}</p>
+
+          <div className="space-y-2 pt-2 border-t">
+            <div className="flex items-start gap-2 text-sm">
+              <MapPin className="h-4 w-4 text-slate-500 mt-0.5" />
+              <div>
+                <p className="font-medium">Pickup:</p>
+                <p className="text-slate-600">{assignment.pickupLocation}</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2 text-sm">
+              <MapPin className="h-4 w-4 text-slate-500 mt-0.5" />
+              <div>
+                <p className="font-medium">Service Location:</p>
+                <p className="text-slate-600">{assignment.serviceLocation}</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        {assignment.specialInstructions && (
-          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <p className="text-sm font-medium text-yellow-900 mb-1">Special Instructions:</p>
-            <p className="text-sm text-yellow-800">{assignment.specialInstructions}</p>
+          {assignment.specialInstructions && (
+            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-sm font-medium text-yellow-900 mb-1">Special Instructions:</p>
+              <p className="text-sm text-yellow-800">{assignment.specialInstructions}</p>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between pt-2 border-t">
+            <div className="flex items-center gap-2 text-sm text-slate-600">
+              <Phone className="h-4 w-4" />
+              <span>{assignment.phone}</span>
+            </div>
+            <span className="font-semibold">{assignment.price}</span>
           </div>
-        )}
 
-        <div className="flex items-center justify-between pt-2 border-t">
-          <div className="flex items-center gap-2 text-sm text-slate-600">
-            <Phone className="h-4 w-4" />
-            <span>{assignment.phone}</span>
-          </div>
-          <span className="font-semibold">{assignment.price}</span>
-        </div>
-
-        <div className="flex gap-2">
-          {assignment.statusValue === 'assigned' && (
-            <>
+          <div className="flex gap-2">
+            {(assignment.statusValue === 'assigned' || assignment.statusValue === 'in-progress' || assignment.statusValue === 'checklist_pending' || assignment.statusValue === 'work_pending') && (
               <Button
                 className="flex-1"
                 size="sm"
-                onClick={() => handleStatusChange(assignment.assignmentId, 'in-progress')}
+                onClick={handleContinueWork}
                 disabled={updateStatusMutation.isPending}
               >
                 <Navigation className="h-4 w-4 mr-2" />
-                Start Service
+                {assignment.statusValue === 'assigned' ? 'Start Service' : 'Continue Work'}
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleCallCustomer(assignment.customerPhone)}
-              >
-                <Phone className="h-4 w-4" />
+            )}
+            {assignment.statusValue === 'submitted' && (
+              <Button variant="outline" className="flex-1" size="sm" disabled>
+                Waiting for Verification
               </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => handleStatusChange(assignment.assignmentId, 'cancelled')}
-                disabled={updateStatusMutation.isPending}
-              >
-                <XCircle className="h-4 w-4" />
+            )}
+            {assignment.statusValue === 'verified' && (
+              <Button variant="outline" className="flex-1" size="sm" disabled>
+                Ready for Checkout
               </Button>
-            </>
-          )}
-          {assignment.statusValue === 'in-progress' && (
-            <>
-              <Button
-                className="flex-1"
-                size="sm"
-                onClick={() => handleStatusChange(assignment.assignmentId, 'completed')}
-                disabled={updateStatusMutation.isPending}
-              >
-                <CheckCircle2 className="h-4 w-4 mr-2" />
-                Complete
+            )}
+            {assignment.statusValue === 'completed' && (
+              <Button variant="outline" className="flex-1" size="sm">
+                View Details
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleCallCustomer(assignment.customerPhone)}
-              >
-                <Phone className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => handleStatusChange(assignment.assignmentId, 'cancelled')}
-                disabled={updateStatusMutation.isPending}
-              >
-                <XCircle className="h-4 w-4" />
-              </Button>
-            </>
-          )}
-          {assignment.statusValue === 'completed' && (
-            <Button
-              variant="outline"
-              className="flex-1"
-              size="sm"
-            >
-              View Details
+            )}
+            <Button variant="outline" size="sm" onClick={() => handleCallCustomer(assignment.customerPhone)}>
+              <Phone className="h-4 w-4" />
             </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
+            {(assignment.statusValue === 'assigned' || assignment.statusValue === 'in-progress') && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => handleStatusChange(assignment.assignmentId, 'cancelled')}
+                disabled={updateStatusMutation.isPending}
+              >
+                <XCircle className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -303,7 +298,6 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
         <p className="text-slate-600">Welcome back, {employeeData.name}! Manage your service appointments</p>
       </div>
 
-      {/* Search and Filter */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col md:flex-row gap-4">
@@ -323,8 +317,12 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="scheduled">Scheduled</SelectItem>
+                <SelectItem value="assigned">Assigned</SelectItem>
                 <SelectItem value="in-progress">In Progress</SelectItem>
+                <SelectItem value="checklist_pending">Checklist</SelectItem>
+                <SelectItem value="work_pending">Work Record</SelectItem>
+                <SelectItem value="submitted">Submitted</SelectItem>
+                <SelectItem value="verified">Verified</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
               </SelectContent>
             </Select>
@@ -332,7 +330,6 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
         </CardContent>
       </Card>
 
-      {/* Stats */}
       <div className="grid md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="pt-6">
@@ -350,7 +347,7 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-2xl font-bold">{completedAssignments.length}</div>
-                <p className="text-sm text-slate-600">Completed Today</p>
+                <p className="text-sm text-slate-600">Completed / Cancelled</p>
               </div>
               <CheckCircle2 className="h-8 w-8 text-green-500" />
             </div>
@@ -369,7 +366,6 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
         </Card>
       </div>
 
-      {/* Assignments Tabs */}
       <Tabs defaultValue="active" className="space-y-4">
         <TabsList>
           <TabsTrigger value="active">Active ({activeAssignments.length})</TabsTrigger>
@@ -408,6 +404,33 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
           </div>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={!!selectedAssignment} onOpenChange={(open) => !open && setSelectedAssignment(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Service Workflow</DialogTitle>
+            <DialogDescription>
+              {selectedAssignment?.customer} - {selectedAssignment?.service}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedAssignment && workflowStep === 'checklist' && (
+            <VehicleChecklistForm
+              assignmentId={selectedAssignment.appointmentId}
+              appointmentId={selectedAssignment.appointmentId}
+              vehicleInfo={selectedAssignment.vehicleInfo || undefined}
+              serviceInfo={selectedAssignment.serviceInfo || undefined}
+              onComplete={() => setWorkflowStep('workrecord')}
+            />
+          )}
+          {selectedAssignment && workflowStep === 'workrecord' && (
+            <WorkRecordForm
+              assignmentId={selectedAssignment.appointmentId}
+              appointmentId={selectedAssignment.appointmentId}
+              serviceInfo={selectedAssignment.serviceInfo || undefined}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

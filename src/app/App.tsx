@@ -35,7 +35,7 @@ import { Badge } from '@/app/components/ui/badge';
 import { toast, Toaster } from 'sonner';
 import { services } from '@/app/data/services';
 import { useAppointments, useProfile } from '@/hooks/useApi';
-import { api } from '@/services/api';
+import { appointmentsApi } from '@/services/api';
 import type { Appointment } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -96,7 +96,7 @@ export default function App() {
 
   const handleConfirmationSubmit = async (data: ConfirmationData) => {
     try {
-      const response = await api.confirmVehicleReturn(selectedAppointment.id, {
+      const response = await appointmentsApi.confirmVehicleReturn(selectedAppointment.id, {
         service_rating: data.serviceRating,
         condition_rating: data.conditionRating,
         review: data.feedback || undefined

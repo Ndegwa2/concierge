@@ -25,6 +25,34 @@ export interface EmployeeProfile {
   hired_at?: string;
   created_at: string;
   updated_at: string;
+  department?: string;
+  title?: string;
+  employment_type?: string;
+  start_date?: string;
+  manager_id?: number;
+  account_status?: string;
+  exit_notes?: string;
+  offboarding_checklist_completed?: boolean;
+  base_salary?: number;
+  hourly_rate?: number;
+  pay_frequency?: string;
+  bank_name?: string;
+  bank_account_number?: string;
+  health_plan_tier?: string;
+}
+
+export interface EmployeeDocument {
+  id: number;
+  employee_id: number;
+  document_name: string;
+  doc_type: string;
+  file_name?: string;
+  file_size?: number;
+  mime_type?: string;
+  is_verified: boolean;
+  verified_at?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export type Employee = EmployeeProfile;
@@ -76,7 +104,7 @@ export interface Appointment {
   service_id: number;
   partner_id?: number;
   appointment_date: string;
-  status: 'scheduled' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled' | 'overdue';
+  status: 'scheduled' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled' | 'overdue' | 'rescheduled';
   notes?: string;
   total_amount?: number;
   payment_status: 'pending' | 'paid' | 'refunded' | 'failed';
@@ -111,127 +139,24 @@ export interface Assignment {
   id: number;
   appointment_id: number;
   employee_id: number;
-  status: string;
+  status: 'assigned' | 'in-progress' | 'checklist_pending' | 'work_pending' | 'submitted' | 'verified' | 'completed' | 'cancelled';
   assigned_at: string;
   started_at?: string;
   completed_at?: string;
   notes?: string;
   created_at: string;
   updated_at: string;
-}
-
-export interface Invoice {
-  id: number;
-  invoice_number: string;
-  appointment_id: number;
-  user_id: number;
-  total_amount: number;
-  status: 'draft' | 'sent' | 'paid' | 'void';
-  sent_at?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface InvoiceLineItem {
-  id: number;
-  invoice_id: number;
-  description: string;
-  quantity: number;
-  unit_price: number;
-  total_price: number;
-  created_at: string;
-}
-
-export interface Company {
-  id: number;
-  name: string;
-  contact_name?: string;
-  email?: string;
-  phone?: string;
-  address?: Record<string, any>;
-  billing_address?: Record<string, any>;
-  payment_terms?: string;
-  is_active: boolean;
-  notes?: string;
-  vehicle_count?: number;
-  active_vehicle_count?: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface FleetVehicle {
-  id: number;
-  company_id: number;
-  make: string;
-  model: string;
-  year?: number;
-  license_plate: string;
-  vin?: string;
-  status: string;
-  assigned_employee_id?: number;
-  last_service_date?: string;
-  mileage_km: number;
-  notes?: string;
-  assigned_employee?: {
+  appointment?: Appointment & {
+    customer: { id: number; name: string; phone: string; email?: string };
+    vehicle?: Vehicle;
+    service?: Service;
+  };
+  employee?: {
     id: number;
     employee_id: string;
-    name?: string;
-    status: string;
+    user: { id: number; name: string; email: string };
   };
-  created_at: string;
-  updated_at: string;
-}
-
-export interface FleetExpense {
-  id: number;
-  company_id: number;
-  vehicle_id?: number;
-  expense_type: string;
-  description: string;
-  amount: number;
-  incurred_at: string;
-  vehicle?: {
-    license_plate: string;
-    make: string;
-    model: string;
-  };
-  created_at: string;
-}
-
-export interface FleetInvoice extends Invoice {
-  company_id?: number;
-  invoice_type: string;
-  tax_amount: number;
-  currency: string;
-  due_date?: string;
-  notes?: string;
-  company?: Company;
-  line_items?: InvoiceLineItem[];
-}
-
-export interface LoginResponse {
-  success: boolean;
-  message: string;
-  data: {
-    user: User;
-    access_token: string;
-    refresh_token: string;
-  };
-}
-
-export interface ApiResponse<T> {
-  success: boolean;
-  message?: string;
-  data?: T;
-  error?: string;
-}
-
-export interface Notification {
-  id: number;
-  user_id: number;
-  title: string;
-  message: string;
-  notification_type: string;
-  is_read: boolean;
-  created_at: string;
+  checklist?: VehicleChecklist;
+  work_record?: WorkRecord;
+  invoice?: Invoice;
 }

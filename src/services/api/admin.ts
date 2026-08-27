@@ -8,10 +8,13 @@ import type {
 
 export const adminApi = {
   async getAdminDashboard(): Promise<ApiResponse<{
-    stats: {
+    statistics: {
       total_users: number;
       total_appointments: number;
       total_services: number;
+      total_vehicles: number;
+      active_appointments: number;
+      completed_appointments: number;
       total_revenue: number;
     };
     recent_appointments: Appointment[];

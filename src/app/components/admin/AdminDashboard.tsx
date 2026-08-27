@@ -15,6 +15,7 @@ import {
 import { Button } from '@/app/components/ui/button';
 import { DashboardOverview } from './DashboardOverview';
 import { AppointmentsManager } from './AppointmentsManager';
+import { PendingVerificationsManager } from './PendingVerificationsManager';
 import { ConciergeManager } from './ConciergeManager';
 import { CustomersManager } from './CustomersManager';
 import { ServicePartnersManager } from './ServicePartnersManager';
@@ -28,7 +29,7 @@ interface AdminDashboardProps {
   onLogout: () => void;
 }
 
-type Section = 'overview' | 'appointments' | 'concierges' | 'employees' | 'customers' | 'partners' | 'pending-requests' | 'fleet' | 'fleet-billing' | 'fleet-analytics';
+type Section = 'overview' | 'appointments' | 'pending-verifications' | 'concierges' | 'employees' | 'customers' | 'partners' | 'pending-requests' | 'fleet' | 'fleet-billing' | 'fleet-analytics';
 
 export function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [currentSection, setCurrentSection] = useState<Section>('overview');
@@ -37,11 +38,12 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const storedUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
   const user = storedUser ? JSON.parse(storedUser) : null;
   const displayName = user?.name || 'Admin';
-  const displayEmail = user?.email || 'admin@autoconcierge.co.ke';
+  const displayEmail = user?.email || '';
 
   const navigation: { id: Section; name: string; icon: typeof LayoutDashboard }[] = [
     { id: 'overview', name: 'Overview', icon: LayoutDashboard },
     { id: 'appointments', name: 'Appointments', icon: Calendar },
+    { id: 'pending-verifications', name: 'Verifications', icon: FileText },
     { id: 'concierges', name: 'Concierge Staff', icon: Users },
     { id: 'employees', name: 'Employees', icon: UserCheck },
     { id: 'customers', name: 'Customers', icon: Users },
@@ -126,6 +128,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
         <main className="flex-1 p-4 lg:p-8">
           {currentSection === 'overview' && <DashboardOverview />}
           {currentSection === 'appointments' && <AppointmentsManager />}
+          {currentSection === 'pending-verifications' && <PendingVerificationsManager />}
           {currentSection === 'concierges' && <ConciergeManager />}
           {currentSection === 'employees' && <EmployeesManager />}
           {currentSection === 'customers' && <CustomersManager />}

@@ -10,4 +10,5 @@ export { servicesApi } from './services';
 export { adminApi } from './admin';
 export { aiChatApi } from './aiChat';
 export { paymentsApi } from './payments';
+export { workflowApi } from './workflow';
 export * from './types';

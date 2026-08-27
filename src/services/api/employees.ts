@@ -227,4 +227,65 @@ export const employeesApi = {
 
     return response.blob();
   },
+
+  async downloadEmployeeDocument(employeeId: number, docId: number): Promise<Blob> {
+    const token = apiClient.getToken();
+    const response = await fetch(`${apiClient['API_BASE_URL']}/employees/admin/employees/${employeeId}/documents/${docId}/download`, {
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.message || 'Failed to download document');
+    }
+
+    return response.blob();
+  },
+
+  async updateEmployeeAccountStatus(id: number, accountStatus: string, exitNotes?: string): Promise<ApiResponse<{ status: string }>> {
+    return apiClient.request(`/employees/admin/employees/${id}/account-status`, {
+      method: 'PUT',
+      body: JSON.stringify({ account_status: accountStatus, exit_notes: exitNotes }),
+    });
+  },
+
+  async getEmployeeDocuments(employeeId: number): Promise<ApiResponse<{ documents: any[] }>> {
+    return apiClient.request(`/employees/admin/employees/${employeeId}/documents`);
+  },
+
+  async deleteEmployeeDocument(employeeId: number, docId: number): Promise<ApiResponse<{}>> {
+    return apiClient.request(`/employees/admin/employees/${employeeId}/documents/${docId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async getDepartments(): Promise<ApiResponse<{ departments: string[] }>> {
+    return apiClient.request('/employees/admin/departments');
+  },
+
+  async getManagers(): Promise<ApiResponse<{ managers: any[] }>> {
+    return apiClient.request('/employees/admin/managers');
+  },
+
+  async getIssueReports(): Promise<ApiResponse<{
+    issues: any[];
+    count: number;
+    open_count: number;
+  }>> {
+    return apiClient.request('/employees/issues');
+  },
+
+  async reportIssue(data: {
+    title: string;
+    description: string;
+    priority?: 'low' | 'medium' | 'high' | 'urgent';
+    appointment_id?: number;
+  }): Promise<ApiResponse<{ issue: any }>> {
+    return apiClient.request('/employees/issues', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
 };
