@@ -64,3 +64,41 @@ class Payment(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+class WebhookEvent(db.Model):
+    """Persisted raw inbound webhook payloads (e.g. M-Pesa Daraja callbacks).
+
+    Stored with an UNPROCESSED state and a unique (source, external_event_id)
+    tuple so retried deliveries from upstream providers are ignored, and
+    processing happens asynchronously via Celery.
+    """
+    __tablename__ = 'webhook_events'
+    __table_args__ = (
+        CheckConstraint("status IN ('unprocessed', 'processing', 'processed', 'failed')"),
+        CheckConstraint("source IN ('mpesa', 'card', 'bank_transfer', 'other')"),
+        db.UniqueConstraint('source', 'external_event_id', name='uq_webhook_events_source_event'),
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    source = db.Column(db.String(30), nullable=False, index=True)
+    external_event_id = db.Column(db.String(200), nullable=False, index=True)
+    payload = db.Column(db.JSON, nullable=False)
+
+    status = db.Column(db.String(20), default='unprocessed', nullable=False, index=True)
+    attempts = db.Column(db.Integer, default=0, nullable=False)
+    last_error = db.Column(db.Text)
+    received_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), nullable=False)
+    processed_at = db.Column(db.DateTime(timezone=True))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'source': self.source,
+            'external_event_id': self.external_event_id,
+            'status': self.status,
+            'attempts': self.attempts,
+            'last_error': self.last_error,
+            'received_at': self.received_at.isoformat() if self.received_at else None,
+            'processed_at': self.processed_at.isoformat() if self.processed_at else None,
+        }

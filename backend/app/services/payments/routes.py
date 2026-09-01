@@ -1,15 +1,16 @@
 from flask import Blueprint, request, jsonify
+import logging
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from app import db, limiter
 from app.utils.decorators import get_current_user
 from app.services.payments.service import (
     initiate_mpesa_payment,
     check_payment_status,
-    handle_mpesa_callback,
     get_payment_by_id,
     get_payments_for_appointment,
 )
 
+logger = logging.getLogger(__name__)
 payments_bp = Blueprint('payments', __name__)
 
 
@@ -103,12 +104,51 @@ def appointment_payments(appointment_id):
 
 @payments_bp.route('/mpesa/callback', methods=['POST'])
 def mpesa_callback():
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'ResultCode': 1, 'ResultDesc': 'Invalid callback data'}), 400
+    """Persist M-Pesa Daraja callback payload and ack immediately.
 
-        result = handle_mpesa_callback(data)
-        return jsonify(result), 200
-    except Exception as e:
+    Returns 200 OK as soon as the payload is durably stored in the
+    webhook_events table. Actual payment state changes happen in the
+    background via the process_webhook_event Celery task. This prevents
+    Safaricom from timing out and retrying, and makes processing
+    idempotent: the unique (source, external_event_id) constraint
+    deduplicates retried deliveries.
+    """
+    from app import db
+    from app.services.payments.models import WebhookEvent
+    from app.tasks.payment_tasks import process_webhook_event
+    from sqlalchemy.exc import IntegrityError
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'ResultCode': 1, 'ResultDesc': 'Invalid callback data'}), 400
+
+    stk_callback = (data.get('Body') or {}).get('StkCallback') or {}
+    checkout_request_id = stk_callback.get('CheckoutRequestId') or ''
+    merchant_request_id = stk_callback.get('MerchantRequestId') or ''
+    external_event_id = checkout_request_id or merchant_request_id or 'unknown'
+
+    event = WebhookEvent(
+        source='mpesa',
+        external_event_id=external_event_id,
+        payload=data,
+        status='unprocessed',
+    )
+
+    try:
+        db.session.add(event)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        logger.info('Duplicate M-Pesa webhook ignored: %s', external_event_id)
+        return jsonify({'ResultCode': 0, 'ResultDesc': 'Already accepted'}), 200
+    except Exception as exc:
+        logger.exception('Failed to persist M-Pesa webhook: %s', exc)
+        db.session.rollback()
         return jsonify({'ResultCode': 1, 'ResultDesc': 'Processing error'}), 500
+
+    try:
+        process_webhook_event.delay(event.id)
+    except Exception as exc:
+        logger.exception('Failed to enqueue webhook processing for event %s: %s', event.id, exc)
+
+    return jsonify({'ResultCode': 0, 'ResultDesc': 'Accepted'}), 200
