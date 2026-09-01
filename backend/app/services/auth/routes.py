@@ -195,29 +195,36 @@ def login():
     request_id = g.get('request_id', 'unknown')
     try:
         data = request.get_json()
-        
+
         if not all(key in data for key in ['email', 'password']):
             return jsonify({
                 'success': False,
                 'message': 'Email and password are required'
             }), 400
-        
+
         email = data['email'].lower().strip()
         user = User.query.filter_by(email=email).first()
-        
+
         if not user or not user.check_password(data['password']):
             log_audit('LOGIN', 'User', None, status='failed', error_message='Invalid credentials')
             return jsonify({
                 'success': False,
                 'message': 'Invalid email or password'
             }), 401
-        
+
+        if user.role != 'customer':
+            log_audit('LOGIN', 'User', user.id, status='failed', error_message='Wrong portal for role')
+            return jsonify({
+                'success': False,
+                'message': 'This account cannot sign in from the customer portal. Please use the correct sign-in tab.'
+            }), 403
+
         if not user.is_active:
             return jsonify({
                 'success': False,
                 'message': 'Account is deactivated. Please contact support.'
             }), 403
-        
+
         access_token = create_access_token(
             identity=str(user.id),
             additional_claims={'role': user.role}
@@ -226,9 +233,9 @@ def login():
             identity=str(user.id),
             additional_claims={'role': user.role}
         )
-        
+
         log_audit('LOGIN', 'User', user.id, new_values={'login_method': 'email'}, user_id=user.id)
-        
+
         return jsonify({
             'success': True,
             'message': 'Login successful',
@@ -238,7 +245,7 @@ def login():
                 'user': user.to_dict(include_employee=True)
             }
         }), 200
-        
+
     except Exception as e:
         log_audit('LOGIN', 'User', None, status='failed', error_message='Internal error')
         logger.error(f"[{request_id}] Login error: {str(e)}", exc_info=True)
@@ -254,42 +261,42 @@ def employee_login():
     request_id = g.get('request_id', 'unknown')
     try:
         data = request.get_json()
-        
+
         if not all(key in data for key in ['email', 'password']):
             return jsonify({
                 'success': False,
                 'message': 'Email and password are required'
             }), 400
-        
+
         email = data['email'].lower().strip()
         user = User.query.filter_by(email=email).first()
-        
+
         if not user or user.role not in ['employee', 'concierge']:
             log_audit('LOGIN', 'Employee', None, status='failed', error_message='Invalid employee credentials')
             return jsonify({
                 'success': False,
                 'message': 'Invalid employee credentials'
             }), 401
-        
+
         if not user.check_password(data['password']):
             log_audit('LOGIN', 'Employee', None, status='failed', error_message='Invalid password')
             return jsonify({
                 'success': False,
                 'message': 'Invalid employee credentials'
             }), 401
-        
+
         if not user.is_active:
             return jsonify({
                 'success': False,
                 'message': 'Account is deactivated. Please contact admin.'
             }), 403
-        
-        if user.employee_profile and user.employee_profile.status != 'active':
+
+        if user.employee_profile and user.employee_profile.status in ('suspended', 'terminated', 'rejected'):
             return jsonify({
                 'success': False,
-                'message': f'Employee status is {user.employee_profile.status}. Please contact admin.'
+                'message': f'Employee account is {user.employee_profile.status}. Please contact admin.'
             }), 403
-        
+
         access_token = create_access_token(
             identity=str(user.id),
             additional_claims={'role': user.role}
@@ -298,9 +305,9 @@ def employee_login():
             identity=str(user.id),
             additional_claims={'role': user.role}
         )
-        
+
         log_audit('LOGIN', 'Employee', user.id, new_values={'login_method': 'employee_portal'}, user_id=user.id)
-        
+
         return jsonify({
             'success': True,
             'message': 'Employee login successful',
@@ -310,7 +317,7 @@ def employee_login():
                 'user': user.to_dict(include_employee=True)
             }
         }), 200
-        
+
     except Exception as e:
         log_audit('LOGIN', 'Employee', None, status='failed', error_message='Internal error')
         logger.error(f"[{request_id}] Employee login error: {str(e)}", exc_info=True)
@@ -863,8 +870,11 @@ def update_employee_status(user_id):
         
         old_status = employee.status
         employee.status = new_status
-        user.is_active = new_status == 'active'
-        
+        if new_status in ('suspended', 'terminated'):
+            user.is_active = False
+        elif old_status in ('suspended', 'terminated') and new_status == 'active':
+            user.is_active = True
+
         db.session.commit()
 
         cache_delete_pattern("employees:*")
