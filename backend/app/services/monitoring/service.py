@@ -351,13 +351,25 @@ def health_check():
 def detailed_health_check():
     health_status = {
         'database': 'healthy',
+        'cache': 'unknown',
         'timestamp': datetime.now(timezone.utc).isoformat()
     }
-    
+
     try:
         db.session.execute(db.text('SELECT 1'))
     except Exception as e:
         health_status['database'] = f'unhealthy: {str(e)}'
+
+    try:
+        from app.utils.cache import get_redis
+        r = get_redis()
+        if r is not None:
+            r.ping()
+            health_status['cache'] = 'healthy'
+        else:
+            health_status['cache'] = 'degraded (using in-memory fallback)'
+    except Exception as e:
+        health_status['cache'] = f'unhealthy: {str(e)}'
     
     health_status['counts'] = {
         'users': User.query.count(),

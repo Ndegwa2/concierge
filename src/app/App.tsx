@@ -34,9 +34,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/ta
 import { Badge } from '@/app/components/ui/badge';
 import { toast, Toaster } from 'sonner';
 import { services } from '@/app/data/services';
-import { useAppointments, useProfile } from '@/hooks/useApi';
-import { appointmentsApi } from '@/services/api';
-import type { Appointment } from '@/services/api';
+import { useAppointments } from '@/hooks/useApi';
+import { appointmentsApi } from '@/services/api/appointments';
+import type { Appointment } from '@/services/api/types';
 import { useAuth } from '@/contexts/AuthContext';
 
 import { PricingPage } from '@/app/components/PricingPage';
@@ -51,11 +51,9 @@ export default function App() {
   const [successModalOpen, setSuccessModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [lastSubmittedRating, setLastSubmittedRating] = useState(0);
-  const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0);
 
   const { userType, logout } = useAuth();
-  const { data: profile } = useProfile();
-  const { data: appointments = [], isLoading: appointmentsLoading, refetch: refetchAppointments } = useAppointments();
+  const { data: appointments = [], refetch: refetchAppointments } = useAppointments();
 
   const handleBookService = (serviceTitle: string) => {
     if (userType !== 'customer') {
@@ -96,6 +94,10 @@ export default function App() {
 
   const handleConfirmationSubmit = async (data: ConfirmationData) => {
     try {
+      if (!selectedAppointment) {
+        toast.error('No appointment selected');
+        return;
+      }
       const response = await appointmentsApi.confirmVehicleReturn(selectedAppointment.id, {
         service_rating: data.serviceRating,
         condition_rating: data.conditionRating,
@@ -122,6 +124,11 @@ export default function App() {
   };
 
   const handleNavigate = (view: string) => {
+    if (view === 'pos' && userType !== 'admin' && userType !== 'super_admin') {
+      toast.error('POS Terminal is restricted to administrators only');
+      return;
+    }
+
     if ((view === 'appointments' || view === 'dashboard' || view === 'profile') && userType !== 'customer') {
       setLoginModalOpen(true);
       toast.error('Please login to access this page');
@@ -176,10 +183,15 @@ export default function App() {
   };
 
   useEffect(() => {
-    if ((currentView === 'appointments' || currentView === 'booking' || currentView === 'profile' || currentView === 'dashboard') && userType !== 'customer') {
+    if ((currentView === 'appointments' || currentView === 'booking' || currentView === 'profile' || currentView === 'dashboard' || currentView === 'pos') && 
+        (userType !== 'customer' && userType !== 'admin' && userType !== 'super_admin')) {
       setCurrentView('home');
-      setLoginModalOpen(true);
-      toast.error('Please login to access this page');
+      if (currentView === 'pos') {
+        toast.error('POS Terminal is restricted to administrators only');
+      } else {
+        setLoginModalOpen(true);
+        toast.error('Please login to access this page');
+      }
     }
   }, [currentView, userType]);
 
@@ -491,7 +503,10 @@ export default function App() {
 
       {/* POS Terminal View */}
       {currentView === 'pos' && (
-        <POSTerminal onClose={() => setCurrentView('home')} />
+        <POSTerminal 
+          onClose={() => setCurrentView('home')}
+          userType={userType}
+        />
       )}
 
       {/* Footer */}
@@ -540,7 +555,11 @@ export default function App() {
                 <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('appointments')}>My Appointments</li>
                 <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('how-it-works')}>How It Works</li>
                 <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('pricing')}>Pricing Plans</li>
-                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => setCurrentView('pos')}>POS Terminal</li>
+                {userType === 'admin' || userType === 'super_admin' ? (
+                  <li className="hover:text-white transition-colors cursor-pointer" onClick={() => setCurrentView('pos')}>POS Terminal</li>
+                ) : (
+                  <li className="text-slate-600 cursor-not-allowed">POS Terminal</li>
+                )}
                 <li className="hover:text-white transition-colors cursor-pointer" onClick={() => toast.info('Coming soon')}>Safety & Insurance</li>
               </ul>
             </div>

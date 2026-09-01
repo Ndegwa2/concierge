@@ -5,7 +5,7 @@ import { Input } from '@/app/components/ui/input';
 import { Card } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/app/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/app/components/ui/dialog';
 import { Select } from '@/app/components/ui/select';
 import { Label } from '@/app/components/ui/label';
 import { Textarea } from '@/app/components/ui/textarea';
@@ -225,7 +225,10 @@ export function FleetCommandCenter() {
               <Button variant="outline"><Plus className="h-4 w-4 mr-2" />Add Company</Button>
             </DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle>Add Company</DialogTitle></DialogHeader>
+              <DialogHeader>
+                <DialogTitle>Add Company</DialogTitle>
+                <DialogDescription>Register a new fleet company in the system</DialogDescription>
+              </DialogHeader>
               <form onSubmit={handleAddCompany} className="space-y-3">
                 <div><Label>Company Name</Label><Input required value={companyForm.name} onChange={e => setCompanyForm({ ...companyForm, name: e.target.value })} /></div>
                 <div><Label>Contact Name</Label><Input value={companyForm.contact_name} onChange={e => setCompanyForm({ ...companyForm, contact_name: e.target.value })} /></div>
@@ -242,7 +245,10 @@ export function FleetCommandCenter() {
               <Button><Plus className="h-4 w-4 mr-2" />Add Vehicle</Button>
             </DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle>Add Vehicle to Fleet</DialogTitle></DialogHeader>
+              <DialogHeader>
+                <DialogTitle>Add Vehicle to Fleet</DialogTitle>
+                <DialogDescription>Add a new vehicle to the selected fleet</DialogDescription>
+              </DialogHeader>
               <form onSubmit={handleAddVehicle} className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Make</Label><Input required value={vehicleForm.make} onChange={e => setVehicleForm({ ...vehicleForm, make: e.target.value })} /></div>
@@ -289,7 +295,10 @@ export function FleetCommandCenter() {
                 <Button variant="outline" size="sm"><Calendar className="h-4 w-4 mr-2" />Schedule Bulk Service Run</Button>
               </DialogTrigger>
               <DialogContent>
-                <DialogHeader><DialogTitle>Bulk Service Run</DialogTitle></DialogHeader>
+                <DialogHeader>
+                  <DialogTitle>Bulk Service Run</DialogTitle>
+                  <DialogDescription>Schedule a bulk service run for fleet vehicles</DialogDescription>
+                </DialogHeader>
                 <form onSubmit={handleBulkSchedule} className="space-y-3">
                   <div><Label>Service Date</Label><Input type="date" name="service_date" required /></div>
                   <div><Label>Description</Label><Input name="description" /></div>

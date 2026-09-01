@@ -8,7 +8,7 @@ from app.services.vehicles.models import Vehicle
 from app.services.appointments.models import Appointment, ServiceHistory
 from app.services.notifications.models import Notification
 from app.utils.decorators import admin_required, role_required, get_current_user
-from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_SHORT_TTL
+from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_SHORT_TTL, REDIS_DEFAULT_TTL
 from .service import (
     get_dashboard_stats,
     get_all_users_query,
@@ -52,15 +52,24 @@ def get_dashboard():
 @admin_required
 def get_all_users():
     try:
+        cache_key = f"admin:users:{request.args.get('status','')}:{request.args.get('role','')}:{request.args.get('search','')}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         users = get_all_users_query()
-        
-        return jsonify({
+
+        result = {
             'success': True,
             'data': {
                 'users': [user.to_dict() for user in users],
                 'count': len(users)
             }
-        }), 200
+        }
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({
@@ -75,14 +84,23 @@ def get_all_users():
 @admin_required
 def get_user(user_id):
     try:
+        cache_key = f"admin:user:{user_id}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         user = get_user_by_id(user_id)
-        
-        return jsonify({
+
+        result = {
             'success': True,
             'data': {
                 'user': user.to_dict()
             }
-        }), 200
+        }
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({
@@ -98,10 +116,15 @@ def get_user(user_id):
 def get_all_appointments():
     try:
         status = request.args.get('status')
+        cache_key = f"admin:appointments:{status or 'all'}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         result = get_all_appointments_query(status)
-        
-        cache_set(f"admin:appointments:{status or 'all'}", result, REDIS_SHORT_TTL)
-        
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
         return jsonify(result), 200
         
     except Exception as e:
@@ -117,15 +140,24 @@ def get_all_appointments():
 @admin_required
 def get_service_history():
     try:
+        cache_key = f"admin:service-history:{request.args.get('limit','')}:{request.args.get('service_id','')}:{request.args.get('start_date','')}:{request.args.get('end_date','')}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         history = get_service_history_query()
-        
-        return jsonify({
+
+        result = {
             'success': True,
             'data': {
                 'service_history': [record.to_dict() for record in history],
                 'count': len(history)
             }
-        }), 200
+        }
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({
@@ -182,7 +214,9 @@ def create_discount():
             }), 400
         
         discount = svc_create_discount(data)
-        
+
+        cache_delete_pattern("services:discounts")
+
         return jsonify({
             'success': True,
             'message': 'Discount code created successfully',

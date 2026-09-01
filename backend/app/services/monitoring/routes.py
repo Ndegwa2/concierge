@@ -8,6 +8,7 @@ from app.services.appointments.models import Appointment
 from app.services.admin.models import AuditLog, SystemMetric, ActivityTracker
 from app.utils.decorators import admin_required, get_current_user
 from app.utils.audit import log_audit, track_activity
+from app.utils.cache import cache_get, cache_set, REDIS_SHORT_TTL
 from .service import (
     get_audit_logs_query,
     get_audit_log_by_id,
@@ -83,8 +84,15 @@ def get_audit_log(log_id):
 @admin_required
 def get_audit_actions():
     try:
+        cache_key = "monitoring:audit_actions"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         result = get_audit_actions_query()
-        
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
         return jsonify(result), 200
         
     except Exception as e:
@@ -150,11 +158,24 @@ def get_online_users():
 @admin_required
 def get_system_metrics():
     try:
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        metric_type = request.args.get('metric_type')
+
+        cache_key = f"monitoring:metrics:{start_date or 'any'}:{end_date or 'any'}:{metric_type or 'any'}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         result = get_system_metrics_query(
-            start_date=request.args.get('start_date'),
-            end_date=request.args.get('end_date'),
-            metric_type=request.args.get('metric_type'),
+            start_date=start_date,
+            end_date=end_date,
+            metric_type=metric_type,
         )
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
+        return jsonify(result), 200
         
         return jsonify(result), 200
         
@@ -171,7 +192,16 @@ def get_system_metrics():
 @admin_required
 def get_dashboard_metrics():
     try:
+        cache_key = "monitoring:dashboard_metrics"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         result = get_dashboard_metrics()
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
+        return jsonify(result), 200
         return jsonify(result), 200
         
     except Exception as e:
@@ -187,11 +217,24 @@ def get_dashboard_metrics():
 @admin_required
 def get_revenue_metrics():
     try:
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        group_by = request.args.get('group_by', 'day')
+
+        cache_key = f"monitoring:revenue:{start_date or 'any'}:{end_date or 'any'}:{group_by}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         result = get_revenue_metrics(
-            start_date=request.args.get('start_date'),
-            end_date=request.args.get('end_date'),
-            group_by=request.args.get('group_by', 'day'),
+            start_date=start_date,
+            end_date=end_date,
+            group_by=group_by,
         )
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
+        return jsonify(result), 200
         
         return jsonify(result), 200
         
@@ -208,7 +251,16 @@ def get_revenue_metrics():
 @admin_required
 def get_performance_metrics():
     try:
+        cache_key = "monitoring:performance"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         result = get_performance_metrics()
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
+        return jsonify(result), 200
         return jsonify(result), 200
         
     except Exception as e:

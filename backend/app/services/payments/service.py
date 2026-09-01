@@ -6,8 +6,7 @@ from app.services.auth.models import User
 from app.services.appointments.models import Appointment
 from app.services.fleets.models import Invoice
 from app.services.payments.models import Payment
-from app.services.payments.mpesa import get_mpesa_client, MpesaError
-from app.utils.email import send_email
+from app.tasks.payment_tasks import process_stk_push, query_payment_status
 
 logger = logging.getLogger(__name__)
 
@@ -64,30 +63,20 @@ def initiate_mpesa_payment(appointment_id: int, phone_number: str, current_user:
         mpesa_phone_number=phone_number,
     )
     db.session.add(payment)
-    db.session.flush()
+    db.session.commit()
 
-    try:
-        mpesa = get_mpesa_client()
-        response = mpesa.stk_push(
-            phone_number=phone_number,
-            amount=amount,
-            account_reference=invoice.invoice_number,
-            transaction_desc=f'Payment for {invoice.invoice_number}',
-        )
+    process_stk_push.delay(
+        payment_id=payment.id,
+        phone_number=phone_number,
+        amount=amount,
+        account_reference=invoice.invoice_number,
+        transaction_desc=f'Payment for {invoice.invoice_number}',
+    )
 
-        payment.merchant_request_id = response.get('MerchantRequestId')
-        payment.checkout_request_id = response.get('CheckoutRequestId')
-        db.session.commit()
-
-        return {
-            'payment': payment.to_dict(),
-            'message': response.get('CustomerMessage', 'Check your phone and enter M-Pesa PIN to complete payment.'),
-        }
-    except MpesaError as e:
-        payment.status = 'failed'
-        payment.failure_reason = str(e)
-        db.session.commit()
-        raise
+    return {
+        'payment': payment.to_dict(),
+        'message': 'Payment initiated. Please check your phone for the STK push.',
+    }
 
 
 def check_payment_status(payment_id: int, current_user: dict):
@@ -99,26 +88,11 @@ def check_payment_status(payment_id: int, current_user: dict):
         raise PermissionError('Unauthorized access to payment')
 
     if payment.status != 'processing' or not payment.checkout_request_id:
-        return payment.to_dict()
+        return payment
 
-    try:
-        mpesa = get_mpesa_client()
-        response = mpesa.query_stk_status(payment.checkout_request_id)
+    query_payment_status.delay(payment.id)
 
-        result_code = response.get('ResultCode')
-        if result_code == '0':
-            payment.status = 'completed'
-            payment.paid_at = datetime.now(timezone.utc)
-            _on_payment_success(payment)
-        elif result_code is not None:
-            payment.status = 'failed'
-            payment.failure_reason = response.get('ResultDesc', 'Payment failed')
-
-        db.session.commit()
-    except MpesaError as e:
-        logger.error('Failed to query payment status: %s', e)
-
-    return payment.to_dict()
+    return payment
 
 
 def handle_mpesa_callback(callback_data: dict):
@@ -176,37 +150,9 @@ def _on_payment_success(payment: Payment):
         appointment.payment_status = 'paid'
 
     db.session.flush()
-    _send_payment_receipt(payment)
 
-
-def _send_payment_receipt(payment: Payment):
-    user = User.query.get(payment.user_id)
-    if not user or not user.email:
-        return
-
-    invoice = payment.invoice
-    subject = f'Payment Receipt - {payment.payment_reference}'
-    body = (
-        f"Dear {user.name},\n\n"
-        f"Thank you for your payment.\n\n"
-        f"Payment Reference: {payment.payment_reference}\n"
-        f"Invoice Number: {invoice.invoice_number if invoice else 'N/A'}\n"
-        f"Amount Paid: {payment.currency} {float(payment.amount):,.2f}\n"
-        f"Payment Method: M-Pesa\n"
-    )
-
-    if payment.mpesa_receipt_number:
-        body += f"M-Pesa Receipt: {payment.mpesa_receipt_number}\n"
-
-    body += (
-        f"Date: {payment.paid_at.strftime('%Y-%m-%d %H:%M') if payment.paid_at else 'N/A'}\n\n"
-        f"Thank you for choosing AutoConcierge.\n"
-    )
-
-    try:
-        send_email(to=user.email, subject=subject, body=body)
-    except Exception as e:
-        logger.error('Failed to send payment receipt: %s', e)
+    from app.tasks.email_tasks import send_payment_receipt
+    send_payment_receipt.delay(payment.id)
 
 
 def get_payment_by_id(payment_id: int, current_user: dict):

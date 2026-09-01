@@ -61,7 +61,9 @@ def create_company():
     try:
         data = request.get_json(silent=True) or {}
         company = svc_create_company(data)
-        
+
+        cache_delete_pattern("fleets:companies:*")
+
         return jsonify({'success': True, 'message': 'Company created', 'data': {'company': company.to_dict()}}), 201
     except SQLAlchemyError as exc:
         db.session.rollback()
@@ -92,7 +94,9 @@ def update_company(company_id):
     try:
         data = request.get_json(silent=True) or {}
         company = svc_update_company(company_id, data)
-        
+
+        cache_delete_pattern("fleets:companies:*")
+
         return jsonify({'success': True, 'message': 'Company updated', 'data': {'company': company.to_dict()}}), 200
     except SQLAlchemyError as exc:
         db.session.rollback()
@@ -137,7 +141,9 @@ def create_company_vehicle(company_id):
     try:
         data = request.get_json(silent=True) or {}
         vehicle = svc_create_company_vehicle(company_id, data)
-        
+
+        cache_delete_pattern(f"fleets:companies:{company_id}:*")
+
         return jsonify({'success': True, 'message': 'Vehicle added', 'data': {'vehicle': vehicle.to_dict()}}), 201
     except SQLAlchemyError as exc:
         db.session.rollback()
@@ -156,6 +162,8 @@ def update_fleet_vehicle(vehicle_id):
     try:
         data = request.get_json(silent=True) or {}
         vehicle = svc_update_fleet_vehicle(vehicle_id, data)
+
+        cache_delete_pattern("fleets:companies:*")
         
         return jsonify({'success': True, 'message': 'Vehicle updated', 'data': {'vehicle': vehicle.to_dict()}}), 200
     except SQLAlchemyError as exc:
@@ -219,6 +227,7 @@ def create_company_expense(company_id):
 def delete_fleet_expense(expense_id):
     try:
         svc_delete_fleet_expense(expense_id)
+        cache_delete_pattern("fleets:companies:*")
         return jsonify({'success': True, 'message': 'Expense deleted'}), 200
     except Exception as exc:
         db.session.rollback()
@@ -298,6 +307,8 @@ def download_fleet_invoice_pdf(invoice_id):
 def send_fleet_invoice(invoice_id):
     try:
         svc_send_fleet_invoice(invoice_id)
+
+        cache_delete_pattern("fleets:companies:*")
         
         return jsonify({'success': True, 'message': 'Fleet invoice sent', 'data': {'invoice': Invoice.query.get(invoice_id).to_dict()}}), 200
     except Exception as exc:

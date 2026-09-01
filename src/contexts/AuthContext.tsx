@@ -5,7 +5,9 @@
  * Supports JWT authentication with role-based access control.
  */
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { authApi, apiClient, type User, type RegisterData } from '../services/api';
+import { authApi } from '../services/api/auth';
+import { apiClient } from '../services/api/client';
+import type { User, RegisterData } from '../services/api/types';
 
 interface SignUpData extends RegisterData {
   name: string;
@@ -23,7 +25,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   userType: 'customer' | 'employee' | 'admin' | 'super_admin' | null;
-  login: (email: string, password: string, userType?: 'customer' | 'employee' | 'admin') => Promise<{ success: boolean; message: string }>;
+  login: (email: string, password: string, userType?: 'customer' | 'employee' | 'admin' | 'super_admin') => Promise<{ success: boolean; message: string }>;
   signup: (data: SignUpData) => Promise<{ success: boolean; message: string; user?: User }>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -62,7 +64,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     initAuth();
   }, []);
 
-  const login = useCallback(async (email: string, password: string, userType: 'customer' | 'employee' | 'admin' = 'customer') => {
+  const login = useCallback(async (email: string, password: string, userType: 'customer' | 'employee' | 'admin' | 'super_admin' = 'customer') => {
     setIsLoading(true);
     try {
       let response;
@@ -179,7 +181,7 @@ export function useAuth(): AuthContextType {
 /**
  * Hook to check if user has required role
  */
-export function useRequireRole(allowedRoles: ('customer' | 'employee' | 'admin')[]) {
+export function useRequireRole(allowedRoles: ('customer' | 'employee' | 'admin' | 'super_admin')[]) {
   const { user, isAuthenticated } = useAuth();
   
   const hasRole = user && allowedRoles.includes(user.role);

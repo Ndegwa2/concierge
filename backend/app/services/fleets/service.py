@@ -318,7 +318,9 @@ def send_fleet_invoice(invoice_id):
         f"Due Date: {invoice.due_date.strftime('%Y-%m-%d') if invoice.due_date else 'On receipt'}\n\n"
         f"Thank you for choosing AutoConcierge.\n"
     )
-    send_email_with_attachment(
+    
+    from app.tasks.email_tasks import send_email_with_attachment
+    send_email_with_attachment.delay(
         to=invoice.company.email,
         subject=subject,
         body=body,

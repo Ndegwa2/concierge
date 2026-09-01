@@ -5,6 +5,7 @@ from app.services.vehicles.models import Vehicle
 from app.services.appointments.models import Appointment
 from app.services.fleets.models import Invoice
 from datetime import datetime, timezone
+from pathlib import Path
 
 
 def _generate_invoice_number(appointment_id, created_at=None):
@@ -58,6 +59,7 @@ def send_invoice(appointment_id, current_user):
         db.session.flush()
         created = True
     
+    from app.services.invoices.pdf_generator import generate_invoice_pdf
     pdf_path = generate_invoice_pdf(appointment, customer, vehicle, service, invoice.invoice_number)
     invoice.pdf_path = pdf_path
     invoice.status = 'sent'
@@ -72,7 +74,9 @@ def send_invoice(appointment_id, current_user):
         f"Total Amount: KSh {float(invoice.total_amount):,.2f}\n\n"
         f"Thank you for choosing Ndegwa Auto Concierge.\n"
     )
-    send_email_with_attachment(
+    
+    from app.tasks.email_tasks import send_email_with_attachment
+    send_email_with_attachment.delay(
         to=customer.email,
         subject=subject,
         body=body,

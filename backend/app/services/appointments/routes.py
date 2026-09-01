@@ -9,7 +9,7 @@ from app.services.fleets.models import Invoice
 from app.utils.decorators import admin_required, role_required, get_current_user, get_current_user_id, is_admin
 from app.utils.invoice import generate_invoice_pdf
 from app.utils.email import send_email_with_attachment
-from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_SHORT_TTL
+from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_SHORT_TTL, REDIS_DEFAULT_TTL
 from .service import (
     get_appointments_query,
     get_appointment_by_id,
@@ -194,10 +194,11 @@ def delete_appointment(appointment_id):
     try:
         current_user = get_current_user()
         svc_delete_appointment(appointment_id, current_user)
-        
+
         cache_delete_pattern("appointments:*")
         cache_delete_pattern("admin:appointments:*")
         cache_delete_pattern("admin:dashboard:*")
+        cache_delete_pattern("employee:dashboard:*")
         
         return jsonify({
             'success': True,
@@ -233,6 +234,11 @@ def confirm_vehicle_return(appointment_id):
             }), 400
         
         service_history = svc_confirm_vehicle_return(appointment_id, current_user, data)
+
+        cache_delete_pattern("appointments:*")
+        cache_delete_pattern("admin:appointments:*")
+        cache_delete_pattern("admin:dashboard:*")
+        cache_delete_pattern("employee:dashboard:*")
         
         logger.info(f"[{request_id}] Vehicle return confirmed for appointment {appointment_id} by user {current_user['id']}")
         
@@ -262,7 +268,7 @@ def confirm_vehicle_return(appointment_id):
 def _auto_send_invoice(appointment):
     from app.services.invoices.service import _generate_invoice_number
     from app.services.invoices.pdf_generator import generate_invoice_pdf
-    from app.utils.email import send_email_with_attachment
+    from app.tasks.email_tasks import send_email_with_attachment
     from datetime import datetime, timezone
 
     customer = User.query.get(appointment.user_id)
@@ -296,7 +302,7 @@ def _auto_send_invoice(appointment):
         f"Total Amount: KSh {float(invoice.total_amount):,.2f}\n\n"
         f"Thank you for choosing Ndegwa Auto Concierge.\n"
     )
-    send_email_with_attachment(
+    send_email_with_attachment.delay(
         to=customer.email,
         subject=subject,
         body=body,

@@ -6,7 +6,7 @@ from app.services.employees.models import Employee, EmployeeDocument, EmployeeTi
 from app.services.appointments.models import Appointment, Assignment
 from app.services.catalog.models import Service
 from app.utils.decorators import admin_required, employee_required, role_required, get_current_user
-from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_SHORT_TTL
+from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_SHORT_TTL, REDIS_LONG_TTL
 from .service import (
     register_employee as svc_register_employee,
     get_all_employees_query,
@@ -51,7 +51,9 @@ def register_employee():
     try:
         data = request.get_json()
         employee = svc_register_employee(data)
-        
+
+        cache_delete_pattern("employees:*")
+
         return jsonify({
             'success': True,
             'message': 'Employee registered successfully',
@@ -78,10 +80,15 @@ def get_all_employees():
         status = request.args.get('status')
         location = request.args.get('location')
         search = request.args.get('search')
-        
+
+        cache_key = f"employees:all:{status or 'all'}:{location or 'all'}:{search or 'all'}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         employees = get_all_employees_query(status, location, search)
-        
-        return jsonify({
+
+        result = {
             'success': True,
             'data': {
                 'employees': [
@@ -92,7 +99,11 @@ def get_all_employees():
                 ],
                 'count': len(employees)
             }
-        }), 200
+        }
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({
@@ -107,15 +118,24 @@ def get_all_employees():
 @admin_required
 def get_employee(employee_id):
     try:
+        cache_key = f"employees:{employee_id}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         employee = get_employee_by_id(employee_id)
-        
-        return jsonify({
+
+        result = {
             'success': True,
             'data': {
                 'user': employee.user.to_dict(include_employee=True),
                 'employee': employee.to_dict()
             }
-        }), 200
+        }
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({
@@ -132,6 +152,8 @@ def update_employee(employee_id):
     try:
         data = request.get_json()
         user = svc_update_employee(employee_id, data)
+
+        cache_delete_pattern("employees:*")
         
         return jsonify({
             'success': True,
@@ -156,6 +178,8 @@ def update_employee(employee_id):
 def deactivate_employee(employee_id):
     try:
         svc_deactivate_employee(employee_id)
+
+        cache_delete_pattern("employees:*")
         
         return jsonify({
             'success': True,
@@ -178,6 +202,8 @@ def update_employee_status(employee_id):
     try:
         data = request.get_json()
         employee = svc_update_employee_status(employee_id, data)
+
+        cache_delete_pattern("employees:*")
         
         return jsonify({
             'success': True,
@@ -207,6 +233,8 @@ def upload_employee_document(employee_id):
         is_verified = request.form.get('is_verified', 'false').lower() == 'true'
         
         document = svc_upload_employee_document(employee_id, file, doc_type, document_name, is_verified)
+
+        cache_delete_pattern("employees:*")
         
         return jsonify({
             'success': True,
@@ -340,6 +368,8 @@ def update_employee_account_status(employee_id):
     try:
         data = request.get_json()
         employee = svc_update_employee_account_status(employee_id, data)
+
+        cache_delete_pattern("employees:*")
         
         return jsonify({
             'success': True,
@@ -386,14 +416,23 @@ def download_employee_document(document_id):
 @admin_required
 def get_departments():
     try:
+        cache_key = "employees:departments"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         departments = get_departments_query()
-        
-        return jsonify({
+
+        result = {
             'success': True,
             'data': {
                 'departments': departments
             }
-        }), 200
+        }
+
+        cache_set(cache_key, result, REDIS_LONG_TTL)
+
+        return jsonify(result), 200
     except Exception as e:
         return jsonify({
             'success': False,
@@ -407,23 +446,32 @@ def get_departments():
 @admin_required
 def get_managers():
     try:
+        cache_key = "employees:managers"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         managers = get_managers_query()
-        
+
         if not managers:
-            return jsonify({
+            result = {
                 'success': True,
                 'data': {
                     'managers': [],
                     'message': 'No managers configured. Set employee titles to Manager/Supervisor to populate.'
                 }
-            }), 200
-
-        return jsonify({
-            'success': True,
-            'data': {
-                'managers': managers
             }
-        }), 200
+        else:
+            result = {
+                'success': True,
+                'data': {
+                    'managers': managers
+                }
+            }
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
+        return jsonify(result), 200
 
     except Exception as e:
         return jsonify({
@@ -554,19 +602,28 @@ def update_assignment_status(assignment_id):
 def get_my_schedule():
     try:
         current_user = get_current_user()
-        
+
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
-        
+
+        cache_key = f"employee:schedule:{current_user['id']}:{start_date or 'any'}:{end_date or 'any'}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         schedule = get_my_schedule_query(current_user, start_date, end_date)
-        
-        return jsonify({
+
+        result = {
             'success': True,
             'data': {
                 'schedule': schedule,
                 'employee': get_my_profile(current_user)
             }
-        }), 200
+        }
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({
@@ -665,8 +722,19 @@ def clock_in_out():
 def get_time_logs():
     try:
         current_user = get_current_user()
+
+        cache_key = f"employee:time_logs:{current_user['id']}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         result = get_time_logs_query(current_user)
-        
+
+        cache_set(cache_key, {
+            'success': True,
+            'data': result
+        }, REDIS_SHORT_TTL)
+
         return jsonify({
             'success': True,
             'data': result
@@ -715,16 +783,26 @@ def request_time_off():
 def get_time_off_requests():
     try:
         current_user = get_current_user()
+
+        cache_key = f"employee:time_off:{current_user['id']}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         requests = get_time_off_requests_query(current_user)
-        
-        return jsonify({
+
+        result = {
             'success': True,
             'data': {
                 'requests': [req.to_dict() for req in requests],
                 'count': len(requests),
                 'pending_count': sum(1 for r in requests if r.status == 'pending')
             }
-        }), 200
+        }
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({
@@ -769,16 +847,26 @@ def report_issue():
 def get_issue_reports():
     try:
         current_user = get_current_user()
+
+        cache_key = f"employee:issues:{current_user['id']}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         issues = get_issue_reports_query(current_user)
-        
-        return jsonify({
+
+        result = {
             'success': True,
             'data': {
                 'issues': [issue.to_dict() for issue in issues],
                 'count': len(issues),
                 'open_count': sum(1 for i in issues if i.status in ('open', 'in-progress'))
             }
-        }), 200
+        }
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({

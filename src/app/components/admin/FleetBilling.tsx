@@ -5,7 +5,7 @@ import { Input } from '@/app/components/ui/input';
 import { Card } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/app/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/app/components/ui/dialog';
 import { Select } from '@/app/components/ui/select';
 import { Label } from '@/app/components/ui/label';
 import { Textarea } from '@/app/components/ui/textarea';
@@ -224,7 +224,10 @@ export function FleetBilling() {
           <Dialog open={expenseDialogOpen} onOpenChange={setExpenseDialogOpen}>
             <DialogTrigger asChild><Button variant="outline" className="w-full"><Plus className="h-4 w-4 mr-2" />Add Expense</Button></DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle>Add Fleet Expense</DialogTitle></DialogHeader>
+              <DialogHeader>
+                <DialogTitle>Add Fleet Expense</DialogTitle>
+                <DialogDescription>Record a new expense for the fleet</DialogDescription>
+              </DialogHeader>
               <form onSubmit={handleAddExpense} className="space-y-3">
                 <div><Label>Type</Label>
                   <select className="w-full border rounded-md p-2" value={expenseForm.expense_type} onChange={e => setExpenseForm({ ...expenseForm, expense_type: e.target.value })}>
@@ -251,7 +254,10 @@ export function FleetBilling() {
             <Dialog open={invoiceDialogOpen} onOpenChange={(open) => { setInvoiceDialogOpen(open); if (!open) { setLineItems([]); setCurrentInvoice(null); }}}>
               <DialogTrigger asChild><Button><FileText className="h-4 w-4 mr-2" />New Invoice</Button></DialogTrigger>
               <DialogContent className="max-w-2xl">
-                <DialogHeader><DialogTitle>Consolidated Invoice Builder</DialogTitle></DialogHeader>
+                <DialogHeader>
+                  <DialogTitle>Consolidated Invoice Builder</DialogTitle>
+                  <DialogDescription>Create a new consolidated invoice for the fleet</DialogDescription>
+                </DialogHeader>
                 <form onSubmit={handleGenerateInvoice} className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div><Label>Period Start</Label><Input type="date" required value={invoiceForm.period_start} onChange={e => setInvoiceForm({ ...invoiceForm, period_start: e.target.value })} /></div>

@@ -4,6 +4,7 @@ from app import db
 from app.services.auth.models import User
 from app.services.notifications.models import Notification
 from app.utils.decorators import get_current_user
+from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_SHORT_TTL
 from .service import get_user_notifications, mark_notification_read, mark_all_notifications_read
 
 notifications_bp = Blueprint('notifications', __name__)
@@ -22,15 +23,25 @@ def get_notifications():
             }), 401
 
         unread_only = request.args.get('unread_only', 'false').lower() == 'true'
+
+        cache_key = f"notifications:{current_user['id']}:{unread_only}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         notifications, unread_count = get_user_notifications(current_user['id'], unread_only)
 
-        return jsonify({
+        result = {
             'success': True,
             'data': {
                 'notifications': notifications,
                 'unread_count': unread_count
             }
-        }), 200
+        }
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
+        return jsonify(result), 200
 
     except Exception as e:
         return jsonify({
@@ -53,6 +64,8 @@ def mark_notification_read(notification_id):
             }), 401
 
         notification = mark_notification_read(notification_id, current_user['id'])
+
+        cache_delete_pattern(f"notifications:{current_user['id']}:*")
         
         return jsonify({
             'success': True,
@@ -82,6 +95,8 @@ def mark_all_notifications_read():
             }), 401
 
         count = mark_all_notifications_read(current_user['id'])
+
+        cache_delete_pattern(f"notifications:{current_user['id']}:*")
 
         return jsonify({
             'success': True,

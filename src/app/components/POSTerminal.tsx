@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Receipt, CreditCard, Wallet, Trash2, Plus, X, Percent, Delete } from 'lucide-react';
+import { Check, Receipt, CreditCard, Wallet, Trash2, Plus, X, Percent, Delete, Shield } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { toast } from 'sonner';
 import { cn } from '@/app/components/ui/utils';
@@ -13,9 +13,37 @@ interface LineItem {
 
 interface POSTerminalProps {
   onClose?: () => void;
+  userType?: 'customer' | 'employee' | 'admin' | 'super_admin' | null;
 }
 
-export function POSTerminal({ onClose }: POSTerminalProps) {
+export function POSTerminal({ onClose, userType }: POSTerminalProps) {
+  const isAdmin = userType === 'admin' || userType === 'super_admin';
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center">
+        <div className="text-center space-y-4">
+          <Shield className="h-16 w-16 text-red-400 mx-auto" />
+          <h1 className="text-3xl font-bold text-white">Access Denied</h1>
+          <p className="text-slate-400 max-w-md">
+            The POS Terminal is restricted to administrators only. 
+            Please contact your system administrator if you believe this is an error.
+          </p>
+          {onClose && (
+            <Button 
+              variant="outline" 
+              onClick={onClose}
+              className="mt-4"
+            >
+              <X className="h-4 w-4 mr-2" />
+              Go Back
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const [activePayment, setActivePayment] = useState<'mpesa' | 'card' | 'cash'>('cash');
   const [keypadInput, setKeypadInput] = useState('16530.00');
   const [lineItems, setLineItems] = useState<LineItem[]>([

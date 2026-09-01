@@ -1,5 +1,5 @@
 import { CheckCircle2, Star, Download } from 'lucide-react';
-import { Dialog, DialogContent } from '@/app/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent } from '@/app/components/ui/card';
 
@@ -19,16 +19,17 @@ export function ConfirmationSuccessModal({
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-center">Thank You!</DialogTitle>
+          <DialogDescription className="text-center">
+            Your confirmation has been submitted successfully
+          </DialogDescription>
+        </DialogHeader>
         <div className="text-center py-6">
           <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 className="h-10 w-10 text-green-600" />
           </div>
           
-          <h2 className="text-2xl font-bold mb-2">Thank You!</h2>
-          <p className="text-slate-600 mb-6">
-            Your confirmation has been submitted successfully
-          </p>
-
           <Card className="mb-6">
             <CardContent className="pt-6">
               <div className="space-y-4">

@@ -5,7 +5,7 @@ from app.services.catalog.models import Service
 from app.services.appointments.models import Appointment
 from app.services.partners.models import ServicePartner
 from app.utils.decorators import admin_required, role_required, get_current_user
-from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_LONG_TTL
+from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_LONG_TTL, REDIS_SHORT_TTL
 from .service import (
     get_all_partners_query,
     get_partner_by_id,
@@ -17,7 +17,7 @@ from .service import (
     activate_partner as svc_activate_partner,
     update_partner_services as svc_update_partner_services,
     update_partner_rating as svc_update_partner_rating,
-    get_partners_statistics,
+    get_partners_statistics as svc_get_partners_statistics,
 )
 from datetime import datetime, timezone
 
@@ -58,14 +58,23 @@ def get_all_partners():
 @role_required('admin', 'employee', 'customer')
 def get_partner(partner_id):
     try:
+        cache_key = f"partners:{partner_id}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         partner = get_partner_by_id(partner_id)
-        
-        return jsonify({
+
+        result = {
             'success': True,
             'data': {
                 'partner': partner.to_dict()
             }
-        }), 200
+        }
+
+        cache_set(cache_key, result, REDIS_LONG_TTL)
+
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({
@@ -117,9 +126,16 @@ def get_all_partners_admin():
     try:
         is_active = request.args.get('is_active')
         search = request.args.get('search')
-        
+
+        cache_key = f"partners:admin:{is_active or 'all'}:{search or 'all'}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         result = get_all_partners_admin_query(is_active, search)
-        
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
         return jsonify(result), 200
         
     except Exception as e:
@@ -135,12 +151,21 @@ def get_all_partners_admin():
 @admin_required
 def get_partner_admin(partner_id):
     try:
+        cache_key = f"partners:admin_detail:{partner_id}"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         data = get_partner_admin_by_id(partner_id)
-        
-        return jsonify({
+
+        result = {
             'success': True,
             'data': data
-        }), 200
+        }
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({
@@ -294,8 +319,15 @@ def update_partner_rating(partner_id):
 @admin_required
 def get_partners_statistics():
     try:
-        result = get_partners_statistics()
-        
+        cache_key = "partners:statistics"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
+         result = svc_get_partners_statistics()
+
+        cache_set(cache_key, result, REDIS_SHORT_TTL)
+
         return jsonify(result), 200
         
     except Exception as e:
