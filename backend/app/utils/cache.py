@@ -159,3 +159,28 @@ def cache_invalidate(prefix: str, pattern: Optional[str] = None) -> int:
 
 def get_cache_key(prefix: str, *args) -> str:
     return _cache_key(prefix, *args)
+
+
+BLOCKLIST_PREFIX = "bl:jti:"
+
+
+def add_jti_to_blocklist(jti: str, ttl_seconds: int) -> bool:
+    r = get_redis()
+    try:
+        if r is not None:
+            return r.setex(f"{BLOCKLIST_PREFIX}{jti}", ttl_seconds, "1")
+        _fallback_cache[f"{BLOCKLIST_PREFIX}{jti}"] = "1"
+        return True
+    except Exception as e:
+        logger.warning(f"Blocklist add error for jti {jti}: {e}")
+        return False
+
+
+def is_jti_revoked(jti: str) -> bool:
+    r = get_redis()
+    if r is not None:
+        try:
+            return r.exists(f"{BLOCKLIST_PREFIX}{jti}") > 0
+        except Exception as e:
+            logger.warning(f"Blocklist check error for jti {jti}: {e}")
+    return f"{BLOCKLIST_PREFIX}{jti}" in _fallback_cache

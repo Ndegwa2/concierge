@@ -1,17 +1,18 @@
 from app import db
 from app.services.vehicles.models import Vehicle
+from app.utils.db_router import get_read_model_query
 
 
 def get_vehicles_query(current_user):
     if current_user['role'] == 'admin':
-        vehicles = Vehicle.query.all()
+        vehicles = get_read_model_query(Vehicle).all()
     else:
-        vehicles = Vehicle.query.filter_by(user_id=current_user['id']).all()
+        vehicles = get_read_model_query(Vehicle).filter_by(user_id=current_user['id']).all()
     return vehicles
 
 
 def get_vehicle_by_id(vehicle_id, current_user):
-    vehicle = Vehicle.query.get(vehicle_id)
+    vehicle = get_read_model_query(Vehicle).get(vehicle_id)
     
     if not vehicle:
         raise ValueError('Vehicle not found')

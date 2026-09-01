@@ -97,6 +97,15 @@ def create_app(config_class=None):
     migrate.init_app(app, db)
     jwt.init_app(app)
 
+    # Initialize Redis cache client (with in-memory fallback on connection failure)
+    from app.utils.cache import init_redis
+    init_redis(app)
+
+    # Initialize Celery
+    from app.celery import make_celery
+    celery = make_celery(app)
+    app.extensions['celery'] = celery
+
     # CORS - restrict to configured origins (never wide open in production)
     cors_origin = os.environ.get('CORS_ORIGIN', os.environ.get('CORS_ORIGINS', ''))
     cors_origins = [o.strip() for o in cors_origin.split(',') if o.strip()] if cors_origin else []
@@ -153,14 +162,12 @@ def create_app(config_class=None):
     # Rate limiting setup
     limiter.init_app(app)
     
-    # JWT configuration with token blocklist callback
+    # JWT configuration with token blocklist callback (Redis-backed)
+    from app.utils.cache import is_jti_revoked
     @jwt.token_in_blocklist_loader
     def check_if_token_revoked(jwt_header, jwt_payload):
         jti = jwt_payload["jti"]
-        # Check if token is in blocklist and not expired
-        return db.session.query(TokenBlocklist.id).filter_by(jti=jti).filter(
-            TokenBlocklist.expires_at > datetime.utcnow()
-        ).scalar() is not None
+        return is_jti_revoked(jti)
     
     # Email configuration
     app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')

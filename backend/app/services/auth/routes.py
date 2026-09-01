@@ -5,6 +5,7 @@ from app.services.auth.models import User
 from app.services.employees.models import Employee
 from app.services.admin.models import AuditLog
 from app.utils.decorators import admin_required, role_required, get_current_user, get_current_user_id, is_admin
+from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_SHORT_TTL, add_jti_to_blocklist
 from datetime import datetime, timedelta, timezone
 import re
 import logging
@@ -377,8 +378,6 @@ def admin_login():
 @limiter.limit("10 per minute")
 def refresh():
     try:
-        from app import TokenBlocklist
-
         current_user = get_current_user()
         
         if not current_user:
@@ -390,14 +389,10 @@ def refresh():
         
         jti = get_jwt()['jti']
         exp = get_jwt().get('exp')
-        expires_at = datetime.fromtimestamp(exp, timezone.utc) if exp else datetime.now(timezone.utc) + timedelta(days=7)
+        now_ts = datetime.now(timezone.utc).timestamp()
+        ttl_seconds = max(int(exp - now_ts), 60) if exp else 604800
         
-        blocklist_entry = TokenBlocklist(
-            jti=jti,
-            expires_at=expires_at
-        )
-        db.session.add(blocklist_entry)
-        db.session.commit()
+        add_jti_to_blocklist(jti, ttl_seconds)
         
         access_token = create_access_token(
             identity=str(current_user['id']),
@@ -430,8 +425,6 @@ def refresh():
 @jwt_required()
 def logout():
     try:
-        from app import TokenBlocklist
-        
         jti = get_jwt()['jti']
         current_user = get_current_user()
         
@@ -443,14 +436,10 @@ def logout():
             }), 401
         
         exp = get_jwt().get('exp')
-        expires_at = datetime.fromtimestamp(exp, timezone.utc) if exp else datetime.now(timezone.utc) + timedelta(hours=24)
+        now_ts = datetime.now(timezone.utc).timestamp()
+        ttl_seconds = max(int(exp - now_ts), 60) if exp else 86400
         
-        blocklist_entry = TokenBlocklist(
-            jti=jti,
-            expires_at=expires_at
-        )
-        db.session.add(blocklist_entry)
-        db.session.commit()
+        add_jti_to_blocklist(jti, ttl_seconds)
         
         user_id = current_user['id'] if current_user.get('role') != 'admin' else None
         admin_id = current_user['id'] if current_user.get('role') == 'admin' else None
@@ -690,6 +679,9 @@ def create_admin():
         db.session.add(user)
         db.session.commit()
 
+        cache_delete_pattern("employees:*")
+        cache_delete_pattern("admin:users")
+
         log_audit('CREATE_ADMIN', 'User', user.id, new_values={'email': user.email, 'name': user.name, 'role': user.role}, user_id=user.id, admin_id=user.id)
 
         return jsonify({
@@ -721,6 +713,11 @@ def get_pending_employees():
                 'message': 'Admin access required'
             }), 403
         
+        cache_key = "admin:pending_employees"
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached), 200
+
         pending_employees = db.session.query(User, Employee).join(
             Employee, User.id == Employee.user_id
         ).filter(
@@ -733,14 +730,18 @@ def get_pending_employees():
                 'user': user.to_dict(),
                 'employee': employee.to_dict()
             })
-        
-        return jsonify({
+
+        response = {
             'success': True,
             'data': {
                 'pending_employees': result,
                 'count': len(result)
             }
-        }), 200
+        }
+
+        cache_set(cache_key, response, REDIS_SHORT_TTL)
+
+        return jsonify(response), 200
         
     except Exception as e:
         return jsonify({
@@ -794,7 +795,10 @@ def approve_employee(user_id):
             }), 400
         
         db.session.commit()
-        
+
+        cache_delete_pattern("employees:*")
+        cache_delete_pattern("admin:users")
+
         admin_id = current_user['id'] if current_user['role'] in ['admin', 'super_admin'] else None
         log_audit(
             f'EMPLOYEE_{action.upper()}',
@@ -862,7 +866,10 @@ def update_employee_status(user_id):
         user.is_active = new_status == 'active'
         
         db.session.commit()
-        
+
+        cache_delete_pattern("employees:*")
+        cache_delete_pattern("admin:users")
+
         admin_id = current_user['id'] if current_user['role'] in ['admin', 'super_admin'] else None
         log_audit(
             'UPDATE_EMPLOYEE_STATUS',
