@@ -370,44 +370,113 @@ def get_managers_query():
     return managers
 
 
-def assign_employee_to_appointment(appointment_id):
-    data = request.get_json(silent=True) or {}
-    
+def assign_employee_to_appointment(appointment_id, data=None):
+    if data is None:
+        from flask import request
+        data = request.get_json(silent=True) or {}
+
     appointment = Appointment.query.get(appointment_id)
-    
+
     if not appointment:
         raise ValueError('Appointment not found')
-    
+
     if 'employee_id' not in data:
         raise ValueError('employee_id is required')
-    
+
     employee = Employee.query.get(data['employee_id'])
-    
+
     if not employee:
         raise ValueError('Employee not found')
-    
+
     if employee.status != 'active':
         raise ValueError('Employee is not available for assignment')
-    
+
     existing = Assignment.query.filter(
         Assignment.appointment_id == appointment_id,
         Assignment.status.in_(['assigned', 'in-progress'])
     ).first()
-    
+
     if existing:
         raise ValueError('Appointment already has an active assignment')
-    
+
     assignment = Assignment()
     assignment.appointment_id = appointment_id
     assignment.employee_id = employee.id
     assignment.status = 'assigned'
     assignment.notes = data.get('notes', '')
-    
+
     appointment.status = 'confirmed'
-    
+
     db.session.add(assignment)
     db.session.commit()
+
+    _notify_employee_assigned(assignment, employee, appointment)
     return assignment
+
+
+def _notify_employee_assigned(assignment, employee, appointment):
+    """Notify the assigned employee via in-app Notification + email."""
+    from datetime import datetime
+    from app.services.notifications.models import Notification
+    from app.services.auth.models import User
+    from app.services.vehicles.models import Vehicle
+    from app.services.catalog.models import Service
+
+    user = User.query.get(employee.user_id) if employee else None
+    if not user:
+        return
+
+    vehicle = Vehicle.query.get(appointment.vehicle_id) if appointment.vehicle_id else None
+    service = Service.query.get(appointment.service_id) if appointment.service_id else None
+
+    vehicle_label = (
+        f'{vehicle.make} {vehicle.model} ({vehicle.year})' if vehicle
+        else f'Vehicle #{appointment.vehicle_id}'
+    )
+    service_name = service.name if service else f'Service #{appointment.service_id}'
+    scheduled = appointment.appointment_date.strftime('%Y-%m-%d %H:%M') if appointment.appointment_date else 'unscheduled'
+
+    title = 'New assignment'
+    message = (
+        f'You have been assigned to {service_name} for {vehicle_label} '
+        f'on {scheduled} (Appointment #{appointment.id}).'
+    )
+
+    try:
+        note = Notification(
+            user_id=user.id,
+            title=title,
+            message=message,
+            notification_type='assignment',
+        )
+        db.session.add(note)
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        import logging
+        logging.getLogger(__name__).warning('Failed to create employee notification: %s', exc)
+        return
+
+    if not user.email:
+        return
+
+    try:
+        from app.tasks.email_tasks import send_email
+        subject = f'[AutoConcierge] New assignment — Appointment #{appointment.id}'
+        body = (
+            f"Hi {user.name},\n\n"
+            f"You have been assigned a new job.\n\n"
+            f"  Service:    {service_name}\n"
+            f"  Vehicle:    {vehicle_label}\n"
+            f"  Date/Time:  {scheduled}\n"
+            f"  Appointment ID: {appointment.id}\n\n"
+            f"Open your employee dashboard to view the full assignment and start the checklist.\n\n"
+            f"AutoConcierge"
+        )
+        send_email.delay(user.email, subject, body)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning('Failed to enqueue employee assignment email: %s', exc)
 
 
 def get_employee_dashboard(current_user):

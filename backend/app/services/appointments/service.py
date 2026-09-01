@@ -124,10 +124,94 @@ def create_appointment(current_user, data):
     appointment.total_amount = total_amount
     appointment.status = 'scheduled'
     appointment.payment_status = 'pending'
-    
+
     db.session.add(appointment)
     db.session.commit()
+
+    _notify_admins_new_booking(appointment)
+
     return appointment
+
+
+def _notify_admins_new_booking(appointment):
+    """Create an in-app Notification for every admin and queue an email.
+
+    The work is queued via Celery so the customer-facing POST /appointments
+    response is not blocked by SMTP I/O. Each admin gets a separate
+    Notification row so the bell badge count and per-admin
+    read/unread state work correctly.
+    """
+    from app.services.notifications.models import Notification
+    from app.services.vehicles.models import Vehicle
+    from app.services.auth.models import User
+
+    admins = User.query.filter(
+        (User.role.in_(['admin', 'super_admin'])) | (User.is_admin.is_(True))
+    ).all()
+
+    if not admins:
+        return
+
+    customer = User.query.get(appointment.user_id)
+    vehicle = Vehicle.query.get(appointment.vehicle_id)
+    service = Service.query.get(appointment.service_id)
+
+    customer_name = customer.name if customer else f'Customer #{appointment.user_id}'
+    vehicle_label = (
+        f'{vehicle.make} {vehicle.model} ({vehicle.year})' if vehicle
+        else f'Vehicle #{appointment.vehicle_id}'
+    )
+    service_name = service.name if service else f'Service #{appointment.service_id}'
+    scheduled = appointment.appointment_date.strftime('%Y-%m-%d %H:%M') if appointment.appointment_date else 'unscheduled'
+
+    title = 'New appointment booked'
+    message = (
+        f'{customer_name} booked {service_name} for {vehicle_label} on {scheduled}. '
+        f'Appointment #{appointment.id} is awaiting assignment.'
+    )
+
+    for admin in admins:
+        try:
+            note = Notification(
+                user_id=admin.id,
+                title=title,
+                message=message,
+                notification_type='info',
+            )
+            db.session.add(note)
+        except Exception as exc:
+            current_app_logger = None
+            import logging
+            logging.getLogger(__name__).warning('Failed to enqueue admin notification: %s', exc)
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return
+
+    for admin in admins:
+        if not admin.email:
+            continue
+        try:
+            from app.tasks.email_tasks import send_email
+            email_subject = f'[AutoConcierge] New appointment #{appointment.id} awaiting assignment'
+            email_body = (
+                f"Hi {admin.name},\n\n"
+                f"A new appointment has just been booked and is waiting to be assigned to an employee.\n\n"
+                f"  Customer:   {customer_name}\n"
+                f"  Service:    {service_name}\n"
+                f"  Vehicle:    {vehicle_label}\n"
+                f"  Date/Time:  {scheduled}\n"
+                f"  Total:      KES {float(appointment.total_amount or 0):,.2f}\n"
+                f"  Appointment ID: {appointment.id}\n\n"
+                f"Open the admin dashboard to assign an employee.\n\n"
+                f"AutoConcierge"
+            )
+            send_email.delay(admin.email, email_subject, email_body)
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning('Failed to enqueue admin email: %s', exc)
 
 
 def update_appointment(appointment_id, current_user, data):

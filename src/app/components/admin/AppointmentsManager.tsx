@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Search, Filter, Download, Eye, Edit, Trash2, Phone, Mail, Loader2 } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Search, Filter, Download, Eye, Edit, Trash2, Phone, Mail, Loader2, UserPlus, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
@@ -27,7 +27,7 @@ import {
 import { Textarea } from '@/app/components/ui/textarea';
 import { Label } from '@/app/components/ui/label';
 import { toast } from 'sonner';
-import { useAllAppointmentsAdmin, useUpdateAppointment, useCancelAppointment } from '@/hooks/useApi';
+import { useAllAppointmentsAdmin, useUpdateAppointment, useCancelAppointment, useAssignEmployee, useEmployees } from '@/hooks/useApi';
 import type { Appointment, User, Vehicle, Service } from '@/services/api';
 
 interface AppointmentRow extends Appointment {
@@ -45,6 +45,9 @@ export function AppointmentsManager() {
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
+  const [assignNotes, setAssignNotes] = useState('');
   const [editForm, setEditForm] = useState({
     status: '',
     notes: '',
@@ -56,6 +59,8 @@ export function AppointmentsManager() {
   const { data: rawAppointments = [], isLoading: loading, error, refetch } = useAllAppointmentsAdmin(statusFilter !== 'all' ? statusFilter : undefined);
   const updateMutation = useUpdateAppointment();
   const cancelMutation = useCancelAppointment();
+  const assignMutation = useAssignEmployee();
+  const { data: activeEmployees = [], isLoading: employeesLoading } = useEmployees('active');
 
   const appointments: AppointmentRow[] = (rawAppointments || []).map((apt: Appointment) => {
     const customer = apt.customer as User | undefined;
@@ -70,6 +75,32 @@ export function AppointmentsManager() {
       service_name: service?.name || `Service #${apt.service_id}`,
     };
   });
+
+  const lastSeenAppointmentId = useRef<number | null>(null);
+  useEffect(() => {
+    if (loading || appointments.length === 0) return;
+    const newest = Math.max(...appointments.map(a => a.id));
+    if (lastSeenAppointmentId.current === null) {
+      lastSeenAppointmentId.current = newest;
+      return;
+    }
+    const fresh = appointments
+      .filter(a => a.id > (lastSeenAppointmentId.current as number))
+      .sort((a, b) => a.id - b.id);
+    fresh.forEach(a => {
+      toast.info(`New appointment #${a.id} from ${a.customer_name} — ${a.service_name}`, {
+        description: `${a.vehicle_info} • ${new Date(a.appointment_date).toLocaleString()}`,
+        action: {
+          label: 'View',
+          onClick: () => {
+            setSelectedAppointment(a);
+            setViewDialogOpen(true);
+          },
+        },
+      });
+    });
+    lastSeenAppointmentId.current = newest;
+  }, [appointments, loading]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -127,6 +158,41 @@ export function AppointmentsManager() {
     setSelectedAppointment(appointment);
     setDeleteDialogOpen(true);
   };
+
+  const handleAssign = (appointment: AppointmentRow) => {
+    setSelectedAppointment(appointment);
+    setSelectedEmployeeId('');
+    setAssignNotes('');
+    setAssignDialogOpen(true);
+  };
+
+  const submitAssign = async () => {
+    if (!selectedAppointment) return;
+    if (!selectedEmployeeId) {
+      toast.error('Please select an employee');
+      return;
+    }
+    try {
+      const response = await assignMutation.mutateAsync({
+        appointmentId: selectedAppointment.id,
+        employeeId: Number(selectedEmployeeId),
+        notes: assignNotes.trim() || undefined,
+      });
+      if (response.success) {
+        toast.success('Employee assigned — customer, admin, and employee have been notified.');
+        setAssignDialogOpen(false);
+        setSelectedAppointment(null);
+        setSelectedEmployeeId('');
+        setAssignNotes('');
+      } else {
+        toast.error(response.message || 'Failed to assign employee');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to assign employee');
+    }
+  };
+
+  const canAssign = (status: string) => status === 'scheduled' || status === 'confirmed';
 
   const confirmDelete = async () => {
     if (!selectedAppointment) return;
@@ -310,6 +376,17 @@ export function AppointmentsManager() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
+                          {canAssign(appointment.status) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleAssign(appointment)}
+                              title="Assign employee"
+                              className="text-blue-600 hover:text-blue-700"
+                            >
+                              <UserPlus className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button variant="ghost" size="sm" onClick={() => handleView(appointment)}>
                             <Eye className="h-4 w-4" />
                           </Button>
@@ -474,6 +551,92 @@ export function AppointmentsManager() {
             <Button onClick={submitEdit} disabled={updateMutation.isPending}>
               {updateMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign Employee Dialog */}
+      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Assign Employee</DialogTitle>
+            <DialogDescription>
+              Assign a concierge to appointment #{selectedAppointment?.id}. The employee and admins will be notified by email and in-app.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedAppointment && (
+            <div className="space-y-4">
+              <div className="rounded-md bg-slate-50 p-3 text-sm space-y-1">
+                <p><span className="font-medium">Customer:</span> {selectedAppointment.customer_name}</p>
+                <p><span className="font-medium">Service:</span> {selectedAppointment.service_name}</p>
+                <p><span className="font-medium">Vehicle:</span> {selectedAppointment.vehicle_info}</p>
+                <p><span className="font-medium">Scheduled:</span> {new Date(selectedAppointment.appointment_date).toLocaleString()}</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="employee">Active Employee</Label>
+                <Select
+                  value={selectedEmployeeId}
+                  onValueChange={setSelectedEmployeeId}
+                  disabled={employeesLoading}
+                >
+                  <SelectTrigger id="employee">
+                    <SelectValue placeholder={employeesLoading ? 'Loading employees…' : 'Select an active employee'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeEmployees.length === 0 && !employeesLoading ? (
+                      <SelectItem value="__none__" disabled>No active employees available</SelectItem>
+                    ) : (
+                      activeEmployees.map((emp: any) => {
+                        const profile = emp.employee || {};
+                        const name = emp.name || profile.full_name || `Employee #${profile.id ?? emp.id ?? ''}`;
+                        const email = emp.email || '';
+                        const empId = profile.id ?? emp.id;
+                        return (
+                          <SelectItem key={empId} value={String(empId)}>
+                            {name}{email ? ` — ${email}` : ''}
+                          </SelectItem>
+                        );
+                      })
+                    )}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-slate-500">Only employees with status "active" are listed.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="assign_notes">Notes (optional)</Label>
+                <Textarea
+                  id="assign_notes"
+                  value={assignNotes}
+                  onChange={(e) => setAssignNotes(e.target.value)}
+                  rows={3}
+                  placeholder="Special instructions for the employee…"
+                />
+              </div>
+              <div className="flex items-start gap-2 rounded-md bg-blue-50 p-3 text-xs text-blue-900">
+                <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <span>
+                  On confirm, the employee will receive an in-app notification and an email,
+                  and the appointment status will move to <strong>Confirmed</strong>.
+                </span>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAssignDialogOpen(false)}
+              disabled={assignMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={submitAssign}
+              disabled={assignMutation.isPending || !selectedEmployeeId}
+            >
+              {assignMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              <UserPlus className="h-4 w-4 mr-2" />
+              Assign Employee
             </Button>
           </DialogFooter>
         </DialogContent>
