@@ -1,147 +1,288 @@
-# Auto Concierge - Production Deployment Guide
+# Ndegwa Auto Concierge - Deployment Guide
 
-This guide covers everything you need to deploy your Auto Concierge application to Render.
+This guide covers deploying the Auto Concierge application using Docker Compose or Render.
 
 ## Architecture Overview
 
-Your application consists of:
-- **Frontend**: React + Vite + Tailwind CSS (static site)
-- **Backend**: Node.js + Express + SQLite (better-sqlite3)
-- **Database**: SQLite (file-based, stored on persistent disk)
-- **Auth**: JWT (for backend API)
-
----
-
-## Pre-Deployment Checklist
-
-### 1. Generate Secure JWT Secret
-
-Run this command locally to generate a secure JWT secret:
-
-```bash
-node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
-```
-
-Save the output - you'll need it for Render environment variables.
-
-### 2. Test Locally in Production Mode
-
-Test your application locally before deploying:
-
-```bash
-# Backend (production mode)
-cd backend
-NODE_ENV=production npm start
-
-# Frontend (in another terminal)
-npm run build
-npm run preview
-```
+The application consists of:
+- **Frontend:** React + Vite + Tailwind CSS (static site)
+- **Backend:** Python Flask + SQLAlchemy (REST API)
+- **Database:** PostgreSQL 16 (production) / SQLite (development)
+- **Cache:** Redis 7 (rate limiting, caching, Celery broker)
+- **Task Queue:** Celery + Redis (async email, PDF, AI, payment tasks)
+- **Web Server:** Gunicorn + Gevent (production WSGI)
+- **Reverse Proxy:** Nginx (optional, for SSL termination and static serving)
 
 ---
 
 ## Deployment Options
 
-### Option A: Manual Deployment (Recommended for First Time)
+### Option 1: Docker Compose (Recommended for Production)
 
-#### Step 1: Deploy Backend
+#### Prerequisites
+- Docker and Docker Compose installed
+- Git
 
-1. Go to [Render Dashboard](https://dashboard.render.com)
-2. Click "New +" → "Web Service"
-3. Connect your GitHub repository
-4. Configure:
-   - **Name**: `auto-concierge-backend`
-   - **Environment**: `Node`
-   - **Build Command**: `npm install`
-   - **Start Command**: `npm start`
-5. Click "Advanced" → Add Environment Variables:
-   - `NODE_ENV` = `production`
-   - `PORT` = `10000`
-   - `DB_PATH` = `/opt/render/project/src/auto-concierge.db`
-   - `JWT_SECRET` = (your generated secret)
-   - `CORS_ORIGIN` = `*` (for now, update later)
-6. **Important**: Add a Persistent Disk
-   - Click "Create Disk"
-   - Size: 1GB minimum
-   - Mount Path: `/opt/render/project/src`
-7. Click "Deploy Web Service"
+#### Steps
 
-#### Step 2: Seed the Database (One Time)
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd concierge
+   ```
 
-After backend is deployed, run the seed script:
+2. **Configure environment variables**
+   Create a `.env` file in the project root:
+   ```env
+   POSTGRES_DB=autoconcierge
+   POSTGRES_USER=autoconcierge
+   POSTGRES_PASSWORD=your-secure-password
+   REDIS_PASSWORD=your-redis-password
+   SECRET_KEY=your-flask-secret-key
+   JWT_SECRET_KEY=your-jwt-secret-key
+   ENCRYPTION_KEY=your-base64-encryption-key
+   CORS_ORIGIN=https://your-frontend-domain.com
+   MAIL_SERVER=smtp.gmail.com
+   MAIL_PORT=587
+   MAIL_USERNAME=your-email@gmail.com
+   MAIL_PASSWORD=your-app-password
+   MPESA_CONSUMER_KEY=your-mpesa-key
+   MPESA_CONSUMER_SECRET=your-mpesa-secret
+   MPESA_PASSKEY=your-mpesa-passkey
+   MPESA_SHORTCODE=your-mpesa-shortcode
+   MPESA_CALLBACK_URL=https://your-api.com/payments/mpesa/callback
+   COHERE_API_KEY=your-cohere-api-key
+   ```
 
-```bash
-# From your local machine (temporarily allow access)
-curl https://your-backend.onrender.com/api/health
-curl -X POST https://your-backend.onrender.com/api/admin/seed
-```
+3. **Initialize PostgreSQL**
+   ```bash
+   docker-compose exec postgres psql -U autoconcierge -d autoconcierge -f backend/postgresql_setup.sql
+   ```
 
-Or manually trigger seeding through your admin interface.
+4. **Run database migrations**
+   ```bash
+   docker-compose exec backend flask db upgrade
+   ```
 
-#### Step 3: Deploy Frontend
+5. **Start all services**
+   ```bash
+   docker-compose up --build -d
+   ```
 
-1. Go to [Render Dashboard](https://dashboard.render.com)
-2. Click "New +" → "Static Site"
-3. Connect your GitHub repository
-4. Configure:
-   - **Name**: `auto-concierge-frontend`
-   - **Build Command**: `npm run build`
-   - **Publish Directory**: `dist`
-5. Add Environment Variables:
-   - `VITE_API_URL` = `https://auto-concierge-backend.onrender.com`
-   - `VITE_APP_ENV` = `production`
-6. Click "Deploy Static Site"
+6. **Verify deployment**
+   ```bash
+   curl http://localhost/api/health
+   ```
 
-#### Step 4: Update CORS
+#### Services
 
-After frontend is deployed:
-1. Go to your backend service on Render
-2. Update `CORS_ORIGIN` to your frontend URL: `https://auto-concierge-frontend.onrender.com`
-3. Redeploy backend
+| Service | Port | Description |
+|---------|------|-------------|
+| Frontend | 80/443 | Served via Nginx |
+| Backend | 8000 | Flask API via Gunicorn |
+| PostgreSQL | 5432 | Database |
+| Redis | 6379 | Cache and broker |
+| Celery Worker | - | Background task processing |
+| Celery Beat | - | Scheduled task scheduler |
 
 ---
 
-### Option B: Automated Deployment with Blueprint
+### Option 2: Render Blueprint
 
-We've created a `render.yaml` file for automated deployment.
+The repository includes a `render.yaml` file for automated deployment.
+
+#### Steps
 
 1. Push your code to GitHub
-2. Go to [Render Blueprint](https://dashboard.render.com/blueprints)
+2. Go to [Render Blueprint Instances](https://dashboard.render.com/blueprints)
 3. Click "New Blueprint Instance"
 4. Connect your GitHub repository
-5. Render will automatically create both services
+5. Render will automatically provision:
+   - PostgreSQL 16 database (with read replica)
+   - Redis instance
+   - Backend web service (Gunicorn)
+   - Frontend static site
 
-**Note**: You'll still need to manually add the Persistent Disk for the backend.
+#### Post-Deployment
 
----
+1. Run PostgreSQL setup:
+   ```bash
+   psql $DATABASE_URL -f backend/postgresql_setup.sql
+   ```
 
-## Environment Variables Reference
+2. Run migrations:
+   ```bash
+   flask db upgrade
+   ```
 
-### Backend (.env.production)
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `PORT` | Server port (Render assigns 10000) | `10000` |
-| `NODE_ENV` | Environment mode | `production` |
-| `DB_PATH` | Path to SQLite database | `/opt/render/project/src/auto-concierge.db` |
-| `JWT_SECRET` | Secret for JWT tokens | (64-char hex string) |
-| `CORS_ORIGIN` | Allowed frontend origin | `https://your-app.onrender.com` |
-
-### Frontend (.env.production)
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `VITE_API_URL` | Backend API URL | `https://your-backend.onrender.com` |
-| `VITE_APP_ENV` | Environment mode | `production` |
+3. Update `CORS_ORIGIN` in backend environment variables to match your frontend URL
+4. Update `VITE_API_URL` in frontend environment variables to match your backend URL
 
 ---
 
-## Database Persistence
+### Option 3: Manual Deployment
 
-Your SQLite database is stored on a Render Persistent Disk:
-- **Location**: `/opt/render/project/src/auto-concierge.db`
-- **Backup**: Download periodically from Render dashboard or implement automated backups
-- **Migration**: For schema changes, you'll need to modify the database manually or implement migration scripts
+#### Backend
+
+1. **Set up Python environment**
+   ```bash
+   cd backend
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
+
+2. **Configure environment variables**
+   ```env
+   DATABASE_URL=postgresql://user:password@host:5432/autoconcierge
+   DATABASE_READ_URL=postgresql://user:password@host:5432/autoconcierge
+   REDIS_URL=redis://:password@host:6379/0
+   RATELIMIT_STORAGE_URI=redis://:password@host:6379/1
+   SECRET_KEY=your-secret-key
+   JWT_SECRET_KEY=your-jwt-secret
+   ENCRYPTION_KEY=your-base64-encryption-key
+   CORS_ORIGIN=https://your-frontend.com
+   FLASK_ENV=production
+   ```
+
+3. **Run migrations**
+   ```bash
+   flask db upgrade
+   ```
+
+4. **Start with Gunicorn**
+   ```bash
+   gunicorn --bind 0.0.0.0:8000 --workers 4 --threads 4 --timeout 120 run:app
+   ```
+
+#### Frontend
+
+1. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+2. **Build for production**
+   ```bash
+   npm run build
+   ```
+
+3. **Serve the `dist` directory** with Nginx or any static file server
+
+---
+
+## Environment Variables
+
+### Required Backend Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@host:5432/db` |
+| `DATABASE_READ_URL` | Read replica connection string | `postgresql://user:pass@host:5432/db` |
+| `REDIS_URL` | Redis connection string | `redis://:pass@host:6379/0` |
+| `RATELIMIT_STORAGE_URI` | Rate limiter storage | `redis://:pass@host:6379/1` |
+| `SECRET_KEY` | Flask secret key | Random 32+ char string |
+| `JWT_SECRET_KEY` | JWT signing secret | Random 32+ char string |
+| `ENCRYPTION_KEY` | Field encryption key (base64, 32 bytes) | `python -c "import base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"` |
+| `CORS_ORIGIN` | Allowed frontend origins (comma-separated) | `https://app.example.com` |
+
+### Optional Backend Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `FLASK_ENV` | Environment mode | `development` |
+| `PORT` | Server port | `5000` (dev) / `8000` (Docker) |
+| `JWT_ACCESS_EXPIRES_MINUTES` | Access token TTL | `30` |
+| `JWT_REFRESH_EXPIRES_DAYS` | Refresh token TTL | `7` |
+| `BEHIND_PROXY` | Trust proxy headers | `True` |
+| `ENFORCE_HTTPS` | Enforce HTTPS redirect | `False` |
+| `GUNICORN_WORKERS` | Gunicorn worker count | `4` |
+| `GUNICORN_THREADS` | Gunicorn threads per worker | `4` |
+| `MAIL_SERVER` | SMTP server | `smtp.gmail.com` |
+| `MAIL_PORT` | SMTP port | `587` |
+| `MAIL_USERNAME` | SMTP username | - |
+| `MAIL_PASSWORD` | SMTP password | - |
+| `MPESA_CONSUMER_KEY` | M-Pesa API key | - |
+| `MPESA_CONSUMER_SECRET` | M-Pesa API secret | - |
+| `MPESA_PASSKEY` | M-Pesa passkey | - |
+| `MPESA_SHORTCODE` | M-Pesa shortcode | - |
+| `MPESA_CALLBACK_URL` | M-Pesa callback URL | - |
+| `COHERE_API_KEY` | Cohere AI API key | - |
+
+### Frontend Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `VITE_API_URL` | Backend API base URL | `https://api.example.com/api` |
+| `VITE_APP_ENV` | Application environment | `production` |
+
+---
+
+## Database Management
+
+### Migrations
+
+```bash
+cd backend
+flask db migrate -m "Description of change"
+flask db upgrade
+```
+
+### Backup (PostgreSQL)
+
+```bash
+pg_dump $DATABASE_URL > backup_$(date +%Y%m%d).sql
+```
+
+### Restore (PostgreSQL)
+
+```bash
+psql $DATABASE_URL < backup_20240101.sql
+```
+
+---
+
+## Monitoring
+
+### Health Check
+
+```bash
+curl https://your-api.com/api/health
+```
+
+Expected response:
+```json
+{
+  "status": "healthy",
+  "service": "AutoConcierge Backend",
+  "request_id": "uuid"
+}
+```
+
+### Logs
+
+**Docker Compose:**
+```bash
+docker-compose logs -f backend
+docker-compose logs -f celery-worker
+```
+
+**Render:**
+View logs in the Render dashboard or use the Render CLI.
+
+---
+
+## Security Checklist
+
+- [ ] `SECRET_KEY` and `JWT_SECRET_KEY` are set to strong random values
+- [ ] `ENCRYPTION_KEY` is generated and set (base64, 32 bytes)
+- [ ] `CORS_ORIGIN` is restricted to your frontend domain(s)
+- [ ] Database uses strong passwords
+- [ ] Redis has a strong password
+- [ ] HTTPS is enforced at the reverse proxy level
+- [ ] Firewall rules restrict database and Redis access
+- [ ] Environment variables are not committed to version control
+- [ ] Regular security updates are applied to dependencies
 
 ---
 
@@ -150,57 +291,22 @@ Your SQLite database is stored on a Render Persistent Disk:
 ### Common Issues
 
 1. **CORS Errors**
-   - Ensure `CORS_ORIGIN` matches your frontend URL exactly
-   - Include `https://` prefix
+   - Ensure `CORS_ORIGIN` includes your frontend URL exactly (including `https://`)
 
-2. **Database Not Found**
-   - Verify Persistent Disk is attached
-   - Check `DB_PATH` environment variable
+2. **Database Connection Errors**
+   - Verify `DATABASE_URL` is correct
+   - Ensure PostgreSQL is running and accessible
+   - Check database user permissions
 
-3. **Build Failures**
-   - Ensure all dependencies are in `package.json`
-   - Check that `npm install` runs successfully
+3. **Redis Connection Errors**
+   - Verify `REDIS_URL` and `RATELIMIT_STORAGE_URI`
+   - Ensure Redis is running
 
-4. **Health Check Fails**
-   - Backend may need 30-60 seconds to start
-   - Check logs in Render dashboard
+4. **Celery Tasks Not Running**
+   - Verify Redis connection
+   - Check Celery worker logs for errors
+   - Ensure task queues are correctly configured
 
-### Checking Logs
-
-```bash
-# View backend logs in Render dashboard
-# Or use Render CLI
-render logs -s auto-concierge-backend
-```
-
----
-
-## Post-Deployment Tasks
-
-1. [ ] Verify backend health: `https://your-backend.onrender.com/health`
-2. [ ] Test API endpoints with Postman or curl
-3. [ ] Verify frontend loads correctly
-4. [ ] Test user registration/login
-5. [ ] Test booking flow
-6. [ ] Set up monitoring alerts (optional)
-7. [ ] Configure custom domain (optional)
-
----
-
-## Estimated Costs (Render)
-
-| Service | Plan | Monthly Cost |
-|---------|------|--------------|
-| Backend Web Service | Free (or Starter) | $7/mo for persistent disk |
-| Frontend Static Site | Free | $0 |
-| PostgreSQL (optional upgrade) | Starter | $5/mo |
-
-For SQLite with persistent disk: ~$7/month
-
----
-
-## Support
-
-- [Render Documentation](https://render.com/docs)
-- [Render Community](https://community.render.com)
-- Check backend logs in Render dashboard for detailed errors
+5. **Migrations Not Applying**
+   - Run `flask db upgrade` manually
+   - Check Alembic version table in database

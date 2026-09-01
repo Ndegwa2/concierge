@@ -5,27 +5,23 @@
  * Supports JWT authentication with role-based access control.
  */
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { authApi } from '../services/api/auth';
-import { apiClient } from '../services/api/client';
-import type { User, RegisterData } from '../services/api/types';
+import { api } from '../services/api';
+import type { User } from '../services/api';
 
-interface SignUpData extends RegisterData {
+interface SignUpData {
   name: string;
   email: string;
   password: string;
-  role: 'customer' | 'employee';
   phone?: string;
   address?: string;
-  location?: string;
-  specialties?: string[];
 }
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  userType: 'customer' | 'employee' | 'admin' | 'super_admin' | null;
-  login: (email: string, password: string, userType?: 'customer' | 'employee' | 'admin' | 'super_admin') => Promise<{ success: boolean; message: string }>;
+  userType: 'customer' | 'employee' | 'admin' | null;
+  login: (email: string, password: string, userType?: 'customer' | 'employee' | 'admin') => Promise<{ success: boolean; message: string }>;
   signup: (data: SignUpData) => Promise<{ success: boolean; message: string; user?: User }>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -45,17 +41,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Check for existing session on mount
   useEffect(() => {
     const initAuth = async () => {
-      if (apiClient.isAuthenticated()) {
+      if (api.isAuthenticated()) {
         try {
-          const response = await authApi.getProfile();
+          const response = await api.getProfile();
           if (response.success && response.data) {
             setUser(response.data.user);
           } else {
-            apiClient.clearTokens();
+            // Token invalid, clear it
+            api.clearTokens();
           }
         } catch (error) {
           console.error('Failed to fetch profile:', error);
-          apiClient.clearTokens();
+          api.clearTokens();
         }
       }
       setIsLoading(false);
@@ -64,24 +61,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
     initAuth();
   }, []);
 
-  const login = useCallback(async (email: string, password: string, userType: 'customer' | 'employee' | 'admin' | 'super_admin' = 'customer') => {
+  const login = useCallback(async (email: string, password: string, userType: 'customer' | 'employee' | 'admin' = 'customer') => {
     setIsLoading(true);
     try {
       let response;
-
+      
+      // using appropriate login endpoint based on user type
       if (userType === 'admin') {
-        response = await authApi.adminLogin(email, password);
+        response = await api.adminLogin(email, password);
       } else if (userType === 'employee') {
-        response = await authApi.employeeLogin(email, password);
+        response = await api.employeeLogin(email, password);
       } else {
-        response = await authApi.login(email, password);
+        response = await api.login(email, password);
       }
-
+      
       if (response.success && response.data) {
         setUser(response.data.user);
         return { success: true, message: response.message };
       }
-
+      
       return { success: false, message: response.message || 'Login failed' };
     } catch (error) {
       return { success: false, message: 'Network error. Please try again.' };
@@ -93,17 +91,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const signup = useCallback(async (data: SignUpData) => {
     setIsLoading(true);
     try {
-      const response = await authApi.register(data);
-
+      const response = await api.register(data);
+      
       if (response.success && response.data) {
-        if (response.data.requires_approval) {
-          apiClient.clearTokens();
-        } else {
-          setUser(response.data.user);
-        }
+        setUser(response.data.user);
         return { success: true, message: response.message || 'Registration successful', user: response.data.user };
       }
-
+      
       return { success: false, message: response.message || 'Registration failed' };
     } catch (error) {
       return { success: false, message: 'Network error. Please try again.' };
@@ -115,7 +109,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const logout = useCallback(async () => {
     setIsLoading(true);
     try {
-      await authApi.logout();
+      await api.logout();
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
@@ -125,10 +119,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const refreshProfile = useCallback(async () => {
-    if (!apiClient.isAuthenticated()) return;
-
+    if (!api.isAuthenticated()) return;
+    
     try {
-      const response = await authApi.getProfile();
+      const response = await api.getProfile();
       if (response.success && response.data) {
         setUser(response.data.user);
       }
@@ -139,7 +133,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
     try {
-      const response = await authApi.changePassword(currentPassword, newPassword);
+      const response = await api.changePassword(currentPassword, newPassword);
       return { success: response.success, message: response.message || 'Password changed successfully' };
     } catch (error) {
       return { success: false, message: 'Network error. Please try again.' };
@@ -181,7 +175,7 @@ export function useAuth(): AuthContextType {
 /**
  * Hook to check if user has required role
  */
-export function useRequireRole(allowedRoles: ('customer' | 'employee' | 'admin' | 'super_admin')[]) {
+export function useRequireRole(allowedRoles: ('customer' | 'employee' | 'admin')[]) {
   const { user, isAuthenticated } = useAuth();
   
   const hasRole = user && allowedRoles.includes(user.role);

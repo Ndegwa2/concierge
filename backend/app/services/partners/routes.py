@@ -324,7 +324,7 @@ def get_partners_statistics():
         if cached is not None:
             return jsonify(cached), 200
 
-         result = svc_get_partners_statistics()
+        result = svc_get_partners_statistics()
 
         cache_set(cache_key, result, REDIS_SHORT_TTL)
 

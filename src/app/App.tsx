@@ -34,9 +34,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/ta
 import { Badge } from '@/app/components/ui/badge';
 import { toast, Toaster } from 'sonner';
 import { services } from '@/app/data/services';
-import { useAppointments } from '@/hooks/useApi';
-import { appointmentsApi } from '@/services/api/appointments';
-import type { Appointment } from '@/services/api/types';
+import { useAppointments, useProfile } from '@/hooks/useApi';
+import { api } from '@/services/api';
+import type { Appointment } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 
 import { PricingPage } from '@/app/components/PricingPage';
@@ -51,9 +51,11 @@ export default function App() {
   const [successModalOpen, setSuccessModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [lastSubmittedRating, setLastSubmittedRating] = useState(0);
+  const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0);
 
   const { userType, logout } = useAuth();
-  const { data: appointments = [], refetch: refetchAppointments } = useAppointments();
+  const { data: profile } = useProfile();
+  const { data: appointments = [], isLoading: appointmentsLoading, refetch: refetchAppointments } = useAppointments();
 
   const handleBookService = (serviceTitle: string) => {
     if (userType !== 'customer') {
@@ -94,11 +96,7 @@ export default function App() {
 
   const handleConfirmationSubmit = async (data: ConfirmationData) => {
     try {
-      if (!selectedAppointment) {
-        toast.error('No appointment selected');
-        return;
-      }
-      const response = await appointmentsApi.confirmVehicleReturn(selectedAppointment.id, {
+      const response = await api.confirmVehicleReturn(selectedAppointment.id, {
         service_rating: data.serviceRating,
         condition_rating: data.conditionRating,
         review: data.feedback || undefined
@@ -124,11 +122,6 @@ export default function App() {
   };
 
   const handleNavigate = (view: string) => {
-    if (view === 'pos' && userType !== 'admin' && userType !== 'super_admin') {
-      toast.error('POS Terminal is restricted to administrators only');
-      return;
-    }
-
     if ((view === 'appointments' || view === 'dashboard' || view === 'profile') && userType !== 'customer') {
       setLoginModalOpen(true);
       toast.error('Please login to access this page');
@@ -183,15 +176,10 @@ export default function App() {
   };
 
   useEffect(() => {
-    if ((currentView === 'appointments' || currentView === 'booking' || currentView === 'profile' || currentView === 'dashboard' || currentView === 'pos') && 
-        (userType !== 'customer' && userType !== 'admin' && userType !== 'super_admin')) {
+    if ((currentView === 'appointments' || currentView === 'booking' || currentView === 'profile' || currentView === 'dashboard') && userType !== 'customer') {
       setCurrentView('home');
-      if (currentView === 'pos') {
-        toast.error('POS Terminal is restricted to administrators only');
-      } else {
-        setLoginModalOpen(true);
-        toast.error('Please login to access this page');
-      }
+      setLoginModalOpen(true);
+      toast.error('Please login to access this page');
     }
   }, [currentView, userType]);
 
@@ -268,7 +256,7 @@ export default function App() {
                 </h1>
                 <p className="text-xl text-slate-200 mb-8 max-w-2xl">
                   Skip the garage and car wash lines. Our professional concierge service picks up 
-                  your vehicle, handles all maintenance and cleaning, and returns it to you — all 
+                  your vehicle, handles all maintenance and cleaning, and returns it to you  all 
                   while you focus on what matters.
                 </p>
                 <div className="flex flex-wrap gap-4">
@@ -306,7 +294,7 @@ export default function App() {
                     <p className="text-sm text-slate-300">Average Rating</p>
                   </div>
                   <div>
-                    <p className="font-bold text-xl mb-1">{import.meta.env.VITE_APP_SERVICES_COMPLETED || '10,000+'}</p>
+                    <p className="font-bold text-xl mb-1">{import.meta.env.VITE_APP_SERVICES_COMPLETED || '1000+'}</p>
                     <p className="text-sm text-slate-300">Services Completed</p>
                   </div>
                   <div>
@@ -337,7 +325,7 @@ export default function App() {
                   </div>
                   <h3 className="font-bold text-lg mb-2">Trusted Professionals</h3>
                   <p className="text-slate-600">
-                    All concierges are vetted, insured, and highly experienced with all vehicle types.
+                    All concierges are vetted,  and highly experienced with all vehicle types.
                   </p>
                 </div>
                 <div className="text-center group">
@@ -396,7 +384,7 @@ export default function App() {
               <h2 className="text-4xl font-bold mb-6">Ready to Save Time?</h2>
               <p className="text-slate-300 mb-10 max-w-2xl mx-auto text-lg leading-relaxed">
                 Book your first service today and experience the convenience of having a 
-                professional take care of your vehicle needs. Join {import.meta.env.VITE_APP_HAPPY_CUSTOMERS || '5,000+'} happy car owners.
+                professional take care of your vehicle needs.
               </p>
               <div className="flex flex-col sm:flex-row justify-center gap-4">
                 <Button
@@ -444,7 +432,7 @@ export default function App() {
             <div className="mb-10">
               <h1 className="text-4xl font-bold mb-3 tracking-tight">My Appointments</h1>
               <p className="text-slate-600 text-lg">
-                Track and manage all your vehicle service appointments in real-time
+                Track and manage all your vehicle service appointments.
               </p>
             </div>
 
@@ -503,10 +491,7 @@ export default function App() {
 
       {/* POS Terminal View */}
       {currentView === 'pos' && (
-        <POSTerminal 
-          onClose={() => setCurrentView('home')}
-          userType={userType}
-        />
+        <POSTerminal onClose={() => setCurrentView('home')} />
       )}
 
       {/* Footer */}
@@ -555,11 +540,7 @@ export default function App() {
                 <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('appointments')}>My Appointments</li>
                 <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('how-it-works')}>How It Works</li>
                 <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('pricing')}>Pricing Plans</li>
-                {userType === 'admin' || userType === 'super_admin' ? (
-                  <li className="hover:text-white transition-colors cursor-pointer" onClick={() => setCurrentView('pos')}>POS Terminal</li>
-                ) : (
-                  <li className="text-slate-600 cursor-not-allowed">POS Terminal</li>
-                )}
+                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => setCurrentView('pos')}>POS Terminal</li>
                 <li className="hover:text-white transition-colors cursor-pointer" onClick={() => toast.info('Coming soon')}>Safety & Insurance</li>
               </ul>
             </div>
