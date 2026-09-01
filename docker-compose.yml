@@ -62,7 +62,7 @@ services:
       MPESA_PASSKEY: ${MPESA_PASSKEY:-}
       MPESA_SHORTCODE: ${MPESA_SHORTCODE:-}
       MPESA_CALLBACK_URL: ${MPESA_CALLBACK_URL:-}
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      COHERE_API_KEY: ${COHERE_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -129,7 +129,7 @@ services:
       MPESA_PASSKEY: ${MPESA_PASSKEY:-}
       MPESA_SHORTCODE: ${MPESA_SHORTCODE:-}
       MPESA_CALLBACK_URL: ${MPESA_CALLBACK_URL:-}
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      COHERE_API_KEY: ${COHERE_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -166,7 +166,7 @@ services:
       MPESA_PASSKEY: ${MPESA_PASSKEY:-}
       MPESA_SHORTCODE: ${MPESA_SHORTCODE:-}
       MPESA_CALLBACK_URL: ${MPESA_CALLBACK_URL:-}
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      COHERE_API_KEY: ${COHERE_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy

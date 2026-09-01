@@ -43,7 +43,7 @@ def chat():
                 'message': 'Invalid user session'
             }), 401
 
-        if not os.environ.get('GOOGLE_API_KEY'):
+        if not os.environ.get('COHERE_API_KEY'):
             return jsonify({
                 'success': False,
                 'message': 'AI service is not configured. Please contact support.'
@@ -89,11 +89,11 @@ def chat():
 @ai_chat_bp.route('/health', methods=['GET'])
 def health_check():
     try:
-        api_key = os.environ.get('GOOGLE_API_KEY')
+        api_key = os.environ.get('COHERE_API_KEY')
         if not api_key:
             return jsonify({
                 'success': False,
-                'message': 'Google AI API key not configured'
+                'message': 'Cohere API key not configured'
             }), 500
 
         return jsonify({

@@ -1,7 +1,7 @@
 """
 AI Chat Tasks for AutoConcierge
 =================================
-Offloads Google GenAI API calls from Gunicorn workers.
+Offloads Cohere API calls from Gunicorn workers.
 """
 import logging
 import os
@@ -32,51 +32,40 @@ Guidelines:
 
 @celery.task(name='app.tasks.ai_tasks.generate_ai_response', bind=True, max_retries=2, default_retry_delay=10, soft_time_limit=60)
 def generate_ai_response(self, user_message, conversation_history=None):
-    """Generate AI chat response asynchronously using Google GenAI."""
-    from google import genai
+    """Generate AI chat response asynchronously using Cohere."""
+    import cohere
 
-    api_key = os.environ.get('GOOGLE_API_KEY')
+    api_key = os.environ.get('COHERE_API_KEY')
     if not api_key:
-        raise ValueError("Google AI API key not configured")
+        raise ValueError("Cohere API key not configured")
 
     conversation_history = conversation_history or []
 
     try:
-        client = genai.Client(api_key=api_key)
+        client = cohere.Client(api_key=api_key)
 
-        contents = []
-        contents.append({
-            'role': 'user',
-            'parts': [{'text': SYSTEM_PROMPT}]
-        })
-        contents.append({
-            'role': 'model',
-            'parts': [{'text': "Understood. I am ready to assist with AutoConcierge services."}]
+        chat_history = []
+        chat_history.append({
+            "role": "SYSTEM",
+            "message": SYSTEM_PROMPT
         })
 
         for msg in conversation_history[-10:]:
             if isinstance(msg, dict) and 'role' in msg and 'content' in msg:
                 role = msg['role']
                 content = msg['content']
-                if role in ('user', 'assistant'):
-                    contents.append({
-                        'role': role,
-                        'parts': [{'text': content}]
-                    })
+                if role == 'user':
+                    chat_history.append({"role": "USER", "message": content})
+                elif role == 'assistant':
+                    chat_history.append({"role": "CHATBOT", "message": content})
 
-        contents.append({
-            'role': 'user',
-            'parts': [{'text': user_message}]
-        })
-
-        response = client.models.generate_content(
-            model='gemini-flash-latest',
-            contents=contents,
-            config={
-                'max_output_tokens': 1024,
-                'temperature': 0.7,
-                'top_p': 0.9,
-            }
+        response = client.chat(
+            model='command-r-plus',
+            message=user_message,
+            chat_history=chat_history,
+            max_tokens=1024,
+            temperature=0.7,
+            p=0.9,
         )
 
         return response.text.strip()
