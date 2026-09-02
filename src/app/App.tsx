@@ -10,8 +10,7 @@ import {
   Car,
   ClipboardCheck,
   MapPin,
-  Headphones,
-  Package
+  Headphones
 } from 'lucide-react';
 import { JobGallery } from '@/app/components/JobGallery';
 import { HeroSlideshow } from '@/app/components/HeroSlideshow';
@@ -30,7 +29,6 @@ import { VehicleReturnConfirmation, ConfirmationData } from '@/app/components/Ve
 import { ConfirmationSuccessModal } from '@/app/components/ConfirmationSuccessModal';
 import { AIChatBox } from '@/app/components/AIChatBox';
 import { Button } from '@/app/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { Badge } from '@/app/components/ui/badge';
 import { toast, Toaster } from 'sonner';
 import { services } from '@/app/data/services';
@@ -56,16 +54,6 @@ export default function App() {
   const { userType, logout } = useAuth();
   const { data: profile } = useProfile();
   const { data: appointments = [], isLoading: appointmentsLoading, refetch: refetchAppointments } = useAppointments();
-
-  const handleBookService = (serviceTitle: string) => {
-    if (userType !== 'customer') {
-      setLoginModalOpen(true);
-      toast.error('Please login to book a service');
-      return;
-    }
-    setSelectedService(serviceTitle);
-    setCurrentView('booking');
-  };
 
   const handleCloseBooking = () => {
     setCurrentView('home');
@@ -211,11 +199,6 @@ export default function App() {
       </>
     );
   }
-
-  const upcomingAppointments = appointments.filter(a => 
-    a.status === 'scheduled' || a.status === 'confirmed' || a.status === 'in-progress'
-  );
-  const completedAppointments = appointments.filter(a => a.status === 'completed');
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -365,7 +348,6 @@ export default function App() {
                   icon={service.icon}
                   title={service.title}
                   features={service.features}
-                  image={service.image}
                 />
               ))}
             </div>
