@@ -21,6 +21,9 @@ from .service import (
 )
 from datetime import datetime, timezone
 
+
+import logging
+logger = logging.getLogger(__name__)
 partners_bp = Blueprint('partners', __name__)
 
 
@@ -46,10 +49,11 @@ def get_all_partners():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get service partners',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -77,10 +81,11 @@ def get_partner(partner_id):
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get service partner',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -112,10 +117,11 @@ def create_partner():
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to create service partner',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -139,10 +145,11 @@ def get_all_partners_admin():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get service partners',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -168,10 +175,11 @@ def get_partner_admin(partner_id):
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get service partner',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -194,10 +202,11 @@ def update_partner(partner_id):
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to update service partner',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -216,10 +225,11 @@ def delete_partner(partner_id):
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to deactivate service partner',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -241,10 +251,11 @@ def activate_partner(partner_id):
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to activate service partner',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -274,10 +285,11 @@ def update_partner_services(partner_id):
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to update partner services',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -307,10 +319,11 @@ def update_partner_rating(partner_id):
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to update partner rating',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -331,8 +344,9 @@ def get_partners_statistics():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get statistics',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500

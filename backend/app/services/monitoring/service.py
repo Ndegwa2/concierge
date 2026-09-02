@@ -7,6 +7,9 @@ from app.services.admin.models import AuditLog, SystemMetric, ActivityTracker
 from app.utils.db_router import get_read_model_query, get_read_session
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import func
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_audit_logs_query(page=1, per_page=50, user_id=None, action=None, entity_type=None, status=None, start_date=None, end_date=None, search=None):
@@ -359,7 +362,8 @@ def detailed_health_check():
     try:
         get_read_session().execute(db.text('SELECT 1'))
     except Exception as e:
-        health_status['database'] = f'unhealthy: {str(e)}'
+        logger.error(str(e), exc_info=True)
+        health_status['database'] = 'unhealthy'
 
     try:
         from app.utils.cache import get_redis
@@ -370,7 +374,8 @@ def detailed_health_check():
         else:
             health_status['cache'] = 'degraded (using in-memory fallback)'
     except Exception as e:
-        health_status['cache'] = f'unhealthy: {str(e)}'
+        logger.error(str(e), exc_info=True)
+        health_status['cache'] = 'unhealthy'
     
     health_status['counts'] = {
         'users': get_read_model_query(User).count(),

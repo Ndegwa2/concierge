@@ -8,6 +8,7 @@ from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import os
+import logging
 import uuid
 from datetime import datetime, timedelta
 
@@ -16,6 +17,8 @@ migrate = Migrate()
 jwt = JWTManager()
 compress = Compress()
 csrf = CSRFProtect()
+
+logger = logging.getLogger(__name__)
 
 # Rate limiter using Redis in production, memory fallback for dev
 limiter = Limiter(
@@ -194,32 +197,39 @@ def create_app(config_class=None):
     from app.services.workflow import workflow_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
-    csrf.exempt(auth_bp)  # JWT-based API: no session cookies, CSRF not needed for auth endpoints
     app.register_blueprint(services_bp, url_prefix='/api/services')
-    csrf.exempt(services_bp)  # JWT-based API
     app.register_blueprint(appointments_bp, url_prefix='/api/appointments')
-    csrf.exempt(appointments_bp)  # JWT-based API
     app.register_blueprint(invoices_bp, url_prefix='/api/appointments')
-    csrf.exempt(invoices_bp)  # JWT-based API
     app.register_blueprint(vehicles_bp, url_prefix='/api/vehicles')
-    csrf.exempt(vehicles_bp)  # JWT-based API
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
-    csrf.exempt(admin_bp)  # JWT-based API
     app.register_blueprint(employees_bp, url_prefix='/api/employees')
-    csrf.exempt(employees_bp)  # JWT-based API: no session cookies, CSRF not needed for employee endpoints
     app.register_blueprint(notifications_bp, url_prefix='/api/notifications')
-    csrf.exempt(notifications_bp)  # JWT-based API
     app.register_blueprint(partners_bp, url_prefix='/api/partners')
-    csrf.exempt(partners_bp)  # JWT-based API
     app.register_blueprint(monitoring_bp, url_prefix='/api/monitoring')
     app.register_blueprint(fleets_bp, url_prefix='/api/fleets')
-    csrf.exempt(fleets_bp)  # JWT-based API
     app.register_blueprint(ai_chat_bp, url_prefix='/api/ai-chat')
-    csrf.exempt(ai_chat_bp)  # JWT-based API
     app.register_blueprint(payments_bp, url_prefix='/api/payments')
-    csrf.exempt(payments_bp)  # JWT-based API
     app.register_blueprint(workflow_bp, url_prefix='/api/workflow')
-    csrf.exempt(workflow_bp)  # JWT-based API
+
+    # CSRF protection strategy:
+    # All API endpoints use JWT Bearer tokens sent via the Authorization header.
+    # Browsers do NOT automatically include the Authorization header in
+    # cross-site requests, so CSRF attacks are not applicable here.
+    # CSRFProtect remains initialized for any future form-based (non-JWT)
+    # endpoints, but is globally exempted since this is a pure JWT Bearer API.
+    csrf.exempt(auth_bp)  # Login/register endpoints: no JWT yet, but use POST body (not cookies)
+    csrf.exempt(services_bp)
+    csrf.exempt(appointments_bp)
+    csrf.exempt(invoices_bp)
+    csrf.exempt(vehicles_bp)
+    csrf.exempt(admin_bp)
+    csrf.exempt(employees_bp)
+    csrf.exempt(notifications_bp)
+    csrf.exempt(partners_bp)
+    csrf.exempt(fleets_bp)
+    csrf.exempt(ai_chat_bp)
+    csrf.exempt(payments_bp)
+    csrf.exempt(workflow_bp)
 
     from app.services.notifications.scheduler import start_scheduler
     start_scheduler(app)
@@ -310,7 +320,8 @@ def create_app(config_class=None):
             pool_info['status'] = 'healthy'
             pool_info['latency'] = 'ok'
         except Exception as e:
-            pool_info['status'] = f'unhealthy: {str(e)}'
+            logger.error(str(e), exc_info=True)
+            pool_info['status'] = 'unhealthy'
             pool_info['latency'] = 'failed'
             return jsonify({
                 'success': False,

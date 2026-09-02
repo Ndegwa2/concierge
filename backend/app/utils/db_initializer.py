@@ -72,16 +72,10 @@ def initialize_database():
             )
         ]
         db.session.add_all(services)
-        
-        # Create sample admin user
-        admin = User()
-        admin.name = 'Sam Ndegwa'
-        admin.email = 'samuel.ndegwa@strathmore.edu'
-        admin.set_password('admin123')
-        admin.role = 'admin'
-        admin.is_admin = True
-        db.session.add(admin)
-        
+
+        # NOTE: No default admin user is created. To create an admin account,
+        # use the /auth/admin/create endpoint (requires super_admin role) or
+        # run: python -c "from app import db; from app.services.auth.models import User; u=User(); u.email='admin@example.com'; u.name='Admin'; u.set_password('strong-password'); u.role='admin'; u.is_admin=True; db.session.add(u); db.session.commit()"
         # Create sample users
         users = []
         

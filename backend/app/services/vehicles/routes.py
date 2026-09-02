@@ -7,6 +7,9 @@ from app.utils.decorators import get_current_user
 from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_SHORT_TTL
 from .service import get_vehicles_query, get_vehicle_by_id, create_vehicle as svc_create_vehicle, update_vehicle as svc_update_vehicle, delete_vehicle as svc_delete_vehicle
 
+
+import logging
+logger = logging.getLogger(__name__)
 vehicles_bp = Blueprint('vehicles', __name__)
 
 
@@ -35,10 +38,11 @@ def get_vehicles():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get vehicles',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -57,15 +61,17 @@ def get_vehicle(vehicle_id):
         }), 200
         
     except ValueError as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
-            'message': str(e)
-        }), 404 if 'not found' in str(e) else 403
+            'message': 'Resource not found'
+        }), 404 if 'not found' in str(e).lower() else 403
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get vehicle',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -95,10 +101,11 @@ def create_vehicle():
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to create vehicle',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -121,16 +128,18 @@ def update_vehicle(vehicle_id):
         }), 200
         
     except ValueError as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
-            'message': str(e)
-        }), 404 if 'not found' in str(e) else 403
+            'message': 'Resource not found'
+        }), 404 if 'not found' in str(e).lower() else 403
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to update vehicle',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -148,14 +157,16 @@ def delete_vehicle(vehicle_id):
         }), 200
         
     except ValueError as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
-            'message': str(e)
-        }), 404 if 'not found' in str(e) else 403
+            'message': 'Resource not found'
+        }), 404 if 'not found' in str(e).lower() else 403
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to delete vehicle',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500

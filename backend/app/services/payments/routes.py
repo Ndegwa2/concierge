@@ -48,9 +48,11 @@ def mpesa_stk_push():
         }), 200
 
     except PermissionError as e:
-        return jsonify({'success': False, 'message': str(e)}), 403
+        logger.error(str(e), exc_info=True)
+        return jsonify({'success': False, 'message': 'Access denied'}), 403
     except ValueError as e:
-        return jsonify({'success': False, 'message': str(e)}), 400
+        logger.error(str(e), exc_info=True)
+        return jsonify({'success': False, 'message': 'Invalid request'}), 400
     except Exception as e:
         return jsonify({'success': False, 'message': 'Failed to initiate payment. Please try again.'}), 500
 
@@ -65,9 +67,11 @@ def payment_status(payment_id):
             'data': {'payment': payment.to_dict()},
         }), 200
     except PermissionError as e:
-        return jsonify({'success': False, 'message': str(e)}), 403
+        logger.error(str(e), exc_info=True)
+        return jsonify({'success': False, 'message': 'Access denied'}), 403
     except ValueError as e:
-        return jsonify({'success': False, 'message': str(e)}), 404
+        logger.error(str(e), exc_info=True)
+        return jsonify({'success': False, 'message': 'Resource not found'}), 404
     except Exception as e:
         return jsonify({'success': False, 'message': 'Failed to check payment status'}), 500
 
@@ -82,9 +86,11 @@ def get_payment(payment_id):
             'data': {'payment': payment.to_dict()},
         }), 200
     except PermissionError as e:
-        return jsonify({'success': False, 'message': str(e)}), 403
+        logger.error(str(e), exc_info=True)
+        return jsonify({'success': False, 'message': 'Access denied'}), 403
     except ValueError as e:
-        return jsonify({'success': False, 'message': str(e)}), 404
+        logger.error(str(e), exc_info=True)
+        return jsonify({'success': False, 'message': 'Resource not found'}), 404
 
 
 @payments_bp.route('/appointment/<int:appointment_id>', methods=['GET'])
@@ -97,9 +103,11 @@ def appointment_payments(appointment_id):
             'data': {'payments': [p.to_dict() for p in payments]},
         }), 200
     except PermissionError as e:
-        return jsonify({'success': False, 'message': str(e)}), 403
+        logger.error(str(e), exc_info=True)
+        return jsonify({'success': False, 'message': 'Access denied'}), 403
     except ValueError as e:
-        return jsonify({'success': False, 'message': str(e)}), 404
+        logger.error(str(e), exc_info=True)
+        return jsonify({'success': False, 'message': 'Resource not found'}), 404
 
 
 @payments_bp.route('/mpesa/callback', methods=['POST'])
@@ -117,10 +125,16 @@ def mpesa_callback():
     from app.services.payments.models import WebhookEvent
     from app.tasks.payment_tasks import process_webhook_event
     from sqlalchemy.exc import IntegrityError
+    from app.services.payments.mpesa import verify_mpesa_callback
 
+    raw_body = request.get_data()
     data = request.get_json(silent=True)
     if not data:
         return jsonify({'ResultCode': 1, 'ResultDesc': 'Invalid callback data'}), 400
+
+    signature = request.headers.get('x-mpesa-signature')
+    if not verify_mpesa_callback(raw_body, data, signature):
+        return jsonify({'ResultCode': 1, 'ResultDesc': 'Callback verification failed'}), 403
 
     stk_callback = (data.get('Body') or {}).get('StkCallback') or {}
     checkout_request_id = stk_callback.get('CheckoutRequestId') or ''

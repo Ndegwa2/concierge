@@ -8,6 +8,9 @@ from app.utils.db_router import get_read_model_query
 from .service import get_services_query, get_categories_query, get_discounts_query, get_discount_by_code_query, create_service as svc_create_service, update_service as svc_update_service, delete_service as svc_delete_service
 from datetime import datetime, timezone
 
+
+import logging
+logger = logging.getLogger(__name__)
 services_bp = Blueprint('services', __name__)
 
 
@@ -46,10 +49,11 @@ def get_services():
         return result
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get services',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -81,10 +85,11 @@ def get_service(service_id):
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get service',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -117,10 +122,11 @@ def get_categories():
         return result
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get categories',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -147,10 +153,11 @@ def get_discounts():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get discounts',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -208,10 +215,11 @@ def get_discount(code):
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get discount code',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -242,10 +250,11 @@ def create_service():
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to create service',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -269,10 +278,11 @@ def update_service(service_id):
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to update service',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -291,8 +301,9 @@ def delete_service(service_id):
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to delete service',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500

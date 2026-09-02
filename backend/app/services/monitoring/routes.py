@@ -24,6 +24,9 @@ from .service import (
 )
 from datetime import datetime, timedelta, timezone
 
+
+import logging
+logger = logging.getLogger(__name__)
 monitoring_bp = Blueprint('monitoring', __name__)
 
 
@@ -50,10 +53,11 @@ def get_audit_logs():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get audit logs',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -72,10 +76,11 @@ def get_audit_log(log_id):
         }), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get audit log',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -96,10 +101,11 @@ def get_audit_actions():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get audit actions',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -123,10 +129,11 @@ def get_activities():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get activities',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -146,10 +153,11 @@ def get_online_users():
         }), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get online users',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -180,10 +188,11 @@ def get_system_metrics():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get metrics',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -205,10 +214,11 @@ def get_dashboard_metrics():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get dashboard metrics',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -239,10 +249,11 @@ def get_revenue_metrics():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get revenue metrics',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -264,10 +275,11 @@ def get_performance_metrics():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get performance metrics',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -279,11 +291,12 @@ def health_check():
         return jsonify(result), status_code
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'status': 'unhealthy',
             'timestamp': datetime.now(timezone.utc).isoformat(),
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 503
 
 
@@ -297,8 +310,9 @@ def detailed_health_check():
         return jsonify(result), status_code
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'status': 'unhealthy',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 503

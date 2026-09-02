@@ -6,6 +6,15 @@ import uuid
 from app.core.types import EncryptedString
 
 
+def mask_bank_account(account: str) -> str:
+    if not account:
+        return None
+    digits = account.replace(' ', '').replace('-', '')
+    if len(digits) <= 4:
+        return '****'
+    return f'****{digits[-4:]}'
+
+
 class Employee(db.Model):
     __tablename__ = 'employees'
     __table_args__ = (CheckConstraint("status IN ('active', 'off-duty', 'suspended', 'terminated', 'pending', 'rejected')"),
@@ -42,8 +51,8 @@ class Employee(db.Model):
 
     user = db.relationship('User', backref=backref('employee_profile', uselist=False), uselist=False, lazy=True)
 
-    def to_dict(self):
-        return {
+    def to_dict(self, mask_sensitive=True):
+        result = {
             'id': self.id,
             'user_id': self.user_id,
             'employee_id': self.employee_id,
@@ -61,13 +70,21 @@ class Employee(db.Model):
             'account_status': self.account_status,
             'exit_notes': self.exit_notes,
             'offboarding_checklist_completed': self.offboarding_checklist_completed,
-            'base_salary': float(self.base_salary) if self.base_salary else None,
-            'hourly_rate': float(self.hourly_rate) if self.hourly_rate else None,
             'pay_frequency': self.pay_frequency,
-            'bank_account_number': self.bank_account_number,
             'bank_name': self.bank_name,
             'health_plan_tier': self.health_plan_tier
         }
+
+        if mask_sensitive:
+            result['bank_account_number'] = mask_bank_account(self.bank_account_number) if self.bank_account_number else None
+            result['base_salary'] = None
+            result['hourly_rate'] = None
+        else:
+            result['bank_account_number'] = self.bank_account_number
+            result['base_salary'] = float(self.base_salary) if self.base_salary else None
+            result['hourly_rate'] = float(self.hourly_rate) if self.hourly_rate else None
+
+        return result
 
     @property
     def specialty_list(self):

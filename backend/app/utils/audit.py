@@ -10,6 +10,9 @@ from app.services.admin.models import AuditLog, ActivityTracker
 from datetime import datetime, timezone
 import time
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_client_ip():

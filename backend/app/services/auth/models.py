@@ -6,6 +6,33 @@ import hashlib
 import bcrypt
 
 
+def mask_phone(phone: str) -> str:
+    if not phone:
+        return None
+    digits = phone.replace('+', '').replace('-', '').replace(' ', '')
+    if len(digits) <= 4:
+        return '****'
+    return f'****{digits[-4:]}'
+
+
+def mask_email(email: str) -> str:
+    if not email:
+        return None
+    parts = email.split('@', 1)
+    if len(parts) != 2:
+        return '*****'
+    local, domain = parts
+    if len(local) <= 2:
+        masked_local = '*' * len(local)
+    else:
+        masked_local = local[0] + '*' * (len(local) - 2) + local[-1]
+    domain_parts = domain.split('.')
+    if len(domain_parts) > 1:
+        domain_parts[-2] = '*' * len(domain_parts[-2]) if domain_parts[-2] else '*'
+    masked_domain = '.'.join(domain_parts)
+    return f'{masked_local}@{masked_domain}'
+
+
 class User(db.Model):
     __tablename__ = 'users'
 
@@ -47,13 +74,11 @@ class User(db.Model):
     def check_password(self, password):
         return bcrypt.checkpw(password.encode('utf-8'), self.password_hash.encode('utf-8'))
 
-    def to_dict(self, include_employee=False):
+    def to_dict(self, include_employee=False, mask_sensitive=True):
         result = {
             'id': self.id,
             'name': self.name,
             'email': self.email,
-            'phone': self.phone,
-            'address': self.address,
             'role': self.role,
             'is_admin': self.is_admin,
             'is_active': self.is_active,
@@ -61,8 +86,15 @@ class User(db.Model):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
+        if mask_sensitive:
+            result['phone'] = mask_phone(self.phone) if self.phone else None
+            result['address'] = None if self.address else None
+        else:
+            result['phone'] = self.phone
+            result['address'] = self.address
+
         if include_employee and self.employee_profile:
-            result['employee'] = self.employee_profile.to_dict()
+            result['employee'] = self.employee_profile.to_dict(mask_sensitive=mask_sensitive)
 
         return result
 

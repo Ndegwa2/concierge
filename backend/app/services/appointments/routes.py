@@ -55,10 +55,11 @@ def get_appointments():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get appointments',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -78,15 +79,17 @@ def get_appointment(appointment_id):
         }), 200
         
     except ValueError as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
-            'message': str(e)
-        }), 404 if 'not found' in str(e) else 403
+            'message': 'Resource not found'
+        }), 404 if 'not found' in str(e).lower() else 403
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get appointment',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -174,16 +177,18 @@ def update_appointment(appointment_id):
         }), 200
         
     except ValueError as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
-            'message': str(e)
-        }), 404 if 'not found' in str(e) else 403
+            'message': 'Resource not found'
+        }), 404 if 'not found' in str(e).lower() else 403
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to update appointment',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -206,16 +211,18 @@ def delete_appointment(appointment_id):
         }), 200
         
     except ValueError as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
-            'message': str(e)
-        }), 404 if 'not found' in str(e) else 403
+            'message': 'Resource not found'
+        }), 404 if 'not found' in str(e).lower() else 403
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to delete appointment',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -251,17 +258,18 @@ def confirm_vehicle_return(appointment_id):
         }), 200
         
     except ValueError as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
-            'message': str(e)
-        }), 404 if 'not found' in str(e) else 403
+            'message': 'Resource not found'
+        }), 404 if 'not found' in str(e).lower() else 403
     except Exception as e:
         db.session.rollback()
         logger.error(f"[{request_id}] Error confirming vehicle return: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to confirm vehicle return',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 

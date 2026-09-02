@@ -1,5 +1,7 @@
 import os
 import base64
+import hashlib
+import hmac
 import logging
 from datetime import datetime, timezone
 from urllib.request import Request, urlopen
@@ -139,6 +141,68 @@ class MpesaClient:
         elif cleaned.startswith('7') or cleaned.startswith('1'):
             cleaned = '254' + cleaned
         return cleaned
+
+
+def verify_mpesa_callback(raw_body: bytes, callback_data: dict, signature_header: str = None) -> bool:
+    """Verify that an M-Pesa webhook callback is authentic.
+
+    Security strategy (defense in depth):
+
+    1. If MPESA_WEBHOOK_VALIDATION_KEY is set, verify the HMAC-SHA256
+       signature from the x-mpesa-signature header against the raw
+       request body.
+    2. If no validation key is configured (development), fall back to
+       CheckoutRequestId validation — verify that a Payment with the
+       given CheckoutRequestId exists in a pending/processing state.
+       This prevents forged callbacks from completing payments that
+       were never initiated.
+
+    Returns True if the callback passes verification, False otherwise.
+    """
+    validation_key = os.environ.get('MPESA_WEBHOOK_VALIDATION_KEY')
+
+    if validation_key:
+        if not signature_header:
+            logger.warning('M-Pesa callback rejected: missing signature header')
+            return False
+
+        expected_signature = hmac.new(
+            key=validation_key.encode('utf-8'),
+            msg=raw_body,
+            digestmod=hashlib.sha256,
+        ).hexdigest()
+
+        if not hmac.compare_digest(expected_signature, signature_header):
+            logger.warning('M-Pesa callback rejected: invalid signature')
+            return False
+
+        logger.info('M-Pesa callback signature verified')
+        return True
+
+    # Fallback: validate CheckoutRequestId against known pending payments
+    stk_callback = (callback_data.get('Body') or {}).get('StkCallback', {})
+    checkout_request_id = stk_callback.get('CheckoutRequestId')
+
+    if not checkout_request_id:
+        logger.warning('M-Pesa callback rejected: missing CheckoutRequestId')
+        return False
+
+    try:
+        from app.services.payments.models import Payment
+        payment = Payment.query.filter(
+            Payment.checkout_request_id == checkout_request_id,
+            Payment.status.in_(['pending', 'processing']),
+        ).first()
+
+        if not payment:
+            logger.warning('M-Pesa callback rejected: unknown or stale CheckoutRequestId %s', checkout_request_id)
+            return False
+    except Exception:
+        logger.exception('M-Pesa callback CheckoutRequestId validation failed')
+        return False
+
+    logger.info('M-Pesa callback CheckoutRequestId validated: %s', checkout_request_id)
+    return True
 
 
 def get_mpesa_client():

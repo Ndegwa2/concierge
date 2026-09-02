@@ -157,7 +157,7 @@ def register():
                 'success': True,
                 'message': 'Registration successful',
                 'data': {
-                    'user': user.to_dict(),
+                    'user': user.to_dict(mask_sensitive=False),
                     'access_token': access_token,
                     'refresh_token': refresh_token
                 }
@@ -167,7 +167,7 @@ def register():
                 'success': True,
                 'message': 'Registration submitted successfully. Your account is pending admin approval. You will be notified once approved.',
                 'data': {
-                    'user': user.to_dict(),
+                    'user': user.to_dict(mask_sensitive=False),
                     'requires_approval': True
                 }
             }), 201
@@ -242,7 +242,7 @@ def login():
             'data': {
                 'access_token': access_token,
                 'refresh_token': refresh_token,
-                'user': user.to_dict(include_employee=True)
+                'user': user.to_dict(include_employee=True, mask_sensitive=False)
             }
         }), 200
 
@@ -314,7 +314,7 @@ def employee_login():
             'data': {
                 'access_token': access_token,
                 'refresh_token': refresh_token,
-                'user': user.to_dict(include_employee=True)
+                'user': user.to_dict(include_employee=True, mask_sensitive=False)
             }
         }), 200
 
@@ -367,7 +367,7 @@ def admin_login():
             'data': {
                 'access_token': access_token,
                 'refresh_token': refresh_token,
-                'user': user.to_dict()
+                'user': user.to_dict(mask_sensitive=False)
             }
         }), 200
 
@@ -521,10 +521,11 @@ def change_password():
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to change password',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -546,15 +547,16 @@ def verify_token():
             'success': True,
             'message': 'Token is valid',
             'data': {
-                'user': user.to_dict(include_employee=True) if hasattr(user, 'employee_profile') else user.to_dict()
+                'user': user.to_dict(include_employee=True, mask_sensitive=False) if hasattr(user, 'employee_profile') else user.to_dict(mask_sensitive=False)
             }
         }), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Token verification failed',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 @auth_bp.route('/profile', methods=['GET'])
@@ -574,16 +576,18 @@ def get_profile():
         return jsonify({
             'success': True,
             'data': {
-                'user': user.to_dict()
+                'user': user.to_dict(mask_sensitive=False)
             }
         }), 200
-        
+
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get profile',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
+
 
 @auth_bp.route('/profile', methods=['PUT'])
 @jwt_required()
@@ -621,16 +625,17 @@ def update_profile():
             'success': True,
             'message': 'Profile updated successfully',
             'data': {
-                'user': user.to_dict()
+                'user': user.to_dict(mask_sensitive=False)
             }
         }), 200
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to update profile',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -701,10 +706,11 @@ def create_admin():
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to create admin account',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -751,10 +757,11 @@ def get_pending_employees():
         return jsonify(response), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to fetch pending employees',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -826,10 +833,11 @@ def approve_employee(user_id):
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to process employee approval',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -901,8 +909,9 @@ def update_employee_status(user_id):
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to update employee status',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500

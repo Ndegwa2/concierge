@@ -41,6 +41,9 @@ from io import StringIO
 import csv
 import os
 
+
+import logging
+logger = logging.getLogger(__name__)
 employees_bp = Blueprint('employees', __name__)
 
 
@@ -65,10 +68,11 @@ def register_employee():
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to register employee',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -106,10 +110,11 @@ def get_all_employees():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get employees',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -138,10 +143,11 @@ def get_employee(employee_id):
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get employee',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -165,10 +171,11 @@ def update_employee(employee_id):
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to update employee',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -188,10 +195,11 @@ def deactivate_employee(employee_id):
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to deactivate employee',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -215,10 +223,11 @@ def update_employee_status(employee_id):
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to update status',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -246,10 +255,11 @@ def upload_employee_document(employee_id):
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to upload document',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -269,10 +279,11 @@ def get_employee_documents(employee_id):
         }), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get documents',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -290,10 +301,11 @@ def delete_employee_document(employee_id, doc_id):
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to delete document',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -354,10 +366,11 @@ def export_employees_csv():
         )
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to export employees',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -381,10 +394,11 @@ def update_employee_account_status(employee_id):
 
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to update account status',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -404,10 +418,11 @@ def download_employee_document(document_id):
         )
 
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to download document',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -434,10 +449,11 @@ def get_departments():
 
         return jsonify(result), 200
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get departments',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -474,10 +490,11 @@ def get_managers():
         return jsonify(result), 200
 
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get managers',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -498,13 +515,17 @@ def assign_employee_to_appointment(appointment_id):
         
     except ValueError as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         message = str(e)
         if message == 'Appointment not found':
             status = 404
+            message = 'Resource not found'
         elif message == 'Employee not found':
             status = 404
+            message = 'Resource not found'
         elif message == 'employee_id is required':
             status = 400
+            message = 'Missing required fields'
         else:
             status = 409
             message = 'An unexpected error occurred during assignment'
@@ -515,10 +536,11 @@ def assign_employee_to_appointment(appointment_id):
         }), status
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to assign employee',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -540,10 +562,11 @@ def employee_dashboard():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get dashboard data',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -574,10 +597,11 @@ def get_my_assignments():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get assignments',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -606,10 +630,11 @@ def update_assignment_status(assignment_id):
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to update assignment',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -643,10 +668,11 @@ def get_my_schedule():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get schedule',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -661,15 +687,16 @@ def my_profile():
         return jsonify({
             'success': True,
             'data': {
-                'user': employee.user.to_dict(include_employee=True)
+                'user': employee.user.to_dict(include_employee=True, mask_sensitive=False)
             }
         }), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get profile',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -692,10 +719,11 @@ def update_my_profile():
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to update profile',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -726,10 +754,11 @@ def clock_in_out():
 
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to clock in/out',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -758,10 +787,11 @@ def get_time_logs():
         }), 200
 
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get time logs',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -787,10 +817,11 @@ def request_time_off():
 
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to submit time-off request',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -822,10 +853,11 @@ def get_time_off_requests():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get time-off requests',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -851,10 +883,11 @@ def report_issue():
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to report issue',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -886,8 +919,9 @@ def get_issue_reports():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get issues',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500

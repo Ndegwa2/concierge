@@ -1,5 +1,6 @@
 from app import db
 from sqlalchemy import func, CheckConstraint
+from app.services.auth.models import mask_phone, mask_email
 
 
 class Appointment(db.Model):
@@ -28,7 +29,7 @@ class Appointment(db.Model):
     vehicle = db.relationship('Vehicle', backref='appointments', lazy=True)
     service = db.relationship('Service', backref='appointments', lazy=True)
 
-    def to_dict(self):
+    def to_dict(self, mask_sensitive=True):
         result = {
             'id': self.id,
             'user_id': self.user_id,
@@ -53,12 +54,20 @@ class Appointment(db.Model):
             result['service'] = self.service.to_dict()
 
         if self.customer:
-            result['customer'] = {
-                'id': self.customer.id,
-                'name': self.customer.name,
-                'phone': self.customer.phone,
-                'email': self.customer.email,
-            }
+            if mask_sensitive:
+                result['customer'] = {
+                    'id': self.customer.id,
+                    'name': self.customer.name,
+                    'phone': mask_phone(self.customer.phone) if self.customer.phone else None,
+                    'email': mask_email(self.customer.email) if self.customer.email else None,
+                }
+            else:
+                result['customer'] = {
+                    'id': self.customer.id,
+                    'name': self.customer.name,
+                    'phone': self.customer.phone,
+                    'email': self.customer.email,
+                }
 
         return result
 

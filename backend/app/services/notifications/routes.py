@@ -7,6 +7,9 @@ from app.utils.decorators import get_current_user
 from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_SHORT_TTL
 from .service import get_user_notifications, mark_notification_read, mark_all_notifications_read
 
+
+import logging
+logger = logging.getLogger(__name__)
 notifications_bp = Blueprint('notifications', __name__)
 
 
@@ -44,10 +47,11 @@ def get_notifications():
         return jsonify(result), 200
 
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to fetch notifications',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -75,10 +79,11 @@ def mark_notification_read(notification_id):
 
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to update notification',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -105,8 +110,9 @@ def mark_all_notifications_read():
 
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to update notifications',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500

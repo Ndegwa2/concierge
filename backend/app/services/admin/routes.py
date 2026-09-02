@@ -20,6 +20,9 @@ from .service import (
 )
 from datetime import datetime, timezone
 
+
+import logging
+logger = logging.getLogger(__name__)
 admin_bp = Blueprint('admin', __name__)
 
 
@@ -40,10 +43,11 @@ def get_dashboard():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get dashboard data',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -72,10 +76,11 @@ def get_all_users():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get users',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -103,10 +108,11 @@ def get_user(user_id):
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get user',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -128,10 +134,11 @@ def get_all_appointments():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get appointments',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -160,10 +167,11 @@ def get_service_history():
         return jsonify(result), 200
         
     except Exception as e:
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to get service history',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -193,10 +201,11 @@ def create_notification():
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to create notification',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
 
 
@@ -227,8 +236,9 @@ def create_discount():
         
     except Exception as e:
         db.session.rollback()
+        logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to create discount',
-            'error': str(e)
+            'error': 'An internal server error occurred.'
         }), 500
