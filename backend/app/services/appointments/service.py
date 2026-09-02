@@ -2,7 +2,8 @@ from app import db
 from app.services.auth.models import User
 from app.services.catalog.models import Service, DiscountCode
 from app.services.vehicles.models import Vehicle
-from app.services.appointments.models import Appointment, ServiceHistory
+from app.services.appointments.models import Appointment, Assignment, ServiceHistory
+from app.services.employees.models import Employee
 from datetime import datetime, timedelta, timezone
 
 
@@ -10,7 +11,6 @@ def get_appointments_query(current_user):
     if current_user['role'] == 'admin':
         appointments = Appointment.query.all()
     elif current_user['role'] == 'employee':
-        from app.services.employees.models import Employee
         appointments = Appointment.query.join(Assignment).filter(
             Assignment.employee_id == Employee.query.filter_by(
                 user_id=current_user['id']

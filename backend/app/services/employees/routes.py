@@ -496,6 +496,23 @@ def assign_employee_to_appointment(appointment_id):
             }
         }), 201
         
+    except ValueError as e:
+        db.session.rollback()
+        message = str(e)
+        if message == 'Appointment not found':
+            status = 404
+        elif message == 'Employee not found':
+            status = 404
+        elif message == 'employee_id is required':
+            status = 400
+        else:
+            status = 409
+            message = 'An unexpected error occurred during assignment'
+        return jsonify({
+            'success': False,
+            'message': message,
+            'error': message
+        }), status
     except Exception as e:
         db.session.rollback()
         return jsonify({
@@ -508,7 +525,7 @@ def assign_employee_to_appointment(appointment_id):
 @employees_bp.route('/dashboard', methods=['GET'])
 @jwt_required()
 @employee_required
-def get_employee_dashboard():
+def employee_dashboard():
     try:
         current_user = get_current_user()
         cache_key = f"employee:dashboard:{current_user['id']}"
@@ -636,11 +653,11 @@ def get_my_schedule():
 @employees_bp.route('/profile', methods=['GET'])
 @jwt_required()
 @employee_required
-def get_my_profile():
+def my_profile():
     try:
         current_user = get_current_user()
         employee = get_my_profile(current_user)
-        
+
         return jsonify({
             'success': True,
             'data': {
