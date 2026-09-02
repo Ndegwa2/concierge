@@ -229,8 +229,8 @@ export function FleetBilling() {
                 <DialogDescription>Record a new expense for the fleet</DialogDescription>
               </DialogHeader>
               <form onSubmit={handleAddExpense} className="space-y-3">
-                <div><Label>Type</Label>
-                  <select className="w-full border rounded-md p-2" value={expenseForm.expense_type} onChange={e => setExpenseForm({ ...expenseForm, expense_type: e.target.value })}>
+                <div><Label htmlFor="expense_type">Type</Label>
+                  <select id="expense_type" name="expense_type" className="w-full border rounded-md p-2" value={expenseForm.expense_type} onChange={e => setExpenseForm({ ...expenseForm, expense_type: e.target.value })}>
                     <option value="garage">Garage</option>
                     <option value="driver_surcharge">Driver Surcharge</option>
                     <option value="fuel">Fuel</option>
@@ -238,10 +238,10 @@ export function FleetBilling() {
                     <option value="other">Other</option>
                   </select>
                 </div>
-                <div><Label>Description</Label><Input required value={expenseForm.description} onChange={e => setExpenseForm({ ...expenseForm, description: e.target.value })} /></div>
-                <div><Label>Amount (KES)</Label><Input type="number" required value={expenseForm.amount} onChange={e => setExpenseForm({ ...expenseForm, amount: e.target.value })} /></div>
-                <div><Label>Date</Label><Input type="date" value={expenseForm.incurred_at} onChange={e => setExpenseForm({ ...expenseForm, incurred_at: e.target.value })} /></div>
-                <div><Label>Vehicle ID</Label><Input type="number" value={expenseForm.vehicle_id} onChange={e => setExpenseForm({ ...expenseForm, vehicle_id: e.target.value })} /></div>
+                <div><Label htmlFor="expense_description">Description</Label><Input id="expense_description" name="description" required value={expenseForm.description} onChange={e => setExpenseForm({ ...expenseForm, description: e.target.value })} /></div>
+                <div><Label htmlFor="expense_amount">Amount (KES)</Label><Input id="expense_amount" name="amount" type="number" required value={expenseForm.amount} onChange={e => setExpenseForm({ ...expenseForm, amount: e.target.value })} /></div>
+                <div><Label htmlFor="expense_date">Date</Label><Input id="expense_date" name="incurred_at" type="date" value={expenseForm.incurred_at} onChange={e => setExpenseForm({ ...expenseForm, incurred_at: e.target.value })} /></div>
+                <div><Label htmlFor="expense_vehicle_id">Vehicle ID</Label><Input id="expense_vehicle_id" name="vehicle_id" type="number" value={expenseForm.vehicle_id} onChange={e => setExpenseForm({ ...expenseForm, vehicle_id: e.target.value })} /></div>
                 <Button type="submit" className="w-full">Record Expense</Button>
               </form>
             </DialogContent>
@@ -260,24 +260,24 @@ export function FleetBilling() {
                 </DialogHeader>
                 <form onSubmit={handleGenerateInvoice} className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
-                    <div><Label>Period Start</Label><Input type="date" required value={invoiceForm.period_start} onChange={e => setInvoiceForm({ ...invoiceForm, period_start: e.target.value })} /></div>
-                    <div><Label>Period End</Label><Input type="date" required value={invoiceForm.period_end} onChange={e => setInvoiceForm({ ...invoiceForm, period_end: e.target.value })} /></div>
+                    <div><Label htmlFor="period_start">Period Start</Label><Input id="period_start" name="period_start" type="date" required value={invoiceForm.period_start} onChange={e => setInvoiceForm({ ...invoiceForm, period_start: e.target.value })} /></div>
+                    <div><Label htmlFor="period_end">Period End</Label><Input id="period_end" name="period_end" type="date" required value={invoiceForm.period_end} onChange={e => setInvoiceForm({ ...invoiceForm, period_end: e.target.value })} /></div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div><Label>Tax Amount (KES)</Label><Input type="number" value={invoiceForm.tax_amount} onChange={e => setInvoiceForm({ ...invoiceForm, tax_amount: e.target.value })} /></div>
-                    <div><Label>Currency</Label><Input value={invoiceForm.currency} onChange={e => setInvoiceForm({ ...invoiceForm, currency: e.target.value })} /></div>
+                    <div><Label htmlFor="tax_amount">Tax Amount (KES)</Label><Input id="tax_amount" name="tax_amount" type="number" value={invoiceForm.tax_amount} onChange={e => setInvoiceForm({ ...invoiceForm, tax_amount: e.target.value })} /></div>
+                    <div><Label htmlFor="currency">Currency</Label><Input id="currency" name="currency" value={invoiceForm.currency} onChange={e => setInvoiceForm({ ...invoiceForm, currency: e.target.value })} /></div>
                   </div>
-                  <div><Label>Due Date</Label><Input type="date" value={invoiceForm.due_date} onChange={e => setInvoiceForm({ ...invoiceForm, due_date: e.target.value })} /></div>
-                  <div><Label>Notes</Label><Textarea value={invoiceForm.notes} onChange={e => setInvoiceForm({ ...invoiceForm, notes: e.target.value })} /></div>
+                  <div><Label htmlFor="due_date">Due Date</Label><Input id="due_date" name="due_date" type="date" value={invoiceForm.due_date} onChange={e => setInvoiceForm({ ...invoiceForm, due_date: e.target.value })} /></div>
+                  <div><Label htmlFor="notes">Notes</Label><Textarea id="notes" name="notes" value={invoiceForm.notes} onChange={e => setInvoiceForm({ ...invoiceForm, notes: e.target.value })} /></div>
                   <div>
                     <div className="flex items-center justify-between mb-2"><Label>Line Items</Label><Button type="button" size="sm" variant="outline" onClick={addLineItem}><Plus className="h-4 w-4 mr-1" />Add</Button></div>
                     <div className="space-y-2">
                       {lineItems.map((li, i) => (
                         <div key={li.id} className="grid grid-cols-12 gap-2 items-end">
-                          <div className="col-span-5"><Input placeholder="Description" value={li.description} onChange={e => updateLineItem(i, 'description', e.target.value)} /></div>
-                          <div className="col-span-2"><Input type="number" placeholder="Qty" value={li.quantity} onChange={e => updateLineItem(i, 'quantity', Number(e.target.value))} /></div>
-                          <div className="col-span-2"><Input type="number" placeholder="Unit Price" value={li.unit_price} onChange={e => updateLineItem(i, 'unit_price', Number(e.target.value))} /></div>
-                          <div className="col-span-2"><Input type="number" placeholder="Total" value={li.total_price} readOnly /></div>
+                          <div className="col-span-5"><Input id={`li-desc-${i}`} name={`line_items[${i}][description]`} placeholder="Description" value={li.description} onChange={e => updateLineItem(i, 'description', e.target.value)} /></div>
+                          <div className="col-span-2"><Input id={`li-qty-${i}`} name={`line_items[${i}][quantity]`} type="number" placeholder="Qty" value={li.quantity} onChange={e => updateLineItem(i, 'quantity', Number(e.target.value))} /></div>
+                          <div className="col-span-2"><Input id={`li-price-${i}`} name={`line_items[${i}][unit_price]`} type="number" placeholder="Unit Price" value={li.unit_price} onChange={e => updateLineItem(i, 'unit_price', Number(e.target.value))} /></div>
+                          <div className="col-span-2"><Input id={`li-total-${i}`} name={`line_items[${i}][total_price]`} type="number" placeholder="Total" value={li.total_price} readOnly /></div>
                           <div className="col-span-1"><Button type="button" variant="ghost" size="sm" onClick={() => removeLineItem(i)}><Trash2 className="h-4 w-4 text-red-600" /></Button></div>
                         </div>
                       ))}

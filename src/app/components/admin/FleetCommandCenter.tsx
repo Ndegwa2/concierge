@@ -230,12 +230,12 @@ export function FleetCommandCenter() {
                 <DialogDescription>Register a new fleet company in the system</DialogDescription>
               </DialogHeader>
               <form onSubmit={handleAddCompany} className="space-y-3">
-                <div><Label>Company Name</Label><Input required value={companyForm.name} onChange={e => setCompanyForm({ ...companyForm, name: e.target.value })} /></div>
-                <div><Label>Contact Name</Label><Input value={companyForm.contact_name} onChange={e => setCompanyForm({ ...companyForm, contact_name: e.target.value })} /></div>
-                <div><Label>Email</Label><Input type="email" value={companyForm.email} onChange={e => setCompanyForm({ ...companyForm, email: e.target.value })} /></div>
-                <div><Label>Phone</Label><Input value={companyForm.phone} onChange={e => setCompanyForm({ ...companyForm, phone: e.target.value })} /></div>
-                <div><Label>Payment Terms</Label><Input value={companyForm.payment_terms} onChange={e => setCompanyForm({ ...companyForm, payment_terms: e.target.value })} /></div>
-                <div><Label>Notes</Label><Textarea value={companyForm.notes} onChange={e => setCompanyForm({ ...companyForm, notes: e.target.value })} /></div>
+                <div><Label htmlFor="company_name">Company Name</Label><Input id="company_name" name="name" required value={companyForm.name} onChange={e => setCompanyForm({ ...companyForm, name: e.target.value })} /></div>
+                <div><Label htmlFor="contact_name">Contact Name</Label><Input id="contact_name" name="contact_name" value={companyForm.contact_name} onChange={e => setCompanyForm({ ...companyForm, contact_name: e.target.value })} /></div>
+                <div><Label htmlFor="company_email">Email</Label><Input id="company_email" name="email" type="email" value={companyForm.email} onChange={e => setCompanyForm({ ...companyForm, email: e.target.value })} /></div>
+                <div><Label htmlFor="company_phone">Phone</Label><Input id="company_phone" name="phone" value={companyForm.phone} onChange={e => setCompanyForm({ ...companyForm, phone: e.target.value })} /></div>
+                <div><Label htmlFor="payment_terms">Payment Terms</Label><Input id="payment_terms" name="payment_terms" value={companyForm.payment_terms} onChange={e => setCompanyForm({ ...companyForm, payment_terms: e.target.value })} /></div>
+                <div><Label htmlFor="company_notes">Notes</Label><Textarea id="company_notes" name="notes" value={companyForm.notes} onChange={e => setCompanyForm({ ...companyForm, notes: e.target.value })} /></div>
                 <Button type="submit" className="w-full">Create Company</Button>
               </form>
             </DialogContent>
@@ -251,27 +251,27 @@ export function FleetCommandCenter() {
               </DialogHeader>
               <form onSubmit={handleAddVehicle} className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Make</Label><Input required value={vehicleForm.make} onChange={e => setVehicleForm({ ...vehicleForm, make: e.target.value })} /></div>
-                  <div><Label>Model</Label><Input required value={vehicleForm.model} onChange={e => setVehicleForm({ ...vehicleForm, model: e.target.value })} /></div>
+                  <div><Label htmlFor="vehicle_make">Make</Label><Input id="vehicle_make" name="make" required value={vehicleForm.make} onChange={e => setVehicleForm({ ...vehicleForm, make: e.target.value })} /></div>
+                  <div><Label htmlFor="vehicle_model">Model</Label><Input id="vehicle_model" name="model" required value={vehicleForm.model} onChange={e => setVehicleForm({ ...vehicleForm, model: e.target.value })} /></div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Year</Label><Input type="number" value={vehicleForm.year} onChange={e => setVehicleForm({ ...vehicleForm, year: e.target.value })} /></div>
-                  <div><Label>License Plate</Label><Input required value={vehicleForm.license_plate} onChange={e => setVehicleForm({ ...vehicleForm, license_plate: e.target.value })} /></div>
+                  <div><Label htmlFor="vehicle_year">Year</Label><Input id="vehicle_year" name="year" type="number" value={vehicleForm.year} onChange={e => setVehicleForm({ ...vehicleForm, year: e.target.value })} /></div>
+                  <div><Label htmlFor="license_plate">License Plate</Label><Input id="license_plate" name="license_plate" required value={vehicleForm.license_plate} onChange={e => setVehicleForm({ ...vehicleForm, license_plate: e.target.value })} /></div>
                 </div>
-                <div><Label>VIN</Label><Input value={vehicleForm.vin} onChange={e => setVehicleForm({ ...vehicleForm, vin: e.target.value })} /></div>
+                <div><Label htmlFor="vin">VIN</Label><Input id="vin" name="vin" value={vehicleForm.vin} onChange={e => setVehicleForm({ ...vehicleForm, vin: e.target.value })} /></div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Status</Label>
-                    <select className="w-full border rounded-md p-2" value={vehicleForm.status} onChange={e => setVehicleForm({ ...vehicleForm, status: e.target.value })}>
+                  <div><Label htmlFor="vehicle_status">Status</Label>
+                    <select id="vehicle_status" name="status" className="w-full border rounded-md p-2" value={vehicleForm.status} onChange={e => setVehicleForm({ ...vehicleForm, status: e.target.value })}>
                       <option value="active">Active</option>
                       <option value="in-service">In Service</option>
                       <option value="maintenance-due">Maintenance Due</option>
                     </select>
                   </div>
-                  <div><Label>Mileage (km)</Label><Input type="number" value={vehicleForm.mileage_km} onChange={e => setVehicleForm({ ...vehicleForm, mileage_km: e.target.value })} /></div>
+                  <div><Label htmlFor="mileage_km">Mileage (km)</Label><Input id="mileage_km" name="mileage_km" type="number" value={vehicleForm.mileage_km} onChange={e => setVehicleForm({ ...vehicleForm, mileage_km: e.target.value })} /></div>
                 </div>
-                <div><Label>Assigned Concierge ID</Label><Input type="number" value={vehicleForm.assigned_employee_id} onChange={e => setVehicleForm({ ...vehicleForm, assigned_employee_id: e.target.value })} /></div>
-                <div><Label>Last Service Date</Label><Input type="date" value={vehicleForm.last_service_date} onChange={e => setVehicleForm({ ...vehicleForm, last_service_date: e.target.value })} /></div>
-                <div><Label>Notes</Label><Textarea value={vehicleForm.notes} onChange={e => setVehicleForm({ ...vehicleForm, notes: e.target.value })} /></div>
+                <div><Label htmlFor="assigned_employee_id">Assigned Concierge ID</Label><Input id="assigned_employee_id" name="assigned_employee_id" type="number" value={vehicleForm.assigned_employee_id} onChange={e => setVehicleForm({ ...vehicleForm, assigned_employee_id: e.target.value })} /></div>
+                <div><Label htmlFor="last_service_date">Last Service Date</Label><Input id="last_service_date" name="last_service_date" type="date" value={vehicleForm.last_service_date} onChange={e => setVehicleForm({ ...vehicleForm, last_service_date: e.target.value })} /></div>
+                <div><Label htmlFor="vehicle_notes">Notes</Label><Textarea id="vehicle_notes" name="notes" value={vehicleForm.notes} onChange={e => setVehicleForm({ ...vehicleForm, notes: e.target.value })} /></div>
                 <Button type="submit" className="w-full">Add Vehicle</Button>
               </form>
             </DialogContent>
@@ -300,9 +300,9 @@ export function FleetCommandCenter() {
                   <DialogDescription>Schedule a bulk service run for fleet vehicles</DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleBulkSchedule} className="space-y-3">
-                  <div><Label>Service Date</Label><Input type="date" name="service_date" required /></div>
-                  <div><Label>Description</Label><Input name="description" /></div>
-                  <div><Label>Estimated Cost (KES)</Label><Input type="number" name="amount" required /></div>
+                  <div><Label htmlFor="service_date">Service Date</Label><Input id="service_date" type="date" name="service_date" required /></div>
+                  <div><Label htmlFor="description">Description</Label><Input id="description" name="description" /></div>
+                  <div><Label htmlFor="amount">Estimated Cost (KES)</Label><Input id="amount" type="number" name="amount" required /></div>
                   <Button type="submit" className="w-full">Schedule Run</Button>
                 </form>
               </DialogContent>
