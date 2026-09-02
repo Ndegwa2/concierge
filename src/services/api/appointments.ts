@@ -42,7 +42,7 @@ export const appointmentsApi = {
     });
   },
 
-  async cancelAppointment(id: number): Promise<ApiResponse<{}>> {
+  async cancelAppointment(id: number): Promise<ApiResponse<{ appointment: Appointment }>> {
     return apiClient.request(`/appointments/${id}`, {
       method: 'DELETE',
     });

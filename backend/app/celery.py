@@ -80,3 +80,34 @@ def make_celery(app=None):
 
 
 celery = make_celery()
+
+
+class ContextTask(celery.Task):
+    """Ensure Celery tasks run within Flask app context.
+
+    The module-level ``celery`` instance is created by ``make_celery()``
+    without an ``app`` argument (the app factory sets the Task class on a
+    *separate* instance stored in ``app.extensions['celery']``).  This
+    custom Task lazily bootstraps a Flask app the first time a task runs
+    under the worker so that extensions such as ``current_app`` / ``db`` /
+    ``flask_mail`` work correctly.
+    """
+    _flask_app = None
+
+    def __call__(self, *args, **kwargs):
+        if ContextTask._flask_app is None:
+            from pathlib import Path
+            from dotenv import load_dotenv
+            backend_dir = Path(__file__).resolve().parent.parent
+            for env_name in ('.env', '../.env'):
+                env_path = (backend_dir / env_name).resolve()
+                if env_path.exists():
+                    load_dotenv(env_path)
+                    break
+            from app import create_app
+            ContextTask._flask_app = create_app()
+        with ContextTask._flask_app.app_context():
+            return self.run(*args, **kwargs)
+
+
+celery.Task = ContextTask

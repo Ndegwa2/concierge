@@ -11,7 +11,8 @@ import {
   Send,
   Search,
   Filter,
-  RefreshCw
+  RefreshCw,
+  Plus,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
@@ -19,7 +20,7 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { toast } from 'sonner';
-import { useAppointments } from '@/hooks/useApi';
+import { useAppointments, useCancelAppointment } from '@/hooks/useApi';
 import { appointmentsApi } from '@/services/api';
 import type { Appointment } from '@/services/api';
 
@@ -65,8 +66,9 @@ const item = {
   show: { opacity: 1, y: 0 },
 };
 
-export function CustomerAppointments({ onConfirmReturn }: { onConfirmReturn?: (appointment: Appointment) => void }) {
+export function CustomerAppointments({ onConfirmReturn, onBookAppointment }: { onConfirmReturn?: (appointment: Appointment) => void; onBookAppointment?: () => void }) {
   const { data: appointments = [], isLoading: appointmentsLoading, refetch: refetchAppointments } = useAppointments();
+  const cancelMutation = useCancelAppointment();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('upcoming');
@@ -107,9 +109,12 @@ export function CustomerAppointments({ onConfirmReturn }: { onConfirmReturn?: (a
     if (!confirm('Are you sure you want to cancel this appointment?')) return;
 
     try {
-      await appointmentsApi.cancelAppointment(appointment.id);
-      toast.success('Appointment cancelled successfully');
-      refetchAppointments();
+      const response = await cancelMutation.mutateAsync(appointment.id);
+      if (response.success) {
+        toast.success('Appointment cancelled successfully');
+      } else {
+        toast.error(response.message || 'Failed to cancel appointment');
+      }
     } catch (error) {
       toast.error('Failed to cancel appointment');
     }
@@ -297,6 +302,13 @@ export function CustomerAppointments({ onConfirmReturn }: { onConfirmReturn?: (a
           />
         </div>
         <div className="flex gap-2">
+          <Button
+            onClick={onBookAppointment}
+            className="gap-2 bg-slate-900 hover:bg-slate-800 text-white"
+          >
+            <Plus className="h-4 w-4" />
+            Book Appointment
+          </Button>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}

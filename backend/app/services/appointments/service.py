@@ -261,7 +261,7 @@ def update_appointment(appointment_id, current_user, data):
     return appointment, original_status
 
 
-def delete_appointment(appointment_id, current_user):
+def cancel_appointment(appointment_id, current_user):
     appointment = Appointment.query.get(appointment_id)
     
     if not appointment:
@@ -270,8 +270,9 @@ def delete_appointment(appointment_id, current_user):
     if current_user['role'] == 'customer' and appointment.user_id != current_user['id']:
         raise ValueError('Unauthorized access')
     
-    db.session.delete(appointment)
+    appointment.status = 'cancelled'
     db.session.commit()
+    return appointment
 
 
 def confirm_vehicle_return(appointment_id, current_user, data):

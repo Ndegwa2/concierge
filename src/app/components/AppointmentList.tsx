@@ -4,6 +4,7 @@ import { Button } from '@/app/components/ui/button';
 import { Clock, MapPin, Calendar, Car, CheckCircle2, Star, Download, Send, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { appointmentsApi } from '@/services/api';
+import { useCancelAppointment } from '@/hooks/useApi';
 import type { Appointment } from '@/services/api';
 
 interface AppointmentListProps {
@@ -21,7 +22,8 @@ export function AppointmentList({
   onCancel,
   refreshTrigger 
 }: AppointmentListProps) {
-  
+   const cancelMutation = useCancelAppointment();
+
   const getStatusColor = (status: Appointment['status']) => {
     switch (status) {
       case 'scheduled':
@@ -60,9 +62,13 @@ export function AppointmentList({
     if (!confirm('Are you sure you want to cancel this appointment?')) return;
     
     try {
-      await appointmentsApi.cancelAppointment(appointment.id);
-      toast.success('Appointment cancelled successfully');
-      onCancel?.(appointment);
+      const response = await cancelMutation.mutateAsync(appointment.id);
+      if (response.success) {
+        toast.success('Appointment cancelled successfully');
+        onCancel?.(appointment);
+      } else {
+        toast.error(response.message || 'Failed to cancel appointment');
+      }
     } catch (error) {
       toast.error('Failed to cancel appointment');
     }
@@ -107,7 +113,9 @@ export function AppointmentList({
     });
   };
 
-  if (appointments.length === 0) {
+  const activeAppointments = appointments.filter(a => a.status !== 'cancelled');
+
+  if (activeAppointments.length === 0) {
     return (
       <div className="text-center py-12">
         <Calendar className="h-12 w-12 text-slate-300 mx-auto mb-4" />
@@ -119,7 +127,7 @@ export function AppointmentList({
 
   return (
     <div className="space-y-4">
-      {appointments.map((appointment) => (
+      {activeAppointments.map((appointment) => (
         <Card key={appointment.id} className="hover:shadow-md transition-shadow">
           <CardHeader className="pb-3">
             <div className="flex items-start justify-between">

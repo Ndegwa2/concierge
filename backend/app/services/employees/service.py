@@ -411,6 +411,7 @@ def assign_employee_to_appointment(appointment_id, data=None):
     db.session.commit()
 
     _notify_employee_assigned(assignment, employee, appointment)
+    _notify_admins_assignment(assignment, employee, appointment)
     return assignment
 
 
@@ -477,6 +478,83 @@ def _notify_employee_assigned(assignment, employee, appointment):
     except Exception as exc:
         import logging
         logging.getLogger(__name__).warning('Failed to enqueue employee assignment email: %s', exc)
+
+
+def _notify_admins_assignment(assignment, employee, appointment):
+    """Create an in-app Notification for every admin and queue an email when an employee is assigned."""
+    import logging
+    from app.services.notifications.models import Notification
+    from app.services.auth.models import User
+    from app.services.vehicles.models import Vehicle
+    from app.services.catalog.models import Service
+    from app.tasks.email_tasks import send_email
+
+    admins = User.query.filter(
+        (User.role.in_(['admin', 'super_admin'])) | (User.is_admin.is_(True))
+    ).all()
+
+    if not admins:
+        return
+
+    customer = User.query.get(appointment.user_id)
+    vehicle = Vehicle.query.get(appointment.vehicle_id) if appointment.vehicle_id else None
+    service = Service.query.get(appointment.service_id) if appointment.service_id else None
+    employee_user = User.query.get(employee.user_id) if employee and employee.user_id else None
+
+    customer_name = customer.name if customer else f'Customer #{appointment.user_id}'
+    employee_name = employee_user.name if employee_user else (employee.employee_id if employee else 'Unknown')
+    vehicle_label = (
+        f'{vehicle.make} {vehicle.model} ({vehicle.year})' if vehicle
+        else f'Vehicle #{appointment.vehicle_id}'
+    )
+    service_name = service.name if service else f'Service #{appointment.service_id}'
+    scheduled = appointment.appointment_date.strftime('%Y-%m-%d %H:%M') if appointment.appointment_date else 'unscheduled'
+
+    title = 'Employee assigned to appointment'
+    message = (
+        f'{employee_name} has been assigned to {service_name} for {vehicle_label} '
+        f'({scheduled}) — Appointment #{appointment.id} for {customer_name}.'
+    )
+
+    for admin in admins:
+        try:
+            note = Notification(
+                user_id=admin.id,
+                title=title,
+                message=message,
+                notification_type='assignment',
+            )
+            db.session.add(note)
+        except Exception as exc:
+            logging.getLogger(__name__).warning('Failed to create admin notification: %s', exc)
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return
+
+    for admin in admins:
+        if not admin.email:
+            continue
+        try:
+            email_subject = f'[AutoConcierge] Appointment #{appointment.id} — {employee_name} assigned'
+            email_body = (
+                f"Hi {admin.name},\n\n"
+                f"An employee has been assigned to a new job.\n\n"
+                f"  Employee:    {employee_name}\n"
+                f"  Customer:    {customer_name}\n"
+                f"  Service:     {service_name}\n"
+                f"  Vehicle:     {vehicle_label}\n"
+                f"  Date/Time:   {scheduled}\n"
+                f"  Appointment ID: {appointment.id}\n"
+                f"  Assignment ID:  {assignment.id}\n\n"
+                f"Open the admin dashboard to view details.\n\n"
+                f"AutoConcierge"
+            )
+            send_email.delay(admin.email, email_subject, email_body)
+        except Exception as exc:
+            logging.getLogger(__name__).warning('Failed to enqueue admin assignment email: %s', exc)
 
 
 def get_employee_dashboard(current_user):

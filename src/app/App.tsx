@@ -420,6 +420,7 @@ export default function App() {
 
             <CustomerAppointments
               onConfirmReturn={handleConfirmReturn}
+              onBookAppointment={() => setCurrentView('booking')}
             />
           </div>
 

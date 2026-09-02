@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   PlayCircle,
   PauseCircle,
+  XCircle,
   MapPin,
   ChevronRight,
   History,

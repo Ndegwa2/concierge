@@ -243,7 +243,10 @@ export function useCancelAppointment() {
 
   return useMutation({
     mutationFn: appointmentsApi.cancelAppointment.bind(appointmentsApi),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (data.success && data.data?.appointment) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.appointment(data.data.appointment.id) });
+      }
       queryClient.invalidateQueries({ queryKey: queryKeys.appointments });
       queryClient.invalidateQueries({ queryKey: queryKeys.allAppointmentsAdmin });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });

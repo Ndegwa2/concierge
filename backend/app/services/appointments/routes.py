@@ -17,7 +17,7 @@ from .service import (
     apply_discount_safely,
     create_appointment as svc_create_appointment,
     update_appointment as svc_update_appointment,
-    delete_appointment as svc_delete_appointment,
+    cancel_appointment as svc_cancel_appointment,
     confirm_vehicle_return as svc_confirm_vehicle_return,
 )
 from datetime import datetime, timedelta, timezone
@@ -195,10 +195,10 @@ def update_appointment(appointment_id):
 @appointments_bp.route('/<int:appointment_id>', methods=['DELETE'])
 @jwt_required()
 @role_required('admin', 'customer')
-def delete_appointment(appointment_id):
+def cancel_appointment(appointment_id):
     try:
         current_user = get_current_user()
-        svc_delete_appointment(appointment_id, current_user)
+        appointment = svc_cancel_appointment(appointment_id, current_user)
 
         cache_delete_pattern("appointments:*")
         cache_delete_pattern("admin:appointments:*")
@@ -207,7 +207,10 @@ def delete_appointment(appointment_id):
         
         return jsonify({
             'success': True,
-            'message': 'Appointment deleted successfully'
+            'message': 'Appointment cancelled successfully',
+            'data': {
+                'appointment': appointment.to_dict()
+            }
         }), 200
         
     except ValueError as e:
@@ -221,7 +224,7 @@ def delete_appointment(appointment_id):
         logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
-            'message': 'Failed to delete appointment',
+            'message': 'Failed to cancel appointment',
             'error': 'An internal server error occurred.'
         }), 500
 
