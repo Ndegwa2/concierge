@@ -4,12 +4,13 @@ from app.services.catalog.models import Service
 from app.services.employees.models import Employee
 from app.services.appointments.models import Appointment
 from app.services.admin.models import AuditLog, SystemMetric, ActivityTracker
+from app.utils.db_router import get_read_model_query, get_read_session
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import func
 
 
 def get_audit_logs_query(page=1, per_page=50, user_id=None, action=None, entity_type=None, status=None, start_date=None, end_date=None, search=None):
-    query = AuditLog.query
+    query = get_read_model_query(AuditLog)
     
     if user_id:
         query = query.filter(
@@ -62,7 +63,7 @@ def get_audit_logs_query(page=1, per_page=50, user_id=None, action=None, entity_
 
 
 def get_audit_log_by_id(log_id):
-    audit_log = AuditLog.query.get(log_id)
+    audit_log = get_read_model_query(AuditLog).get(log_id)
     
     if not audit_log:
         raise ValueError('Audit log not found')
@@ -71,8 +72,8 @@ def get_audit_log_by_id(log_id):
 
 
 def get_audit_actions_query():
-    actions = db.session.query(AuditLog.action).distinct().all()
-    entity_types = db.session.query(AuditLog.entity_type).distinct().all()
+    actions = get_read_session().query(AuditLog.action).distinct().all()
+    entity_types = get_read_session().query(AuditLog.entity_type).distinct().all()
     
     return {
         'success': True,
@@ -84,7 +85,7 @@ def get_audit_actions_query():
 
 
 def get_activities_query(page=1, per_page=50, user_id=None, activity_type=None, start_date=None, end_date=None):
-    query = ActivityTracker.query
+    query = get_read_model_query(ActivityTracker)
     
     if user_id:
         query = query.filter(
@@ -123,7 +124,7 @@ def get_activities_query(page=1, per_page=50, user_id=None, activity_type=None, 
 def get_online_users_query():
     threshold = datetime.now(timezone.utc) - timedelta(minutes=15)
     
-    online_users = db.session.query(
+    online_users = get_read_session().query(
         ActivityTracker.user_id,
         ActivityTracker.admin_id,
         func.max(ActivityTracker.created_at).label('last_activity')
@@ -137,7 +138,7 @@ def get_online_users_query():
     result = []
     for user_activity in online_users:
         user_id = user_activity.user_id or user_activity.admin_id
-        user = db.session.query(User).get(user_id)
+        user = get_read_session().query(User).get(user_id)
         
         if user:
             result.append({
@@ -160,7 +161,7 @@ def get_system_metrics_query(start_date=None, end_date=None, metric_type=None):
     if end_date:
         end_date_dt = datetime.fromisoformat(end_date)
     
-    query = SystemMetric.query.filter(
+    query = get_read_model_query(SystemMetric).filter(
         SystemMetric.period_start >= start_date_dt,
         SystemMetric.period_end <= end_date_dt
     )
@@ -183,27 +184,27 @@ def get_dashboard_metrics():
     start_of_month = datetime(today.year, today.month, 1)
     start_of_week = datetime.now(timezone.utc) - timedelta(days=7)
     
-    total_users = User.query.filter_by(is_active=True).count()
-    new_users_this_month = User.query.filter(
+    total_users = get_read_model_query(User).filter_by(is_active=True).count()
+    new_users_this_month = get_read_model_query(User).filter(
         User.created_at >= start_of_month
     ).count()
     
-    total_appointments = Appointment.query.count()
-    appointments_this_month = Appointment.query.filter(
+    total_appointments = get_read_model_query(Appointment).count()
+    appointments_this_month = get_read_model_query(Appointment).filter(
         Appointment.created_at >= start_of_month
     ).count()
-    appointments_this_week = Appointment.query.filter(
+    appointments_this_week = get_read_model_query(Appointment).filter(
         Appointment.created_at >= start_of_week
     ).count()
     
-    status_counts = db.session.query(
+    status_counts = get_read_session().query(
         Appointment.status,
         func.count(Appointment.id)
     ).group_by(Appointment.status).all()
     
     status_breakdown = {status: count for status, count in status_counts}
     
-    revenue_result = db.session.query(
+    revenue_result = get_read_session().query(
         func.sum(Appointment.total_amount)
     ).filter(
         Appointment.payment_status == 'paid',
@@ -212,20 +213,20 @@ def get_dashboard_metrics():
     
     monthly_revenue = float(revenue_result) if revenue_result else 0.0
     
-    total_employees = Employee.query.filter_by(status='active').count()
+    total_employees = get_read_model_query(Employee).filter_by(status='active').count()
     
-    total_services = Service.query.filter_by(is_active=True).count()
+    total_services = get_read_model_query(Service).filter_by(is_active=True).count()
     
     activity_threshold = datetime.now(timezone.utc) - timedelta(hours=24)
-    api_calls_24h = ActivityTracker.query.filter(
+    api_calls_24h = get_read_model_query(ActivityTracker).filter(
         ActivityTracker.created_at >= activity_threshold,
         ActivityTracker.activity_type == 'api_call'
     ).count()
     
-    actions_24h = AuditLog.query.filter(
+    actions_24h = get_read_model_query(AuditLog).filter(
         AuditLog.created_at >= activity_threshold
     ).count()
-    failed_actions_24h = AuditLog.query.filter(
+    failed_actions_24h = get_read_model_query(AuditLog).filter(
         AuditLog.created_at >= activity_threshold,
         AuditLog.status == 'failed'
     ).count()
@@ -277,7 +278,7 @@ def get_revenue_metrics(start_date=None, end_date=None, group_by='day'):
     else:
         date_trunc = func.date_trunc('month', Appointment.created_at)
     
-    revenue_data = db.session.query(
+    revenue_data = get_read_session().query(
         date_trunc.label('date'),
         func.sum(Appointment.total_amount).label('revenue'),
         func.count(Appointment.id).label('appointments')
@@ -305,7 +306,7 @@ def get_revenue_metrics(start_date=None, end_date=None, group_by='day'):
 def get_performance_metrics():
     threshold = datetime.now(timezone.utc) - timedelta(hours=24)
     
-    performance_data = db.session.query(
+    performance_data = get_read_session().query(
         ActivityTracker.activity_details['endpoint'].astext.label('endpoint'),
         func.avg(ActivityTracker.duration_ms).label('avg_duration'),
         func.count(ActivityTracker.id).label('call_count'),
@@ -336,7 +337,7 @@ def get_performance_metrics():
 
 
 def health_check():
-    db.session.execute(db.text('SELECT 1'))
+    get_read_session().execute(db.text('SELECT 1'))
     
     return {
         'success': True,
@@ -356,7 +357,7 @@ def detailed_health_check():
     }
 
     try:
-        db.session.execute(db.text('SELECT 1'))
+        get_read_session().execute(db.text('SELECT 1'))
     except Exception as e:
         health_status['database'] = f'unhealthy: {str(e)}'
 
@@ -372,13 +373,13 @@ def detailed_health_check():
         health_status['cache'] = f'unhealthy: {str(e)}'
     
     health_status['counts'] = {
-        'users': User.query.count(),
-        'appointments': Appointment.query.count(),
-        'services': Service.query.count(),
-        'employees': Employee.query.count()
+        'users': get_read_model_query(User).count(),
+        'appointments': get_read_model_query(Appointment).count(),
+        'services': get_read_model_query(Service).count(),
+        'employees': get_read_model_query(Employee).count()
     }
     
-    recent_errors = AuditLog.query.filter(
+    recent_errors = get_read_model_query(AuditLog).filter(
         AuditLog.status == 'error',
         AuditLog.created_at >= datetime.now(timezone.utc) - timedelta(hours=1)
     ).count()

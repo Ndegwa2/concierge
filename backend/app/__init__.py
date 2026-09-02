@@ -302,4 +302,40 @@ def create_app(config_class=None):
             'request_id': g.get('request_id', 'unknown')
         }, 200
     
+    @app.route('/api/health/db', methods=['GET'])
+    def db_health_check():
+        pool_info = {}
+        try:
+            db.session.execute(db.text('SELECT 1'))
+            pool_info['status'] = 'healthy'
+            pool_info['latency'] = 'ok'
+        except Exception as e:
+            pool_info['status'] = f'unhealthy: {str(e)}'
+            pool_info['latency'] = 'failed'
+            return jsonify({
+                'success': False,
+                'status': 'unhealthy',
+                'timestamp': datetime.now(timezone.utc).isoformat(),
+                'database': pool_info,
+                'request_id': g.get('request_id', 'unknown')
+            }), 503
+        
+        try:
+            engine = db.engine
+            pool = engine.pool
+            pool_info['pool_size'] = pool.size() if hasattr(pool, 'size') else 'unknown'
+            pool_info['checkedin'] = pool.checkedin() if hasattr(pool, 'checkedin') else 'unknown'
+            pool_info['checkedout'] = pool.checkedout() if hasattr(pool, 'checkedout') else 'unknown'
+            pool_info['overflow'] = pool.overflow() if hasattr(pool, 'overflow') else 'unknown'
+        except Exception:
+            pool_info['pool_details'] = 'unavailable'
+        
+        return jsonify({
+            'success': True,
+            'status': 'healthy',
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'database': pool_info,
+            'request_id': g.get('request_id', 'unknown')
+        }), 200
+    
     return app
