@@ -3,6 +3,7 @@ from app.services.auth.models import User
 from app.services.employees.models import Employee
 from app.services.appointments.models import Appointment, Assignment
 from app.services.fleets.models import Invoice
+from app.services.workflow.models import WorkRecord, VehicleChecklist
 from app.services.invoices.service import _generate_invoice_number, _load_appointment_entities
 from datetime import datetime, timezone
 from sqlalchemy.exc import SQLAlchemyError
