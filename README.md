@@ -294,7 +294,15 @@ Detailed API documentation is available in [`backend/API.md`](backend/API.md).
 
 ## Database Schema
 
+<<<<<<< HEAD
 The database schema is documented in [`DATABASE.md`](DATABASE.md).
+=======
+The database schema is the single source of truth in [`SCHEMA.md`](SCHEMA.md), auto-generated from the SQLAlchemy models. To regenerate after a model change:
+
+```bash
+cd backend && ../backend/venv/bin/python scripts/generate_schema_doc.py
+```
+>>>>>>> 128fbc89 (docs(db): replace DATABASE.md + database_schema_design.md with single generated SCHEMA.md)
 
 ### Key Models
 - **User** - Customer, employee, and admin accounts
