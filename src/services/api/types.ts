@@ -6,7 +6,7 @@ export interface User {
   email: string;
   phone?: string;
   address?: string;
-  role: 'customer' | 'employee' | 'admin' | 'super_admin';
+  role: 'customer' | 'employee' | 'concierge' | 'admin' | 'super_admin';
   is_active: boolean;
   created_at: string;
   updated_at: string;

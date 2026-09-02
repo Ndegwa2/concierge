@@ -4,7 +4,7 @@
  * This module provides React Query hooks for all API operations.
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, authApi, employeesApi, servicesApi, vehiclesApi, appointmentsApi, adminApi, partnersApi } from '../services/api';
+import { api, authApi, employeesApi, servicesApi, vehiclesApi, appointmentsApi, adminApi, partnersApi, workflowApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import type { User, Vehicle, Appointment, ServicePartner, Employee, EmployeeAssignment, TimeOffRequest, IssueReport, TimeLog } from '../services/api';
 
@@ -272,7 +272,8 @@ export function useMyAssignments(status?: string) {
     queryFn: async () => {
       if (!api.isAuthenticated()) return [];
       const response = await employeesApi.getMyAssignments(status);
-      return response.success ? response.data?.assignments ?? [] : [];
+      if (!response.success) throw new Error(response.message || 'Failed to load assignments');
+      return response.data?.assignments ?? [];
     },
     enabled: api.isAuthenticated(),
   });

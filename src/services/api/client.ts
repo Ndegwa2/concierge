@@ -68,7 +68,6 @@ class ApiClient {
 
       return data;
     } catch (error) {
-      console.error('API request error:', error);
       return {
         success: false,
         message: 'Network error. Please check your connection.',
