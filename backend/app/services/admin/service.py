@@ -42,8 +42,20 @@ def get_dashboard_stats():
     }
 
 
-def get_all_users_query():
-    return User.query.all()
+def get_all_users_query(search=None):
+    query = User.query
+    
+    if search:
+        search_token = User._compute_phone_search_token(search)
+        query = query.filter(
+            db.or_(
+                User.name.ilike(f'%{search}%'),
+                User.email.ilike(f'%{search}%'),
+                User.phone_search_token == search_token
+            )
+        )
+    
+    return query.all()
 
 
 def get_user_by_id(user_id):

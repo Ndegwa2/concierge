@@ -1,6 +1,8 @@
 from app import db
 from sqlalchemy import func
+from sqlalchemy.orm import validates
 from app.core.types import EncryptedString
+import hashlib
 import bcrypt
 
 
@@ -12,12 +14,31 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     phone = db.Column(EncryptedString(255))
+    phone_search_token = db.Column(db.String(64), index=True)
     address = db.Column(EncryptedString(255))
     role = db.Column(db.String(20), default='customer', index=True)
     is_admin = db.Column(db.Boolean, default=False, index=True)
     is_active = db.Column(db.Boolean, default=True, index=True)
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    @staticmethod
+    def _normalize_phone(phone):
+        if not phone:
+            return None
+        return phone.replace(" ", "").replace("-", "")
+
+    @staticmethod
+    def _compute_phone_search_token(phone):
+        normalized = User._normalize_phone(phone)
+        if not normalized:
+            return None
+        return hashlib.sha256(normalized.encode('utf-8')).hexdigest()
+
+    @validates('phone')
+    def _update_phone_search_token(self, key, phone):
+        self.phone_search_token = User._compute_phone_search_token(phone)
+        return phone
 
     def set_password(self, password):
         salt = bcrypt.gensalt()

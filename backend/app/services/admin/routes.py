@@ -57,7 +57,7 @@ def get_all_users():
         if cached is not None:
             return jsonify(cached), 200
 
-        users = get_all_users_query()
+        users = get_all_users_query(search=request.args.get('search'))
 
         result = {
             'success': True,
