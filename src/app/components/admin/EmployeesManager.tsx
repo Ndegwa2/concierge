@@ -47,6 +47,12 @@ import {
   ACCOUNT_STATUSES,
 } from '@/app/components/employee/forms/EmployeeForm';
 
+const USER_ROLES = [
+  { value: 'all', label: 'All Roles' },
+  { value: 'employee', label: 'Employee' },
+  { value: 'concierge', label: 'Concierge' },
+] as const;
+
 interface EmployeeRow {
   id: number;
   user: User;
@@ -70,6 +76,7 @@ export function EmployeesManager() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [roleFilter, setRoleFilter] = useState('all');
   const [sortBy, setSortBy] = useState<'name' | 'employee_id' | 'department' | 'status' | 'start_date'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [currentPage, setCurrentPage] = useState(1);
@@ -115,6 +122,10 @@ export function EmployeesManager() {
       result = result.filter((emp) => emp.employee?.employment_type === typeFilter);
     }
 
+    if (roleFilter !== 'all') {
+      result = result.filter((emp) => emp.user?.role === roleFilter);
+    }
+
     result.sort((a, b) => {
       const getVal = (emp: EmployeeRow, key: string): string => {
         switch (key) {
@@ -140,7 +151,7 @@ export function EmployeesManager() {
     });
 
     return result;
-  }, [employees, searchQuery, statusFilter, departmentFilter, typeFilter, sortBy, sortOrder]);
+  }, [employees, searchQuery, statusFilter, departmentFilter, typeFilter, roleFilter, sortBy, sortOrder]);
 
   const paginatedEmployees = useMemo(() => {
     const startIndex = (currentPage - 1) * rowsPerPage;
@@ -376,7 +387,7 @@ export function EmployeesManager() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold mb-2">Employee Management</h1>
-          <p className="text-slate-600">Manage your organization's employee records, departments, and roles</p>
+          <p className="text-slate-600">Manage your organization's employee and concierge staff records</p>
         </div>
         <div className="flex items-center gap-3">
           {canCreate && (
@@ -437,6 +448,7 @@ export function EmployeesManager() {
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
+                id="employee-search"
                 placeholder="Search by name, ID, email, phone, or title..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -484,6 +496,17 @@ export function EmployeesManager() {
               </SelectContent>
             </Select>
 
+            <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <SelectTrigger className="w-full md:w-48">
+                <SelectValue placeholder="Filter by role" />
+              </SelectTrigger>
+              <SelectContent>
+                {USER_ROLES.map((role) => (
+                  <SelectItem key={role.value} value={role.value}>{role.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
             <Button variant="outline" size="sm" onClick={() => refetch()}>
               Refresh
             </Button>
@@ -508,7 +531,7 @@ export function EmployeesManager() {
             <div className="text-center py-8">
               <UsersIcon className="h-12 w-12 text-slate-300 mx-auto mb-4" />
               <p className="text-slate-500">No employees found matching your search</p>
-              <Button variant="outline" size="sm" className="mt-4" onClick={() => { setSearchQuery(''); setStatusFilter('all'); setDepartmentFilter('all'); setTypeFilter('all'); }}>
+                <Button variant="outline" size="sm" className="mt-4" onClick={() => { setSearchQuery(''); setStatusFilter('all'); setDepartmentFilter('all'); setTypeFilter('all'); setRoleFilter('all'); }}>
                 Clear Filters
               </Button>
             </div>
@@ -534,6 +557,7 @@ export function EmployeesManager() {
                     <TableHead>Department</TableHead>
                     <TableHead>Title</TableHead>
                     <TableHead>Type</TableHead>
+                    <TableHead>Role</TableHead>
                     <TableHead>
                       <Button
                         variant="ghost"
@@ -608,6 +632,11 @@ export function EmployeesManager() {
                           {empProfile.employment_type
                             ? EMPLOYMENT_TYPES.find((t) => t.value === empProfile.employment_type)?.label || empProfile.employment_type
                             : '-'}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs capitalize">
+                            {empUser.role || 'employee'}
+                          </Badge>
                         </TableCell>
                         <TableCell className="text-sm text-slate-600">
                           {empProfile.start_date

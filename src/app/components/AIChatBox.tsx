@@ -190,6 +190,7 @@ export function AIChatBox() {
           <div className="p-3 border-t bg-white">
             <div className="flex gap-2">
               <Input
+                id="ai-chat-input"
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
