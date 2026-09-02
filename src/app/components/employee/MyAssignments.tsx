@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { Search, Filter, Phone, Navigation, CheckCircle2, Clock, XCircle, MapPin } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
@@ -8,11 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/app/components/ui/dialog';
 import { toast } from 'sonner';
-import { employeesApi, workflowApi } from '@/services/api';
-import { useUpdateAssignmentStatus, useStartAssignment, useSubmitChecklist, useSubmitWorkRecord } from '@/hooks/useApi';
+import { useMyAssignments, useUpdateAssignmentStatus, useStartAssignment, useSubmitChecklist, useSubmitWorkRecord } from '@/hooks/useApi';
 import { VehicleChecklistForm } from './VehicleChecklistForm';
 import { WorkRecordForm } from './WorkRecordForm';
-import type { Assignment } from '@/services/api';
 
 interface MyAssignmentsProps {
   employeeData: {
@@ -47,9 +45,6 @@ interface AssignmentDisplay {
 export function MyAssignments({ employeeData }: MyAssignmentsProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [assignments, setAssignments] = useState<AssignmentDisplay[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedAssignment, setSelectedAssignment] = useState<AssignmentDisplay | null>(null);
   const [workflowStep, setWorkflowStep] = useState<'checklist' | 'workrecord' | null>(null);
   const updateStatusMutation = useUpdateAssignmentStatus();
@@ -57,55 +52,40 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
   const submitChecklistMutation = useSubmitChecklist();
   const submitWorkRecordMutation = useSubmitWorkRecord();
 
-  const fetchAssignments = async () => {
-    try {
-      const statusParam = statusFilter === 'all' ? undefined : statusFilter;
-      const response = await employeesApi.getMyAssignments(statusParam);
-      if (response.success && response.data) {
-        const mapped = response.data.assignments.map(a => {
-          const appt = a.appointment;
-          return {
-            id: `A-${appt.id}`,
-            assignmentId: a.id,
-            customer: appt.customer?.name || 'Unknown Customer',
-            phone: appt.customer?.phone || 'N/A',
-            service: appt.service?.name || 'N/A',
-            vehicle: appt.vehicle ? `${appt.vehicle.make} ${appt.vehicle.model} (${appt.vehicle.year})` : 'N/A',
-            pickupLocation: appt.notes ? appt.notes.split('\n')[0] || 'TBD' : 'TBD',
-            serviceLocation: appt.service ? appt.service.name : 'Standard Service Center',
-            date: new Date(appt.appointment_date).toLocaleDateString('en-KE', { month: 'short', day: 'numeric', year: 'numeric' }),
-            time: new Date(appt.appointment_date).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' }),
-            status: a.status || 'pending',
-            estimatedDuration: appt.service ? `${appt.service.duration} min` : 'N/A',
-            specialInstructions: appt.notes,
-            price: appt.total_amount ? `KES ${appt.total_amount.toLocaleString()}` : 'N/A',
-            appointmentId: appt.id,
-            vehicleInfo: appt.vehicle || null,
-            serviceInfo: appt.service || null,
-            notes: appt.notes || '',
-            customerPhone: appt.customer?.phone || '',
-            statusValue: a.status || 'pending',
-          };
-        });
-        setAssignments(mapped);
-      } else {
-        setError(response.message || 'Failed to load assignments');
-      }
-    } catch (err) {
-      setError('Failed to load assignments. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const statusParam = statusFilter === 'all' ? undefined : statusFilter;
+  const { data: assignments = [], isLoading, error } = useMyAssignments(statusParam);
 
-  useEffect(() => {
-    fetchAssignments();
-  }, [statusFilter]);
+  const assignmentDisplays: AssignmentDisplay[] = useMemo(() =>
+    assignments.map(a => {
+      const appt = a.appointment;
+      return {
+        id: `A-${appt.id}`,
+        assignmentId: a.id,
+        customer: appt.customer?.name || 'Unknown Customer',
+        phone: appt.customer?.phone || 'N/A',
+        service: appt.service?.name || 'N/A',
+        vehicle: appt.vehicle ? `${appt.vehicle.make} ${appt.vehicle.model} (${appt.vehicle.year})` : 'N/A',
+        pickupLocation: appt.notes ? appt.notes.split('\n')[0] || 'TBD' : 'TBD',
+        serviceLocation: appt.service ? appt.service.name : 'Standard Service Center',
+        date: new Date(appt.appointment_date).toLocaleDateString('en-KE', { month: 'short', day: 'numeric', year: 'numeric' }),
+        time: new Date(appt.appointment_date).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' }),
+        status: a.status || 'pending',
+        estimatedDuration: appt.service ? `${appt.service.duration} min` : 'N/A',
+        specialInstructions: appt.notes,
+        price: appt.total_amount ? `KES ${appt.total_amount.toLocaleString()}` : 'N/A',
+        appointmentId: appt.id,
+        vehicleInfo: appt.vehicle || null,
+        serviceInfo: appt.service || null,
+        notes: appt.notes || '',
+        customerPhone: appt.customer?.phone || '',
+        statusValue: a.status || 'pending',
+      };
+    }),
+  [assignments]);
 
   const handleStatusChange = async (assignmentId: number, newStatus: string, notes?: string) => {
     try {
       await updateStatusMutation.mutateAsync({ id: assignmentId, status: newStatus, notes });
-      fetchAssignments();
     } catch {
       // Error handled by mutation
     }
@@ -148,15 +128,15 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
     return status.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   };
 
-  const filteredAssignments = assignments.filter(assignment => {
-    const matchesSearch = 
+  const filteredAssignments = assignmentDisplays.filter(assignment => {
+    const matchesSearch =
       assignment.customer.toLowerCase().includes(searchQuery.toLowerCase()) ||
       assignment.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       assignment.vehicle.toLowerCase().includes(searchQuery.toLowerCase()) ||
       assignment.service.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     const matchesStatus = statusFilter === 'all' || assignment.status === statusFilter;
-    
+
     return matchesSearch && matchesStatus;
   });
 
@@ -285,7 +265,7 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
     return (
       <Card>
         <CardContent className="py-12 text-center">
-          <p className="text-slate-500">{error}</p>
+          <p className="text-slate-500">{error instanceof Error ? error.message : 'Failed to load assignments'}</p>
         </CardContent>
       </Card>
     );
@@ -304,6 +284,7 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
+                id="assignment-search"
                 placeholder="Search by customer, vehicle, or service..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
