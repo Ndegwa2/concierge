@@ -11,6 +11,9 @@ build/
 # Use deployment platform's env var dashboard (Render, Vercel, etc.)
 .env
 .env.*
+backend/.env
+backend/.env.*
+# Keep ONLY example/template files tracked
 !.env.example
 
 # Database files
@@ -37,4 +40,3 @@ npm-debug.log*
 
 # Documentation
 *.md
-backend/.env
