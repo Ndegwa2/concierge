@@ -111,6 +111,7 @@ def appointment_payments(appointment_id):
 
 
 @payments_bp.route('/mpesa/callback', methods=['POST'])
+@limiter.limit("100 per minute")
 def mpesa_callback():
     """Persist M-Pesa Daraja callback payload and ack immediately.
 
