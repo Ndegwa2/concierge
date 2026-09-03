@@ -1,7 +1,10 @@
 from app import db
 from flask import request, has_request_context
 from app.services.fleets.models import Company, FleetVehicle, FleetExpense, Invoice, InvoiceLineItem
+from app.services.employees.models import Employee
 from datetime import datetime, timezone
+import uuid
+from sqlalchemy.orm import selectinload, joinedload
 
 
 def list_companies_query(search='', page=1, per_page=20):
@@ -49,7 +52,13 @@ def get_company_by_id(company_id):
     if not company:
         raise ValueError('Company not found')
     
-    vehicles = FleetVehicle.query.filter_by(company_id=company.id).order_by(FleetVehicle.created_at.desc()).all()
+    vehicles = (
+        FleetVehicle.query
+        .options(joinedload(FleetVehicle.assigned_employee).joinedload(Employee.user))
+        .filter_by(company_id=company.id)
+        .order_by(FleetVehicle.created_at.desc())
+        .all()
+    )
     recent_expenses = FleetExpense.query.filter_by(company_id=company.id).order_by(FleetExpense.incurred_at.desc()).limit(20).all()
     
     data = company.to_dict()
@@ -276,14 +285,11 @@ def download_fleet_invoice_pdf_file(invoice_id):
         raise ValueError('Invoice not found')
     
     if not invoice.pdf_path:
-        from app.utils.fleet_invoice import generate_fleet_invoice_pdf
-        pdf_path = generate_fleet_invoice_pdf(invoice, invoice.company, invoice.line_items)
-        invoice.pdf_path = pdf_path
-        db.session.commit()
-    else:
-        pdf_path = invoice.pdf_path
+        from app.tasks.invoice_tasks import generate_fleet_invoice_pdf
+        generate_fleet_invoice_pdf.delay(invoice.id)
+        raise ValueError('Invoice PDF is being generated. Please try again in a moment.')
     
-    path = Path(pdf_path)
+    path = Path(invoice.pdf_path)
     if not path.exists():
         raise ValueError('Invoice file is missing')
     
@@ -395,11 +401,9 @@ def _generate_fleet_invoice_number(company_id, period_start, created_at=None):
     created_at = created_at or datetime.now(timezone.utc)
     date_part = created_at.strftime('%Y%m%d')
     base = f"FLEET-{date_part}-{company_id:04d}"
-    seq = 1
     candidate = base
-    while Invoice.query.filter_by(invoice_number=candidate).first() is not None:
-        seq += 1
-        candidate = f"{base}-{seq:03d}"
+    if Invoice.query.filter_by(invoice_number=candidate).first() is not None:
+        candidate = f"{base}-{uuid.uuid4().hex[:6].upper()}"
     return candidate
 
 
