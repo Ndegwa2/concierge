@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Check, Receipt, CreditCard, Wallet, Trash2, Plus, X, Percent, Delete, Shield } from 'lucide-react';
+import { Check, Receipt, CreditCard, Wallet, Trash2, Plus, X, Percent, Delete, Shield, Download } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { toast } from 'sonner';
 import { cn } from '@/app/components/ui/utils';
+import { adminApi } from '@/services/api/admin';
 
 interface LineItem {
   id: string;
@@ -55,6 +56,11 @@ export function POSTerminal({ onClose, userType }: POSTerminalProps) {
   const [discountPercent, setDiscountPercent] = useState(5);
   const [vatPercent] = useState(16);
   const [cashTendered, setCashTendered] = useState(17000);
+  const [customerName, setCustomerName] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [notes, setNotes] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const subtotal = lineItems.reduce((sum, item) => sum + item.amount, 0);
   const discountAmount = Math.round(subtotal * (discountPercent / 100));
@@ -105,13 +111,48 @@ export function POSTerminal({ onClose, userType }: POSTerminalProps) {
     setLineItems(lineItems.filter((item) => item.id !== id));
   };
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (activePayment === 'cash' && cashTendered < grandTotal) {
       toast.error('Cash tendered is less than grand total');
       return;
     }
-    toast.success(`Checkout completed! KES ${grandTotal.toLocaleString('en-KE', { minimumFractionDigits: 2 })}`);
-    onClose?.();
+
+    if (lineItems.length === 0) {
+      toast.error('Add at least one line item');
+      return;
+    }
+
+    setIsProcessing(true);
+
+    try {
+      const response = await adminApi.posCheckout({
+        customer_name: customerName || undefined,
+        customer_email: customerEmail || undefined,
+        customer_phone: customerPhone || undefined,
+        payment_method: activePayment,
+        line_items: lineItems.map((item) => ({
+          description: item.label,
+          quantity: 1,
+          unit_price: item.amount,
+          total_price: item.amount,
+        })),
+        discount_amount: discountAmount,
+        tax_amount: vatAmount,
+        notes: notes || undefined,
+        cash_tendered: activePayment === 'cash' ? cashTendered : undefined,
+      });
+
+      if (response.success) {
+        toast.success(`Checkout completed! KES ${grandTotal.toLocaleString('en-KE', { minimumFractionDigits: 2 })}`);
+        onClose?.();
+      } else {
+        toast.error(response.message || 'Checkout failed');
+      }
+    } catch (error) {
+      toast.error('Failed to complete checkout');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const formatKES = (value: number) =>
@@ -137,13 +178,59 @@ export function POSTerminal({ onClose, userType }: POSTerminalProps) {
           <div className="px-6 py-4 border-b border-slate-800">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold text-white">SAMUEL NDEGWA</h2>
-                <p className="text-sm text-slate-400">KDA 892X &nbsp;|&nbsp; Order #4092</p>
+                <h2 className="text-lg font-bold text-white">POS CHECKOUT</h2>
+                <p className="text-sm text-slate-400">Create invoice and process payment</p>
               </div>
               <div className="flex items-center gap-2 text-slate-400">
                 <Receipt className="h-5 w-5" />
                 <span className="text-sm">Receipt</span>
               </div>
+            </div>
+          </div>
+
+          {/* Customer Info */}
+          <div className="px-6 py-4 border-b border-slate-800 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Customer Name</label>
+                <input
+                  type="text"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="Walk-in Customer"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Email (optional)</label>
+                <input
+                  type="email"
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                  placeholder="for receipt"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">Phone (optional)</label>
+              <input
+                type="tel"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                placeholder="+254 700 000 000"
+                className="w-full bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">Notes</label>
+              <input
+                type="text"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Optional notes"
+                className="w-full bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
             </div>
           </div>
 
@@ -168,10 +255,30 @@ export function POSTerminal({ onClose, userType }: POSTerminalProps) {
                   >
                     {item.type === 'pass-through' ? '[Pass-Through]' : '[Service Fee]'}
                   </span>
-                  <span className="text-sm text-slate-200 truncate">{item.label}</span>
+                  <input
+                    type="text"
+                    value={item.label}
+                    onChange={(e) => {
+                      const newItems = lineItems.map((i) =>
+                        i.id === item.id ? { ...i, label: e.target.value } : i
+                      );
+                      setLineItems(newItems);
+                    }}
+                    className="text-sm text-slate-200 bg-transparent border-none focus:outline-none focus:ring-0 flex-1 min-w-0"
+                  />
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-sm font-semibold text-white">{formatKES(item.amount)}</span>
+                  <input
+                    type="number"
+                    value={item.amount}
+                    onChange={(e) => {
+                      const newItems = lineItems.map((i) =>
+                        i.id === item.id ? { ...i, amount: Number(e.target.value) || 0 } : i
+                      );
+                      setLineItems(newItems);
+                    }}
+                    className="w-24 text-right bg-slate-800 border border-slate-700 rounded-md px-2 py-1 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
                   <Button
                     variant="ghost"
                     size="icon"
@@ -250,9 +357,10 @@ export function POSTerminal({ onClose, userType }: POSTerminalProps) {
             <Button
               className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-lg py-6"
               onClick={handleCheckout}
+              disabled={isProcessing}
             >
               <Check className="h-5 w-5 mr-2" />
-              Complete Checkout ({formatKES(grandTotal)})
+              {isProcessing ? 'Processing...' : `Complete Checkout (${formatKES(grandTotal)})`}
             </Button>
           </div>
         </div>
