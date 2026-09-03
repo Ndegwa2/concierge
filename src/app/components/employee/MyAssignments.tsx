@@ -86,8 +86,9 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
   const handleStatusChange = async (assignmentId: number, newStatus: string, notes?: string) => {
     try {
       await updateStatusMutation.mutateAsync({ id: assignmentId, status: newStatus, notes });
-    } catch {
-      // Error handled by mutation
+      toast.success('Assignment status updated');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update assignment status');
     }
   };
 
@@ -386,32 +387,32 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={!!selectedAssignment} onOpenChange={(open) => !open && setSelectedAssignment(null)}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Service Workflow</DialogTitle>
-            <DialogDescription>
-              {selectedAssignment?.customer} - {selectedAssignment?.service}
-            </DialogDescription>
-          </DialogHeader>
-          {selectedAssignment && workflowStep === 'checklist' && (
-            <VehicleChecklistForm
-              assignmentId={selectedAssignment.appointmentId}
-              appointmentId={selectedAssignment.appointmentId}
-              vehicleInfo={selectedAssignment.vehicleInfo || undefined}
-              serviceInfo={selectedAssignment.serviceInfo || undefined}
-              onComplete={() => setWorkflowStep('workrecord')}
-            />
-          )}
-          {selectedAssignment && workflowStep === 'workrecord' && (
-            <WorkRecordForm
-              assignmentId={selectedAssignment.appointmentId}
-              appointmentId={selectedAssignment.appointmentId}
-              serviceInfo={selectedAssignment.serviceInfo || undefined}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+       <Dialog open={!!selectedAssignment} onOpenChange={(open) => !open && setSelectedAssignment(null)}>
+         <DialogContent className="max-w-3xl max-h-[calc(100vh-4rem)] flex flex-col overflow-y-auto">
+           <DialogHeader>
+             <DialogTitle>Service Workflow</DialogTitle>
+             <DialogDescription>
+               {selectedAssignment?.customer} - {selectedAssignment?.service}
+             </DialogDescription>
+           </DialogHeader>
+           {selectedAssignment && workflowStep === 'checklist' && (
+             <VehicleChecklistForm
+               assignmentId={selectedAssignment.appointmentId}
+               appointmentId={selectedAssignment.appointmentId}
+               vehicleInfo={selectedAssignment.vehicleInfo || undefined}
+               serviceInfo={selectedAssignment.serviceInfo || undefined}
+               onComplete={() => setWorkflowStep('workrecord')}
+             />
+           )}
+           {selectedAssignment && workflowStep === 'workrecord' && (
+             <WorkRecordForm
+               assignmentId={selectedAssignment.appointmentId}
+               appointmentId={selectedAssignment.appointmentId}
+               serviceInfo={selectedAssignment.serviceInfo || undefined}
+             />
+           )}
+         </DialogContent>
+       </Dialog>
     </div>
   );
 }

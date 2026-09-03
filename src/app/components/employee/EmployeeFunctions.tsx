@@ -21,6 +21,8 @@ import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
+import { toast } from 'sonner';
 import {
   useMyAssignments,
   useUpdateAssignmentStatus,
@@ -94,10 +96,13 @@ export function EmployeeFunctions({ employeeData }: EmployeeFunctionsProps) {
         status,
         notes,
       });
+      toast.success('Assignment status updated');
       setSelectedAssignment(null);
       setStatusModalOpen(false);
     } catch (err: any) {
-      setGlobalError(err.message || 'Failed to update assignment status');
+      const msg = err?.message || 'Failed to update assignment status';
+      setGlobalError(msg);
+      toast.error(msg);
     }
   };
 
@@ -106,18 +111,24 @@ export function EmployeeFunctions({ employeeData }: EmployeeFunctionsProps) {
       setGlobalError(null);
       await clockInOutMutation.mutateAsync({ action, notes });
       setClockModalOpen(false);
+      toast.success(`Clocked ${action === 'in' ? 'in' : 'out'} successfully`);
     } catch (err: any) {
-      setGlobalError(err.message || `Failed to clock ${action}`);
+      const msg = err?.message || `Failed to clock ${action}`;
+      setGlobalError(msg);
+      toast.error(msg);
     }
   };
 
-  const handleRequestTimeOff = async (data: TimeOffModalData) => {
+  const handleRequestTimeOff = async (data: TimeOffRequestData) => {
     try {
       setGlobalError(null);
       await requestTimeOffMutation.mutateAsync(data);
       setTimeOffModalOpen(false);
+      toast.success('Time-off request submitted');
     } catch (err: any) {
-      setGlobalError(err.message || 'Failed to submit time-off request');
+      const msg = err?.message || 'Failed to submit time-off request';
+      setGlobalError(msg);
+      toast.error(msg);
     }
   };
 
@@ -126,8 +137,11 @@ export function EmployeeFunctions({ employeeData }: EmployeeFunctionsProps) {
       setGlobalError(null);
       await reportIssueMutation.mutateAsync(data);
       setIssueModalOpen(false);
+      toast.success('Issue reported');
     } catch (err: any) {
-      setGlobalError(err.message || 'Failed to report issue');
+      const msg = err?.message || 'Failed to report issue';
+      setGlobalError(msg);
+      toast.error(msg);
     }
   };
 
@@ -457,40 +471,41 @@ export function EmployeeFunctions({ employeeData }: EmployeeFunctionsProps) {
               <p className="text-xs mt-1">Check back later for new assignments</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {activeAssignments.map((assignment) => {
-                const appt = assignment.appointment;
-                const customer = appt?.customer;
-                const service = appt?.service;
-                const vehicle = appt?.vehicle;
+            <ScrollArea className="h-[360px] sm:h-[400px]">
+              <div className="space-y-4 pr-4">
+                {activeAssignments.map((assignment) => {
+                  const appt = assignment.appointment;
+                  const customer = appt?.customer;
+                  const service = appt?.service;
+                  const vehicle = appt?.vehicle;
 
-                return (
-                  <Card
-                    key={assignment.id}
-                    className="border border-slate-200 hover:shadow-md transition-shadow"
-                  >
-                    <CardContent className="pt-4">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-semibold text-lg">
-                              {service?.name || 'Unknown Service'}
-                            </h3>
-                            <Badge variant="outline">
-                              {assignment.status
-                                .split('-')
-                                .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-                                .join(' ')}
-                            </Badge>
+                  return (
+                    <Card
+                      key={assignment.id}
+                      className="border border-slate-200 hover:shadow-md transition-shadow"
+                    >
+                      <CardContent className="pt-4">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold text-lg">
+                                {service?.name || 'Unknown Service'}
+                              </h3>
+                              <Badge variant="outline">
+                                {assignment.status
+                                  .split('-')
+                                  .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+                                  .join(' ')}
+                              </Badge>
+                            </div>
+                            <p className="text-sm text-slate-600">
+                              Customer: {customer?.name || 'N/A'}
+                            </p>
+                            <p className="text-sm text-slate-600">
+                              Vehicle: {vehicle ? `${vehicle.make} ${vehicle.model} (${vehicle.year})` : 'N/A'}
+                            </p>
                           </div>
-                          <p className="text-sm text-slate-600">
-                            Customer: {customer?.name || 'N/A'}
-                          </p>
-                          <p className="text-sm text-slate-600">
-                            Vehicle: {vehicle ? `${vehicle.make} ${vehicle.model} (${vehicle.year})` : 'N/A'}
-                          </p>
-                        </div>
-                        <ChevronRight className="h-5 w-5 text-slate-400" />
+                          <ChevronRight className="h-5 w-5 text-slate-400" />
                       </div>
 
                       {appt?.appointment_date && (
@@ -560,6 +575,7 @@ export function EmployeeFunctions({ employeeData }: EmployeeFunctionsProps) {
                 );
               })}
             </div>
+          </ScrollArea>
           )}
         </CardContent>
       </Card>

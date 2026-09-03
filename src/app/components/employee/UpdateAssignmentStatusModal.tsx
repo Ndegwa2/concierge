@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Clock, Save, X } from 'lucide-react';
 import {
   Dialog,
@@ -61,6 +61,13 @@ export function UpdateAssignmentStatusModal({
   const [selectedStatus, setSelectedStatus] = useState<string>(assignment.status);
   const [notes, setNotes] = useState('');
 
+  useEffect(() => {
+    if (open) {
+      setSelectedStatus(assignment.status);
+      setNotes('');
+    }
+  }, [open, assignment.id, assignment.status]);
+
   const handleSubmit = async () => {
     if (!selectedStatus) return;
     await onSave(selectedStatus, notes);
@@ -74,13 +81,19 @@ export function UpdateAssignmentStatusModal({
     onClose();
   };
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      handleClose();
+    }
+  };
+
   const handleStatusChange = (value: string) => {
     setSelectedStatus(value);
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-md max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Update Assignment Status</DialogTitle>
           <DialogDescription>
