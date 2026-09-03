@@ -17,6 +17,7 @@ from .service import (
     get_service_history_query,
     create_notification as svc_create_notification,
     create_discount as svc_create_discount,
+    create_pos_checkout as svc_create_pos_checkout,
 )
 from datetime import datetime, timezone
 
@@ -122,12 +123,14 @@ def get_user(user_id):
 def get_all_appointments():
     try:
         status = request.args.get('status')
-        cache_key = f"admin:appointments:{status or 'all'}"
+        page = max(int(request.args.get('page', 1)), 1)
+        per_page = min(max(int(request.args.get('per_page', 20)), 1), 100)
+        cache_key = f"admin:appointments:{status or 'all'}:page:{page}:per_page:{per_page}"
         cached = cache_get(cache_key)
         if cached is not None:
             return jsonify(cached), 200
 
-        result = get_all_appointments_query(status)
+        result = get_all_appointments_query(status, page=page, per_page=per_page)
 
         cache_set(cache_key, result, REDIS_SHORT_TTL)
 
@@ -240,5 +243,31 @@ def create_discount():
         return jsonify({
             'success': False,
             'message': 'Failed to create discount',
+            'error': 'An internal server error occurred.'
+        }), 500
+
+
+@admin_bp.route('/pos/checkout', methods=['POST'])
+@jwt_required()
+@admin_required
+def pos_checkout():
+    try:
+        data = request.get_json(silent=True) or {}
+        invoice = svc_create_pos_checkout(data)
+
+        return jsonify({
+            'success': True,
+            'message': 'POS checkout completed',
+            'data': {'invoice': invoice.to_dict()},
+        }), 201
+
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        logger.error('POS checkout failed: %s', e, exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to complete checkout',
             'error': 'An internal server error occurred.'
         }), 500

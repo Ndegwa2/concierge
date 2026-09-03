@@ -67,7 +67,7 @@ def get_user_by_id(user_id):
     return user
 
 
-def get_all_appointments_query(status=None):
+def get_all_appointments_query(status=None, page=1, per_page=20):
     query = Appointment.query.options(
         joinedload(Appointment.vehicle),
         joinedload(Appointment.service),
@@ -77,13 +77,16 @@ def get_all_appointments_query(status=None):
     if status:
         query = query.filter_by(status=status)
     
-    appointments = query.all()
+    total = query.count()
+    appointments = query.order_by(Appointment.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
     
     return {
         'success': True,
         'data': {
             'appointments': [appointment.to_dict() for appointment in appointments],
-            'count': len(appointments)
+            'total': total,
+            'page': page,
+            'per_page': per_page,
         }
     }
 
@@ -131,6 +134,83 @@ def create_discount(data):
     db.session.add(discount)
     db.session.commit()
     return discount
+
+
+def create_pos_checkout(data):
+    from app.services.fleets.models import Invoice, InvoiceLineItem
+    from app.services.invoices.service import _generate_invoice_number
+    from app.services.invoices.pdf_generator import generate_invoice_pdf
+    from app.tasks.email_tasks import send_email_with_attachment
+
+    customer_name = (data.get('customer_name') or 'Walk-in Customer').strip()
+    customer_email = data.get('customer_email')
+    customer_phone = data.get('customer_phone')
+    payment_method = data.get('payment_method', 'cash')
+    line_items_data = data.get('line_items', [])
+    discount_amount = float(data.get('discount_amount') or 0)
+    tax_amount = float(data.get('tax_amount') or 0)
+    notes = data.get('notes')
+    cash_tendered = data.get('cash_tendered')
+
+    if not line_items_data:
+        raise ValueError('At least one line item is required')
+
+    subtotal = sum(float(item.get('total_price') or 0) for item in line_items_data)
+    total = subtotal - discount_amount + tax_amount
+    total = max(0, total)
+
+    if payment_method == 'cash' and cash_tendered is not None and float(cash_tendered) < total:
+        raise ValueError('Cash tendered is less than total amount')
+
+    invoice_number = _generate_invoice_number(0, datetime.now(timezone.utc))
+    invoice = Invoice(
+        invoice_number=invoice_number,
+        user_id=None,
+        total_amount=total,
+        status='paid' if payment_method == 'cash' else 'sent',
+        invoice_type='pos',
+        tax_amount=tax_amount,
+        currency='KES',
+        notes=notes,
+    )
+    db.session.add(invoice)
+    db.session.flush()
+
+    for item_data in line_items_data:
+        line = InvoiceLineItem(
+            invoice_id=invoice.id,
+            description=item_data.get('description') or '',
+            quantity=int(item_data.get('quantity') or 1),
+            unit_price=float(item_data.get('unit_price') or 0),
+            total_price=float(item_data.get('total_price') or 0),
+        )
+        db.session.add(line)
+
+    db.session.commit()
+
+    pdf_path = generate_invoice_pdf(None, None, None, None, invoice.invoice_number, invoice=invoice)
+    invoice.pdf_path = pdf_path
+    db.session.commit()
+
+    if customer_email:
+        subject = f'Receipt {invoice_number} - AutoConcierge'
+        body = (
+            f"Dear {customer_name},\n\n"
+            f"Thank you for your purchase.\n\n"
+            f"Invoice/Receipt Number: {invoice.invoice_number}\n"
+            f"Total Amount: KES {total:,.2f}\n"
+            f"Payment Method: {payment_method}\n\n"
+            f"Thank you for choosing AutoConcierge.\n"
+        )
+        send_email_with_attachment.delay(
+            to=customer_email,
+            subject=subject,
+            body=body,
+            attachment_path=pdf_path,
+            attachment_filename=f'{invoice_number}.pdf',
+        )
+
+    return invoice
 
 
 def get_current_user():
