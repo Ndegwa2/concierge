@@ -1,5 +1,14 @@
 import { API_BASE_URL, ApiResponse } from './types';
 
+const DEFAULT_TIMEOUT_MS = 30000;
+const AUTH_ENDPOINTS = new Set([
+  '/auth/refresh',
+  '/auth/login',
+  '/auth/admin/login',
+  '/auth/employee/login',
+  '/auth/register',
+]);
+
 class ApiClient {
   private token: string | null = null;
   private refreshToken: string | null = null;
@@ -39,6 +48,9 @@ class ApiClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
       ...(this.token && { Authorization: `Bearer ${this.token}` }),
@@ -49,30 +61,58 @@ class ApiClient {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         ...options,
         headers,
+        signal: controller.signal,
       });
 
-      const data = await response.json();
+      const text = await response.text();
+      let data: any = {};
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          return {
+            success: false,
+            message: `Unexpected response (${response.status}) from server.`,
+            error: text.slice(0, 200),
+          };
+        }
+      }
 
-      const method = (options.method || 'GET').toUpperCase();
-      const isRefreshEndpoint = endpoint === '/auth/refresh';
-      if ((response.status === 401 || response.status === 422) && !isRefreshEndpoint) {
+      const isAuthEndpoint = AUTH_ENDPOINTS.has(endpoint);
+      const shouldRetry =
+        response.status === 401 && !isAuthEndpoint && !!this.refreshToken;
+
+      if (shouldRetry) {
         const refreshed = await this.refreshAccessToken();
 
         if (refreshed) {
           return this.request<T>(endpoint, options);
         } else {
           this.clearTokens();
-          window.location.href = '/';
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('auth:logout'));
+          }
+          return {
+            success: false,
+            message: 'Session expired. Please log in again.',
+            error: 'unauthorized',
+          };
         }
       }
 
       return data;
-    } catch (error) {
+    } catch (error: any) {
+      const isAbort = error?.name === 'AbortError';
+      console.error(`API request failed for ${endpoint}:`, error);
       return {
         success: false,
-        message: 'Network error. Please check your connection.',
+        message: isAbort
+          ? 'Request timed out. Please try again.'
+          : 'Network error. Please check your connection.',
         error: String(error),
       };
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
@@ -84,17 +124,18 @@ class ApiClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(this.refreshToken && { Authorization: `Bearer ${this.refreshToken}` }),
+          Authorization: `Bearer ${this.refreshToken}`,
         },
         body: JSON.stringify({
           refresh_token: this.refreshToken,
         }),
       });
 
-      const data = await response.json();
+      const text = await response.text();
+      const data = text ? JSON.parse(text) : {};
 
       if (data.success && data.data?.access_token) {
-        this.setTokens(data.data.access_token);
+        this.setTokens(data.data.access_token, data.data.refresh_token);
         return true;
       }
 

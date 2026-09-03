@@ -1,4 +1,4 @@
-export { apiClient, ApiClient } from './client';
+export { apiClient, apiClient as api, ApiClient } from './client';
 export { authApi } from './auth';
 export { appointmentsApi } from './appointments';
 export { vehiclesApi } from './vehicles';

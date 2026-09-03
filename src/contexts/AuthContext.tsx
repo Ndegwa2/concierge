@@ -5,7 +5,8 @@
  * Supports JWT authentication with role-based access control.
  */
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { api } from '../services/api';
+import { useQueryClient } from '@tanstack/react-query';
+import { authApi, apiClient } from '../services/api';
 import type { User } from '../services/api';
 
 interface SignUpData {
@@ -20,7 +21,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  userType: 'customer' | 'employee' | 'admin' | null;
+  userType: 'customer' | 'employee' | 'admin' | 'super_admin' | null;
   login: (email: string, password: string, userType?: 'customer' | 'employee' | 'admin') => Promise<{ success: boolean; message: string }>;
   signup: (data: SignUpData) => Promise<{ success: boolean; message: string; user?: User }>;
   logout: () => Promise<void>;
@@ -37,29 +38,51 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
 
   // Check for existing session on mount
   useEffect(() => {
     const initAuth = async () => {
-      if (api.isAuthenticated()) {
+      if (apiClient.isAuthenticated()) {
         try {
-          const response = await api.getProfile();
+          const response = await authApi.getProfile();
           if (response.success && response.data) {
             setUser(response.data.user);
           } else {
-            // Token invalid, clear it
-            api.clearTokens();
+            apiClient.clearTokens();
           }
         } catch (error) {
           console.error('Failed to fetch profile:', error);
-          api.clearTokens();
+          apiClient.clearTokens();
         }
       }
       setIsLoading(false);
     };
-
     initAuth();
-  }, []);
+
+    const onForcedLogout = () => {
+      queryClient.clear();
+      setUser(null);
+    };
+    window.addEventListener('auth:logout', onForcedLogout);
+    return () => window.removeEventListener('auth:logout', onForcedLogout);
+  }, [queryClient]);
+
+  // Whenever the active user id changes (login, logout, account-switch),
+  // wipe all user-scoped React Query cache. This is defense-in-depth on
+  // top of the per-user query keys in `useApi.ts`.
+  const activeUserId = user?.id ?? null;
+  const prevUserIdRef = React.useRef<number | null | undefined>(undefined);
+  useEffect(() => {
+    if (prevUserIdRef.current === undefined) {
+      prevUserIdRef.current = activeUserId;
+      return;
+    }
+    if (prevUserIdRef.current !== activeUserId) {
+      queryClient.clear();
+      prevUserIdRef.current = activeUserId;
+    }
+  }, [activeUserId, queryClient]);
 
   const login = useCallback(async (email: string, password: string, userType: 'customer' | 'employee' | 'admin' = 'customer') => {
     setIsLoading(true);
@@ -68,11 +91,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       // using appropriate login endpoint based on user type
       if (userType === 'admin') {
-        response = await api.adminLogin(email, password);
+        response = await authApi.adminLogin(email, password);
       } else if (userType === 'employee') {
-        response = await api.employeeLogin(email, password);
+        response = await authApi.employeeLogin(email, password);
       } else {
-        response = await api.login(email, password);
+        response = await authApi.login(email, password);
       }
       
       if (response.success && response.data) {
@@ -91,13 +114,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const signup = useCallback(async (data: SignUpData) => {
     setIsLoading(true);
     try {
-      const response = await api.register(data);
-      
+      const response = await authApi.register(data);
+
       if (response.success && response.data) {
         setUser(response.data.user);
         return { success: true, message: response.message || 'Registration successful', user: response.data.user };
       }
-      
+
       return { success: false, message: response.message || 'Registration failed' };
     } catch (error) {
       return { success: false, message: 'Network error. Please try again.' };
@@ -109,7 +132,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const logout = useCallback(async () => {
     setIsLoading(true);
     try {
-      await api.logout();
+      await authApi.logout();
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
@@ -119,10 +142,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const refreshProfile = useCallback(async () => {
-    if (!api.isAuthenticated()) return;
-    
+    if (!apiClient.isAuthenticated()) return;
+
     try {
-      const response = await api.getProfile();
+      const response = await authApi.getProfile();
       if (response.success && response.data) {
         setUser(response.data.user);
       }
@@ -133,7 +156,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
     try {
-      const response = await api.changePassword(currentPassword, newPassword);
+      const response = await authApi.changePassword(currentPassword, newPassword);
       return { success: response.success, message: response.message || 'Password changed successfully' };
     } catch (error) {
       return { success: false, message: 'Network error. Please try again.' };
@@ -144,7 +167,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     user,
     isLoading,
     isAuthenticated: !!user,
-    userType: user?.role ?? null,
+    userType: (user?.role === 'customer' || user?.role === 'employee' || user?.role === 'admin' || user?.role === 'super_admin')
+      ? user.role
+      : null,
     login,
     signup,
     logout,
@@ -177,9 +202,9 @@ export function useAuth(): AuthContextType {
  */
 export function useRequireRole(allowedRoles: ('customer' | 'employee' | 'admin')[]) {
   const { user, isAuthenticated } = useAuth();
-  
-  const hasRole = user && allowedRoles.includes(user.role);
-  
+
+  const hasRole = !!user && (allowedRoles as string[]).includes(user.role);
+
   return {
     hasAccess: isAuthenticated && hasRole,
     user,
