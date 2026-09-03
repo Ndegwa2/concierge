@@ -129,9 +129,11 @@ class InvoiceLineItem(db.Model):
 class Invoice(db.Model):
     __tablename__ = 'invoices'
     __table_args__ = (
-        CheckConstraint("status IN ('draft', 'sent', 'paid', 'void')"),
+        CheckConstraint("status IN ('draft', 'pending_verification', 'sent', 'paid', 'verified', 'void')"),
+        CheckConstraint("invoice_type IN ('appointment', 'pos', 'fleet')"),
         db.Index('ix_invoices_appointment_status', 'appointment_id', 'status'),
         db.Index('ix_invoices_company_status', 'company_id', 'status'),
+        db.Index('ix_invoices_status_created', 'status', 'created_at'),
     )
 
     id = db.Column(db.BigInteger, primary_key=True)
@@ -139,13 +141,17 @@ class Invoice(db.Model):
     appointment_id = db.Column(db.BigInteger, db.ForeignKey('appointments.id', ondelete='CASCADE'), nullable=True, index=True)
     user_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=True, index=True)
     company_id = db.Column(db.BigInteger, db.ForeignKey('companies.id', ondelete='SET NULL'), index=True)
+    processed_by_user_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
+    verified_by_user_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
+    verified_at = db.Column(db.DateTime(timezone=True))
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
-    status = db.Column(db.String(20), default='draft', nullable=False, index=True)
+    status = db.Column(db.String(32), default='draft', nullable=False, index=True)
     invoice_type = db.Column(db.String(20), default='appointment')
     tax_amount = db.Column(db.Numeric(10, 2), default=0)
     currency = db.Column(db.String(3), default='KES')
     due_date = db.Column(db.DateTime(timezone=True))
     notes = db.Column(db.Text)
+    payment_method = db.Column(db.String(20))
     pdf_path = db.Column(db.String(255))
     sent_at = db.Column(db.DateTime(timezone=True))
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
@@ -161,13 +167,18 @@ class Invoice(db.Model):
             'appointment_id': self.appointment_id,
             'user_id': self.user_id,
             'company_id': self.company_id,
+            'processed_by_user_id': self.processed_by_user_id,
+            'verified_by_user_id': self.verified_by_user_id,
+            'verified_at': self.verified_at.isoformat() if self.verified_at else None,
             'total_amount': float(self.total_amount),
             'status': self.status,
             'invoice_type': self.invoice_type,
             'tax_amount': float(self.tax_amount),
             'currency': self.currency,
+            'payment_method': self.payment_method,
             'due_date': self.due_date.isoformat() if self.due_date else None,
             'notes': self.notes,
+            'pdf_path': self.pdf_path,
             'sent_at': self.sent_at.isoformat() if self.sent_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
