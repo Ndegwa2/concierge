@@ -11,6 +11,7 @@ import {
   Wrench
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { employeesApi } from '@/services/api';
 import { EmployeeOverview } from './EmployeeOverview';
 import { EmployeeFunctions } from './EmployeeFunctions';
@@ -122,47 +123,51 @@ export function EmployeeDashboard({ onLogout }: EmployeeDashboardProps) {
         </div>
       </header>
 
-      <div className="flex">
+    <div className="flex">
         {/* Sidebar */}
         <aside className={`
           fixed lg:sticky top-16 left-0 h-[calc(100vh-4rem)] w-64 bg-white border-r z-30
           transform transition-transform duration-200 ease-in-out
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}>
-          <nav className="p-4 space-y-1">
-            {navigation.map((item) => {
-              const Icon = item.icon;
-              const isActive = currentSection === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setCurrentSection(item.id as any);
-                    setSidebarOpen(false);
-                  }}
-                  className={`
-                    w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors
-                    ${isActive 
-                      ? 'bg-slate-900 text-white' 
-                      : 'text-slate-600 hover:bg-slate-100'
-                    }
-                  `}
-                >
-                  <Icon className="h-5 w-5" />
-                  <span className="font-medium">{item.name}</span>
-                </button>
-              );
-            })}
-          </nav>
+          <ScrollArea className="h-full">
+            <nav className="p-4 space-y-1">
+              {navigation.map((item) => {
+                const Icon = item.icon;
+                const isActive = currentSection === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setCurrentSection(item.id as any);
+                      setSidebarOpen(false);
+                    }}
+                    className={`
+                      w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors
+                      ${isActive 
+                        ? 'bg-slate-900 text-white' 
+                        : 'text-slate-600 hover:bg-slate-100'
+                      }
+                    `}
+                  >
+                    <Icon className="h-5 w-5" />
+                    <span className="font-medium">{item.name}</span>
+                  </button>
+                );
+              })}
+            </nav>
+          </ScrollArea>
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 p-4 lg:p-8">
-          {currentSection === 'functions' && <EmployeeFunctions employeeData={employeeData} />}
-          {currentSection === 'overview' && <EmployeeOverview employeeData={employeeData} />}
-          {currentSection === 'assignments' && <MyAssignments employeeData={employeeData} />}
-          {currentSection === 'schedule' && <MySchedule employeeData={employeeData} />}
-          {currentSection === 'profile' && <EmployeeProfile employeeData={employeeData} />}
+        <main className="flex-1 p-4 lg:p-8 overflow-x-hidden">
+          <div className="max-w-full overflow-hidden">
+            {currentSection === 'functions' && <EmployeeFunctions employeeData={employeeData} />}
+            {currentSection === 'overview' && <EmployeeOverview employeeData={employeeData} />}
+            {currentSection === 'assignments' && <MyAssignments employeeData={employeeData} />}
+            {currentSection === 'schedule' && <MySchedule employeeData={employeeData} />}
+            {currentSection === 'profile' && <EmployeeProfile employeeData={employeeData} />}
+          </div>
         </main>
       </div>
 

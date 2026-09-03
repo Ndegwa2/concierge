@@ -62,11 +62,17 @@ export function IssueReportModal({
     onClose();
   };
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      handleClose();
+    }
+  };
+
   const isValid = title.trim().length > 0 && description.trim().length > 0;
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-lg">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Report an Issue</DialogTitle>
           <DialogDescription>

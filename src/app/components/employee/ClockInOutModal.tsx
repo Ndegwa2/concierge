@@ -38,9 +38,15 @@ export function ClockInOutModal({
     onClose();
   };
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      handleClose();
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-md max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {action === 'in' ? 'Clock In' : 'Clock Out'}

@@ -59,8 +59,8 @@ const guidelinesSections = [
 
 export function ViewGuidelinesModal({ open, onClose }: ViewGuidelinesModalProps) {
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <BookText className="h-5 w-5" />
