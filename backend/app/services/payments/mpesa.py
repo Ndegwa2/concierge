@@ -81,7 +81,7 @@ class MpesaClient:
         }
 
         req = Request(
-            f'{self._base_url()}/mpesa/stkpush/v1/processprocess',
+            f'{self._base_url()}/mpesa/stkpush/v1/process',
             data=json.dumps(payload).encode(),
             headers={
                 'Authorization': f'Bearer {token}',
@@ -151,7 +151,9 @@ def verify_mpesa_callback(raw_body: bytes, callback_data: dict, signature_header
     1. If MPESA_WEBHOOK_VALIDATION_KEY is set, verify the HMAC-SHA256
        signature from the x-mpesa-signature header against the raw
        request body.
-    2. If no validation key is configured (development), fall back to
+    2. In production, the validation key is REQUIRED. If it is not set,
+       reject the callback with 500 to avoid accepting forged payloads.
+    3. In development only (FLASK_ENV=development), fall back to
        CheckoutRequestId validation — verify that a Payment with the
        given CheckoutRequestId exists in a pending/processing state.
        This prevents forged callbacks from completing payments that
@@ -160,6 +162,7 @@ def verify_mpesa_callback(raw_body: bytes, callback_data: dict, signature_header
     Returns True if the callback passes verification, False otherwise.
     """
     validation_key = os.environ.get('MPESA_WEBHOOK_VALIDATION_KEY')
+    is_production = os.environ.get('FLASK_ENV', 'development') != 'development'
 
     if validation_key:
         if not signature_header:
@@ -179,7 +182,11 @@ def verify_mpesa_callback(raw_body: bytes, callback_data: dict, signature_header
         logger.info('M-Pesa callback signature verified')
         return True
 
-    # Fallback: validate CheckoutRequestId against known pending payments
+    if is_production:
+        logger.error('M-Pesa callback rejected: MPESA_WEBHOOK_VALIDATION_KEY is required in production')
+        return False
+
+    # Development fallback: validate CheckoutRequestId against known pending payments
     stk_callback = (callback_data.get('Body') or {}).get('StkCallback', {})
     checkout_request_id = stk_callback.get('CheckoutRequestId')
 
