@@ -214,28 +214,22 @@ def _notify_admins_new_booking(appointment):
         db.session.rollback()
         return
 
-    for admin in admins:
-        if not admin.email:
-            continue
+    admin_emails = [admin.email for admin in admins if admin.email]
+    if admin_emails:
         try:
-            from app.tasks.email_tasks import send_email
-            email_subject = f'[AutoConcierge] New appointment #{appointment.id} awaiting assignment'
-            email_body = (
-                f"Hi {admin.name},\n\n"
-                f"A new appointment has just been booked and is waiting to be assigned to an employee.\n\n"
-                f"  Customer:   {customer_name}\n"
-                f"  Service:    {service_name}\n"
-                f"  Vehicle:    {vehicle_label}\n"
-                f"  Date/Time:  {scheduled}\n"
-                f"  Total:      KES {float(appointment.total_amount or 0):,.2f}\n"
-                f"  Appointment ID: {appointment.id}\n\n"
-                f"Open the admin dashboard to assign an employee.\n\n"
-                f"AutoConcierge"
+            from app.tasks.email_tasks import send_new_appointment_notifications
+            send_new_appointment_notifications.delay(
+                admin_emails=admin_emails,
+                customer_name=customer_name,
+                service_name=service_name,
+                vehicle_label=vehicle_label,
+                scheduled=scheduled,
+                total_amount=float(appointment.total_amount or 0),
+                appointment_id=appointment.id,
             )
-            send_email.delay(admin.email, email_subject, email_body)
         except Exception as exc:
             import logging
-            logging.getLogger(__name__).warning('Failed to enqueue admin email: %s', exc)
+            logging.getLogger(__name__).warning('Failed to enqueue batch admin notification: %s', exc)
 
 
 def update_appointment(appointment_id, current_user, data):
