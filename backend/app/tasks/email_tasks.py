@@ -140,3 +140,36 @@ def send_fleet_invoice_email(self, to, contact_name, invoice_number, total_amoun
     except Exception as exc:
         logger.error('Failed to send fleet invoice email to %s: %s', to, exc)
         raise self.retry(exc=exc)
+
+
+@celery.task(name='app.tasks.email_tasks.send_new_appointment_notifications', bind=True, max_retries=3, default_retry_delay=60)
+def send_new_appointment_notifications(self, admin_emails, customer_name, service_name, vehicle_label, scheduled, total_amount, appointment_id):
+    """Send batch admin notification emails for a new appointment."""
+    from app.utils.email import send_email as _send_email
+
+    subject = f'[AutoConcierge] New appointment #{appointment_id} awaiting assignment'
+    body = (
+        f"Hi Admin,\n\n"
+        f"A new appointment has just been booked and is waiting to be assigned to an employee.\n\n"
+        f"  Customer:   {customer_name}\n"
+        f"  Service:    {service_name}\n"
+        f"  Vehicle:    {vehicle_label}\n"
+        f"  Date/Time:  {scheduled}\n"
+        f"  Total:      KES {total_amount:,.2f}\n"
+        f"  Appointment ID: {appointment_id}\n\n"
+        f"Open the admin dashboard to assign an employee.\n\n"
+        f"AutoConcierge"
+    )
+
+    failures = []
+    for email in admin_emails:
+        try:
+            _send_email(to=email, subject=subject, body=body)
+            logger.info('New appointment notification sent to %s', email)
+        except Exception as exc:
+            logger.error('Failed to send new appointment notification to %s: %s', email, exc)
+            failures.append(email)
+
+    if failures and len(failures) == len(admin_emails):
+        raise self.retry(exc=Exception(f'All {len(failures)} admin emails failed'))
+
