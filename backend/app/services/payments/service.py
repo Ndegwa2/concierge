@@ -1,5 +1,6 @@
 import os
 import logging
+import uuid
 from datetime import datetime, timezone
 from app import db
 from app.services.auth.models import User
@@ -11,12 +12,20 @@ from app.tasks.payment_tasks import process_stk_push, query_payment_status
 logger = logging.getLogger(__name__)
 
 
+def _validate_payment_amount(amount, appointment):
+    if amount <= 0:
+        raise ValueError('Invalid payment amount')
+    if amount > 5000000:
+        raise ValueError('Payment amount exceeds maximum allowed')
+    original_service_price = float(appointment.service.price) if appointment.service else 0
+    if original_service_price > 0 and amount > original_service_price * 10:
+        raise ValueError('Payment amount exceeds reasonable threshold for this service')
+
+
 def _generate_payment_reference():
     timestamp = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')
-    count = Payment.query.filter(
-        Payment.created_at >= datetime.now(timezone.utc).replace(hour=0, minute=0, second=0)
-    ).count()
-    return f'PAY-{timestamp}-{count + 1:04d}'
+    unique_suffix = uuid.uuid4().hex[:8].upper()
+    return f'PAY-{timestamp}-{unique_suffix}'
 
 
 def initiate_mpesa_payment(appointment_id: int, phone_number: str, current_user: dict):
@@ -38,6 +47,17 @@ def initiate_mpesa_payment(appointment_id: int, phone_number: str, current_user:
         raise ValueError('This invoice has already been paid')
 
     amount = float(invoice.total_amount or appointment.total_amount or 0)
+    _validate_payment_amount(amount, appointment)
+
+    appointment_total = float(appointment.total_amount or 0)
+    invoice_total = float(invoice.total_amount or 0)
+    if appointment_total > 0 and invoice_total > 0 and abs(appointment_total - invoice_total) > 0.01:
+        logger.warning(
+            'Payment amount mismatch for appointment %s: invoice=%.2f, appointment=%.2f',
+            appointment.id, invoice_total, appointment_total
+        )
+        raise ValueError('Invoice amount does not match the appointment total')
+
     if amount <= 0:
         raise ValueError('Invalid payment amount')
 
