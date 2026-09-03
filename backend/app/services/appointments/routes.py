@@ -277,46 +277,5 @@ def confirm_vehicle_return(appointment_id):
 
 
 def _auto_send_invoice(appointment):
-    from app.services.invoices.service import _generate_invoice_number
-    from app.services.invoices.pdf_generator import generate_invoice_pdf
-    from app.tasks.email_tasks import send_email_with_attachment
-    from datetime import datetime, timezone
-
-    customer = User.query.get(appointment.user_id)
-    vehicle = Vehicle.query.get(appointment.vehicle_id)
-    service = Service.query.get(appointment.service_id)
-
-    if not all([customer, vehicle, service]) or not customer.email:
-        logger.warning('Skipping auto-invoice for appointment %s: missing data', appointment.id)
-        return
-
-    invoice_number = _generate_invoice_number(appointment.id, appointment.updated_at)
-    pdf_path = generate_invoice_pdf(appointment, customer, vehicle, service, invoice_number)
-
-    invoice = Invoice(
-        invoice_number=invoice_number,
-        appointment_id=appointment.id,
-        user_id=customer.id,
-        total_amount=appointment.total_amount or 0,
-        status='sent',
-        pdf_path=pdf_path,
-        sent_at=datetime.now(timezone.utc),
-    )
-    db.session.add(invoice)
-    db.session.commit()
-
-    subject = f'Invoice {invoice_number} - Ndegwa Auto Concierge'
-    body = (
-        f"Dear {customer.name},\n\n"
-        f"Please find your invoice for the completed service attached.\n\n"
-        f"Invoice Number: {invoice_number}\n"
-        f"Total Amount: KSh {float(invoice.total_amount):,.2f}\n\n"
-        f"Thank you for choosing Ndegwa Auto Concierge.\n"
-    )
-    send_email_with_attachment.delay(
-        to=customer.email,
-        subject=subject,
-        body=body,
-        attachment_path=pdf_path,
-        attachment_filename=f'{invoice_number}.pdf',
-    )
+    from app.tasks.invoice_tasks import auto_send_invoice
+    auto_send_invoice.delay(appointment.id)
