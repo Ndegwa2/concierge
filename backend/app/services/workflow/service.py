@@ -7,13 +7,19 @@ from app.services.workflow.models import WorkRecord, VehicleChecklist
 from app.services.invoices.service import _generate_invoice_number, _load_appointment_entities
 from datetime import datetime, timezone
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import selectinload, joinedload
 import logging
 
 logger = logging.getLogger(__name__)
 
 
 def _get_assignment_or_404(assignment_id):
-    assignment = Assignment.query.get(assignment_id)
+    assignment = Assignment.query.options(
+        selectinload(Assignment.appointment),
+        selectinload(Assignment.employee),
+        selectinload(Assignment.work_record),
+        selectinload(Assignment.checklist),
+    ).get(assignment_id)
     if not assignment:
         raise ValueError('Assignment not found')
     return assignment
@@ -151,6 +157,29 @@ def update_work_record(work_record_id, current_user, data):
     if work_record.status != 'draft':
         raise ValueError('Cannot update work record that is not in draft status')
 
+    if 'labor_hours' in data or 'labor_rate' in data:
+        new_labor_hours = data.get('labor_hours', work_record.labor_hours)
+        new_labor_rate = data.get('labor_rate', work_record.labor_rate)
+
+        if new_labor_hours is not None:
+            hours = float(new_labor_hours)
+            if hours < 0 or hours > 100:
+                raise ValueError('Labor hours must be between 0 and 100')
+
+        if new_labor_rate is not None:
+            rate = float(new_labor_rate)
+            if rate < 0 or rate > 100000:
+                raise ValueError('Labor rate must be between 0 and 100,000 KES')
+
+        service = assignment.appointment.service
+        if service and service.price:
+            items_total = sum(item.get('total_price', 0) for item in (data.get('items') or work_record.items or []))
+            labor_total = (float(new_labor_hours) if new_labor_hours is not None else float(work_record.labor_hours or 0)) * (float(new_labor_rate) if new_labor_rate is not None else float(work_record.labor_rate or 0))
+            new_total = items_total + labor_total
+            max_allowed = float(service.price) * 5
+            if new_total > max_allowed:
+                raise ValueError(f'Total amount exceeds 5x the service price (max: {max_allowed:,.2f} KES)')
+
     if 'items' in data:
         work_record.items = data['items']
     if 'overall_notes' in data:
@@ -270,9 +299,21 @@ def get_admin_pending_verifications(current_user):
     if current_user.get('role') not in ('admin', 'super_admin'):
         raise PermissionError('Admin access required')
 
-    assignments = Assignment.query.join(WorkRecord).filter(
-        WorkRecord.status == 'submitted'
-    ).order_by(WorkRecord.submitted_at.desc()).all()
+    assignments = (
+        Assignment.query
+        .join(WorkRecord)
+        .options(
+            selectinload(Assignment.appointment).selectinload(Appointment.customer),
+            selectinload(Assignment.appointment).selectinload(Appointment.vehicle),
+            selectinload(Assignment.appointment).selectinload(Appointment.service),
+            joinedload(Assignment.employee).joinedload(Employee.user),
+            selectinload(Assignment.work_record),
+            selectinload(Assignment.checklist),
+        )
+        .filter(WorkRecord.status == 'submitted')
+        .order_by(WorkRecord.submitted_at.desc())
+        .all()
+    )
 
     result = []
     for assignment in assignments:
@@ -313,7 +354,21 @@ def get_employee_dashboard_data(current_user):
     submitted = Assignment.query.filter_by(employee_id=employee.id, status='submitted').count()
     completed = Assignment.query.filter_by(employee_id=employee.id, status='completed').count()
 
-    assignments = Assignment.query.filter_by(employee_id=employee.id).order_by(Assignment.assigned_at.desc()).limit(20).all()
+    assignments = (
+        Assignment.query
+        .options(
+            selectinload(Assignment.appointment).selectinload(Appointment.customer),
+            selectinload(Assignment.appointment).selectinload(Appointment.vehicle),
+            selectinload(Assignment.appointment).selectinload(Appointment.service),
+            joinedload(Assignment.employee).joinedload(Employee.user),
+            selectinload(Assignment.checklist),
+            selectinload(Assignment.work_record),
+        )
+        .filter_by(employee_id=employee.id)
+        .order_by(Assignment.assigned_at.desc())
+        .limit(20)
+        .all()
+    )
 
     enriched = []
     for assignment in assignments:
