@@ -128,7 +128,11 @@ class InvoiceLineItem(db.Model):
 
 class Invoice(db.Model):
     __tablename__ = 'invoices'
-    __table_args__ = (CheckConstraint("status IN ('draft', 'sent', 'paid', 'void')"),)
+    __table_args__ = (
+        CheckConstraint("status IN ('draft', 'sent', 'paid', 'void')"),
+        db.Index('ix_invoices_appointment_status', 'appointment_id', 'status'),
+        db.Index('ix_invoices_company_status', 'company_id', 'status'),
+    )
 
     id = db.Column(db.BigInteger, primary_key=True)
     invoice_number = db.Column(db.String(50), unique=True, nullable=False, index=True)

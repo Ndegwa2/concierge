@@ -8,6 +8,8 @@ class Payment(db.Model):
     __table_args__ = (
         CheckConstraint("status IN ('pending', 'processing', 'completed', 'failed', 'cancelled', 'refunded')"),
         CheckConstraint("method IN ('mpesa', 'card', 'cash', 'bank_transfer')"),
+        db.Index('ix_payments_invoice_status', 'invoice_id', 'status'),
+        db.Index('ix_payments_user_status', 'user_id', 'status'),
     )
 
     id = db.Column(db.BigInteger, primary_key=True)

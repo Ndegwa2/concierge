@@ -8,6 +8,9 @@ class Appointment(db.Model):
     __table_args__ = (
         CheckConstraint("status IN ('scheduled', 'confirmed', 'in-progress', 'completed', 'cancelled', 'rescheduled', 'overdue')"),
         CheckConstraint("payment_status IN ('pending', 'paid', 'refunded', 'failed')"),
+        db.Index('ix_appointments_user_status', 'user_id', 'status'),
+        db.Index('ix_appointments_user_payment', 'user_id', 'payment_status'),
+        db.Index('ix_appointments_status_date', 'status', 'appointment_date'),
     )
 
     id = db.Column(db.BigInteger, primary_key=True)
