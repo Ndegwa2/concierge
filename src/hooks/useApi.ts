@@ -4,36 +4,64 @@
  * This module provides React Query hooks for all API operations.
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, authApi, employeesApi, servicesApi, vehiclesApi, appointmentsApi, adminApi, partnersApi, workflowApi } from '../services/api';
+import { authApi, employeesApi, servicesApi, vehiclesApi, appointmentsApi, adminApi, partnersApi, workflowApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import type { User, Vehicle, Appointment, ServicePartner, Employee, EmployeeAssignment, TimeOffRequest, IssueReport, TimeLog } from '../services/api';
 
 // Query Keys
+// User-scoped keys include a `userScope` segment so React Query caches
+// are partitioned per logged-in user. This prevents user A's data from
+// being served to user B after a logout/login cycle within the cache TTL.
+const anonScope = 'anonymous';
+
 export const queryKeys = {
   services: ['services'] as const,
   service: (id: number) => ['services', id] as const,
-  appointments: ['appointments'] as const,
-  appointment: (id: number) => ['appointments', id] as const,
-  allAppointmentsAdmin: ['admin', 'appointments'] as const,
-  vehicles: ['vehicles'] as const,
-  vehicle: (id: number) => ['vehicles', id] as const,
-  employees: ['employees'] as const,
-  employee: (id: number) => ['employees', id] as const,
+
+  // User-scoped
+  appointments: (uid: number | string) => [uid === anonScope ? 'anon' : `user-${uid}`, 'appointments'] as const,
+  appointment: (uid: number | string, id: number) =>
+    [uid === anonScope ? 'anon' : `user-${uid}`, 'appointments', id] as const,
+
+  allAppointmentsAdmin: (uid: number | string) =>
+    [uid === anonScope ? 'anon' : `user-${uid}`, 'admin', 'appointments'] as const,
+
+  vehicles: (uid: number | string) => [uid === anonScope ? 'anon' : `user-${uid}`, 'vehicles'] as const,
+  vehicle: (uid: number | string, id: number) =>
+    [uid === anonScope ? 'anon' : `user-${uid}`, 'vehicles', id] as const,
+
+  employees: (uid: number | string) => [uid === anonScope ? 'anon' : `user-${uid}`, 'employees'] as const,
+  employee: (uid: number | string, id: number) =>
+    [uid === anonScope ? 'anon' : `user-${uid}`, 'employees', id] as const,
+
   partners: ['partners'] as const,
   partner: (id: number) => ['partners', id] as const,
-  profile: ['profile'] as const,
-  dashboard: ['dashboard'] as const,
-  assignments: ['assignments'] as const,
-  schedule: ['schedule'] as const,
-  timeLogs: ['time-logs'] as const,
-  timeOffRequests: ['time-off-requests'] as const,
-  issueReports: ['issue-reports'] as const,
-  workflowAssignment: (id: number) => ['workflow', 'assignment', id] as const,
-  workflowChecklist: (id: number) => ['workflow', 'checklist', id] as const,
-  workflowWorkRecord: (id: number) => ['workflow', 'work-record', id] as const,
-  workflowPendingVerifications: ['workflow', 'pending-verifications'] as const,
-  workflowEmployeeDashboard: ['workflow', 'employee-dashboard'] as const,
+
+  profile: (uid: number | string) => [uid === anonScope ? 'anon' : `user-${uid}`, 'profile'] as const,
+  dashboard: (uid: number | string) => [uid === anonScope ? 'anon' : `user-${uid}`, 'dashboard'] as const,
+  assignments: (uid: number | string, status?: string) =>
+    [uid === anonScope ? 'anon' : `user-${uid}`, 'assignments', status ?? 'all'] as const,
+  schedule: (uid: number | string, start?: string, end?: string) =>
+    [uid === anonScope ? 'anon' : `user-${uid}`, 'schedule', start ?? '', end ?? ''] as const,
+  timeLogs: (uid: number | string) => [uid === anonScope ? 'anon' : `user-${uid}`, 'time-logs'] as const,
+  timeOffRequests: (uid: number | string) =>
+    [uid === anonScope ? 'anon' : `user-${uid}`, 'time-off-requests'] as const,
+  issueReports: (uid: number | string) =>
+    [uid === anonScope ? 'anon' : `user-${uid}`, 'issue-reports'] as const,
+  workflowAssignment: (uid: number | string, id: number) =>
+    [uid === anonScope ? 'anon' : `user-${uid}`, 'workflow', 'assignment', id] as const,
+  workflowChecklist: (uid: number | string, id: number) =>
+    [uid === anonScope ? 'anon' : `user-${uid}`, 'workflow', 'checklist', id] as const,
+  workflowWorkRecord: (uid: number | string, id: number) =>
+    [uid === anonScope ? 'anon' : `user-${uid}`, 'workflow', 'work-record', id] as const,
+  workflowPendingVerifications: (uid: number | string) =>
+    [uid === anonScope ? 'anon' : `user-${uid}`, 'workflow', 'pending-verifications'] as const,
+  workflowEmployeeDashboard: (uid: number | string) =>
+    [uid === anonScope ? 'anon' : `user-${uid}`, 'workflow', 'employee-dashboard'] as const,
 };
+
+export const userScope = (userId: number | null | undefined): number | string =>
+  userId == null ? anonScope : userId;
 
 // ============================================================
 // AUTH HOOKS
@@ -47,7 +75,9 @@ export function useLogin() {
       authApi.login(email, password),
     onSuccess: (data) => {
       if (data.success && data.data) {
-        queryClient.setQueryData(queryKeys.profile, data.data.user);
+        const scope = userScope(data.data.user.id);
+        queryClient.setQueryData(queryKeys.profile(scope), data.data.user);
+        queryClient.removeQueries({ queryKey: ['anon'] });
       }
     },
   });
@@ -72,14 +102,17 @@ export function useLogout() {
 }
 
 export function useProfile() {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: queryKeys.profile,
+    queryKey: queryKeys.profile(scope),
     queryFn: async () => {
-      if (!api.isAuthenticated()) return null;
       const response = await authApi.getProfile();
       return response.success ? response.data?.user ?? null : null;
     },
-    enabled: api.isAuthenticated(),
+    enabled: isAuthenticated,
+    staleTime: 60 * 1000,
   });
 }
 
@@ -126,59 +159,70 @@ export function useService(id: number) {
 // ============================================================
 
 export function useVehicles() {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: queryKeys.vehicles,
+    queryKey: queryKeys.vehicles(scope),
     queryFn: async () => {
-      if (!api.isAuthenticated()) return [];
       const response = await vehiclesApi.getVehicles();
       return response.success ? response.data?.vehicles ?? [] : [];
     },
-    enabled: api.isAuthenticated(),
+    enabled: isAuthenticated,
   });
 }
 
 export function useVehicle(id: number) {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: queryKeys.vehicle(id),
+    queryKey: queryKeys.vehicle(scope, id),
     queryFn: async () => {
       const response = await vehiclesApi.getVehicle(id);
       return response.success ? response.data?.vehicle ?? null : null;
     },
-    enabled: !!id && api.isAuthenticated(),
+    enabled: !!id && isAuthenticated,
   });
 }
 
 export function useCreateVehicle() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: vehiclesApi.createVehicle.bind(vehiclesApi),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.vehicles });
+      queryClient.invalidateQueries({ queryKey: queryKeys.vehicles(scope) });
     },
   });
 }
 
 export function useUpdateVehicle() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Vehicle> }) =>
       vehiclesApi.updateVehicle(id, data),
     onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.vehicles });
-      queryClient.invalidateQueries({ queryKey: queryKeys.vehicle(id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.vehicles(scope) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.vehicle(scope, id) });
     },
   });
 }
 
 export function useDeleteVehicle() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: vehiclesApi.deleteVehicle.bind(vehiclesApi),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.vehicles });
+      queryClient.invalidateQueries({ queryKey: queryKeys.vehicles(scope) });
     },
   });
 }
@@ -188,68 +232,79 @@ export function useDeleteVehicle() {
 // ============================================================
 
 export function useAppointments(status?: string) {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: [...queryKeys.appointments, status],
+    queryKey: [...queryKeys.appointments(scope), status ?? 'all'],
     queryFn: async () => {
-      if (!api.isAuthenticated()) return [];
       const response = await appointmentsApi.getAppointments(status);
       return response.success ? response.data?.appointments ?? [] : [];
     },
-    enabled: api.isAuthenticated(),
+    enabled: isAuthenticated,
   });
 }
 
 export function useAppointment(id: number) {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: queryKeys.appointment(id),
+    queryKey: queryKeys.appointment(scope, id),
     queryFn: async () => {
       const response = await appointmentsApi.getAppointment(id);
       return response.success ? response.data?.appointment ?? null : null;
     },
-    enabled: !!id && api.isAuthenticated(),
+    enabled: !!id && isAuthenticated,
   });
 }
 
 export function useCreateAppointment() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: appointmentsApi.createAppointment.bind(appointmentsApi),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.appointments });
-      queryClient.invalidateQueries({ queryKey: queryKeys.allAppointmentsAdmin });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments(scope) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.allAppointmentsAdmin(scope) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(scope) });
     },
   });
 }
 
 export function useUpdateAppointment() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Appointment> }) =>
       appointmentsApi.updateAppointment(id, data),
     onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.appointments });
-      queryClient.invalidateQueries({ queryKey: queryKeys.appointment(id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.allAppointmentsAdmin });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments(scope) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointment(scope, id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.allAppointmentsAdmin(scope) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(scope) });
     },
   });
 }
 
 export function useCancelAppointment() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: appointmentsApi.cancelAppointment.bind(appointmentsApi),
     onSuccess: (data) => {
       if (data.success && data.data?.appointment) {
-        queryClient.invalidateQueries({ queryKey: queryKeys.appointment(data.data.appointment.id) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.appointment(scope, data.data.appointment.id) });
       }
-      queryClient.invalidateQueries({ queryKey: queryKeys.appointments });
-      queryClient.invalidateQueries({ queryKey: queryKeys.allAppointmentsAdmin });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments(scope) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.allAppointmentsAdmin(scope) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(scope) });
     },
   });
 }
@@ -259,61 +314,74 @@ export function useCancelAppointment() {
 // ============================================================
 
 export function useEmployeeDashboard() {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: queryKeys.dashboard,
+    queryKey: queryKeys.dashboard(scope),
     queryFn: async () => {
       const response = await employeesApi.getEmployeeDashboard();
       return response.success ? response.data : null;
     },
-    enabled: api.isAuthenticated(),
+    enabled: isAuthenticated,
   });
 }
 
 export function useMyAssignments(status?: string) {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: [...queryKeys.assignments, status],
+    queryKey: queryKeys.assignments(scope, status),
     queryFn: async () => {
-      if (!api.isAuthenticated()) return [];
       const response = await employeesApi.getMyAssignments(status);
       if (!response.success) throw new Error(response.message || 'Failed to load assignments');
       return response.data?.assignments ?? [];
     },
-    enabled: api.isAuthenticated(),
+    enabled: isAuthenticated,
   });
 }
 
 export function useUpdateAssignmentStatus() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: ({ id, status, notes }: { id: number; status: string; notes?: string }) =>
       employeesApi.updateAssignmentStatus(id, status, notes),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.assignments });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+      queryClient.invalidateQueries({ queryKey: queryKeys.assignments(scope) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(scope) });
     },
   });
 }
 
 export function useMySchedule(startDate?: string, endDate?: string) {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: [...queryKeys.schedule, startDate, endDate],
+    queryKey: queryKeys.schedule(scope, startDate, endDate),
     queryFn: async () => {
       const response = await employeesApi.getMySchedule(startDate, endDate);
       return response.success ? response.data : null;
     },
-    enabled: api.isAuthenticated(),
+    enabled: isAuthenticated,
   });
 }
 
 export function useEmployeeProfile() {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: queryKeys.profile,
+    queryKey: queryKeys.profile(scope),
     queryFn: async () => {
       const response = await employeesApi.getEmployeeProfile();
       return response.success ? response.data?.user ?? null : null;
     },
-    enabled: api.isAuthenticated(),
+    enabled: isAuthenticated,
   });
 }
 
@@ -335,26 +403,30 @@ export function useUpdateEmployeeProfile() {
 // ============================================================
 
 export function useTimeLogs() {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: ['time-logs'],
+    queryKey: queryKeys.timeLogs(scope),
     queryFn: async () => {
-      if (!api.isAuthenticated()) return null;
       const response = await employeesApi.getTimeLogs();
       return response.success ? response.data : null;
     },
-    enabled: api.isAuthenticated(),
+    enabled: isAuthenticated,
   });
 }
 
 export function useClockInOut() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: ({ action, notes }: { action: 'in' | 'out'; notes?: string }) =>
       employeesApi.clockInOut({ action, notes }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['time-logs'] });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+      queryClient.invalidateQueries({ queryKey: queryKeys.timeLogs(scope) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(scope) });
     },
   });
 }
@@ -364,19 +436,23 @@ export function useClockInOut() {
 // ============================================================
 
 export function useTimeOffRequests() {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: ['time-off-requests'],
+    queryKey: queryKeys.timeOffRequests(scope),
     queryFn: async () => {
-      if (!api.isAuthenticated()) return null;
       const response = await employeesApi.getTimeOffRequests();
       return response.success ? response.data : null;
     },
-    enabled: api.isAuthenticated(),
+    enabled: isAuthenticated,
   });
 }
 
 export function useRequestTimeOff() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: (data: {
@@ -386,7 +462,7 @@ export function useRequestTimeOff() {
       reason?: string;
     }) => employeesApi.requestTimeOff(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['time-off-requests'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.timeOffRequests(scope) });
     },
   });
 }
@@ -396,19 +472,23 @@ export function useRequestTimeOff() {
 // ============================================================
 
 export function useIssueReports() {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: ['issue-reports'],
+    queryKey: queryKeys.issueReports(scope),
     queryFn: async () => {
-      if (!api.isAuthenticated()) return null;
       const response = await employeesApi.getIssueReports();
       return response.success ? response.data : null;
     },
-    enabled: api.isAuthenticated(),
+    enabled: isAuthenticated,
   });
 }
 
 export function useReportIssue() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: (data: {
@@ -418,7 +498,7 @@ export function useReportIssue() {
       appointment_id?: number;
     }) => employeesApi.reportIssue(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['issue-reports'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.issueReports(scope) });
     },
   });
 }
@@ -428,109 +508,133 @@ export function useReportIssue() {
 // ============================================================
 
 export function useAdminDashboard() {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: queryKeys.dashboard,
+    queryKey: queryKeys.dashboard(scope),
     queryFn: async () => {
       const response = await adminApi.getAdminDashboard();
       return response.success ? response.data : null;
     },
-    enabled: api.isAuthenticated(),
+    enabled: isAuthenticated,
   });
 }
 
 export function useAllAppointmentsAdmin(status?: string) {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: [...queryKeys.allAppointmentsAdmin, status],
+    queryKey: [...queryKeys.allAppointmentsAdmin(scope), status ?? 'all'],
     queryFn: async () => {
       const response = await appointmentsApi.getAllAppointmentsAdmin(status);
       return response.success ? response.data?.appointments ?? [] : [];
     },
-    enabled: api.isAuthenticated(),
+    enabled: isAuthenticated,
   });
 }
 
 export function useAllUsers() {
+  const { isAuthenticated } = useAuth();
+
   return useQuery({
     queryKey: ['users'],
     queryFn: async () => {
       const response = await adminApi.getAllUsers();
       return response.success ? response.data?.users ?? [] : [];
     },
-    enabled: api.isAuthenticated(),
+    enabled: isAuthenticated,
   });
 }
 
 // Employee Management
 export function useEmployees(status?: string, location?: string, search?: string) {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: [...queryKeys.employees, status, location, search],
+    queryKey: [...queryKeys.employees(scope), status ?? 'all', location ?? '', search ?? ''],
     queryFn: async () => {
       const response = await employeesApi.getEmployees(status, location, search);
       return response.success ? response.data?.employees ?? [] : [];
     },
-    enabled: api.isAuthenticated(),
+    enabled: isAuthenticated,
   });
 }
 
 export function useRegisterEmployee() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: employeesApi.registerEmployee.bind(employeesApi),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.employees });
+      queryClient.invalidateQueries({ queryKey: queryKeys.employees(scope) });
     },
   });
 }
 
 export function useUpdateEmployee() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<User & Employee> }) =>
       employeesApi.updateEmployee(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.employees });
+      queryClient.invalidateQueries({ queryKey: queryKeys.employees(scope) });
     },
   });
 }
 
 export function useUpdateEmployeeStatus() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) =>
       employeesApi.updateEmployeeStatus(id, status),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.employees });
+      queryClient.invalidateQueries({ queryKey: queryKeys.employees(scope) });
     },
   });
 }
 
 export function useEmployee(id: number) {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: queryKeys.employee(id),
+    queryKey: queryKeys.employee(scope, id),
     queryFn: async () => {
       const response = await employeesApi.getEmployee(id);
       return response.success ? response.data : null;
     },
-    enabled: !!id && api.isAuthenticated(),
+    enabled: !!id && isAuthenticated,
   });
 }
 
 export function useDeleteEmployee() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: employeesApi.deactivateEmployee.bind(employeesApi),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.employees });
+      queryClient.invalidateQueries({ queryKey: queryKeys.employees(scope) });
     },
   });
 }
 
 export function useUpdateEmployeeAccountStatus() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: ({
@@ -543,24 +647,29 @@ export function useUpdateEmployeeAccountStatus() {
       exitNotes?: string;
     }) => employeesApi.updateEmployeeAccountStatus(id, accountStatus, exitNotes),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.employees });
+      queryClient.invalidateQueries({ queryKey: queryKeys.employees(scope) });
     },
   });
 }
 
 export function useEmployeeDocuments(employeeId: number) {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: ['employee-docs', employeeId],
+    queryKey: [...queryKeys.employee(scope, employeeId), 'documents'],
     queryFn: async () => {
       const response = await employeesApi.getEmployeeDocuments(employeeId);
       return response.success ? response.data?.documents ?? [] : [];
     },
-    enabled: !!employeeId && api.isAuthenticated(),
+    enabled: !!employeeId && isAuthenticated,
   });
 }
 
 export function useUploadDocument() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: ({
@@ -577,50 +686,60 @@ export function useUploadDocument() {
       isVerified?: boolean;
     }) =>
       employeesApi.uploadEmployeeDocument(employeeId, file, docType, documentName, isVerified),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.employees });
+    onSuccess: (_, { employeeId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.employees(scope) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.employee(scope, employeeId) });
     },
   });
 }
 
 export function useDeleteDocument() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: ({ employeeId, docId }: { employeeId: number; docId: number }) =>
       employeesApi.deleteEmployeeDocument(employeeId, docId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.employees });
+    onSuccess: (_, { employeeId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.employees(scope) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.employee(scope, employeeId) });
     },
   });
 }
 
 export function useDepartments() {
+  const { isAuthenticated } = useAuth();
+
   return useQuery({
     queryKey: ['departments'],
     queryFn: async () => {
       const response = await employeesApi.getDepartments();
       return response.success ? (response.data?.departments ?? []) : [];
     },
-    enabled: api.isAuthenticated(),
+    enabled: isAuthenticated,
     staleTime: 5 * 60 * 1000,
   });
 }
 
 export function useManagers() {
+  const { isAuthenticated } = useAuth();
+
   return useQuery({
     queryKey: ['managers'],
     queryFn: async () => {
       const response = await employeesApi.getManagers();
       return response.success ? (response.data?.managers ?? []) : [];
     },
-    enabled: api.isAuthenticated(),
+    enabled: isAuthenticated,
     staleTime: 5 * 60 * 1000,
   });
 }
 
 export function useAssignEmployee() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: ({
@@ -633,21 +752,23 @@ export function useAssignEmployee() {
       notes?: string;
     }) => employeesApi.assignEmployeeToAppointment(appointmentId, employeeId, notes),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.appointments });
-      queryClient.invalidateQueries({ queryKey: queryKeys.assignments });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments(scope) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.assignments(scope) });
     },
   });
 }
 
 // Service Partners
 export function useServicePartners(service?: string, location?: string) {
+  const { isAuthenticated } = useAuth();
+
   return useQuery({
     queryKey: [...queryKeys.partners, service, location],
     queryFn: async () => {
       const response = await partnersApi.getServicePartners(service, location);
       return response.success ? response.data?.partners ?? [] : [];
     },
-    enabled: api.isAuthenticated(),
+    enabled: isAuthenticated,
   });
 }
 
@@ -690,166 +811,197 @@ export function useDeactivateServicePartner() {
 // ============================================================
 
 export function useAssignmentDetail(assignmentId: number) {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: queryKeys.workflowAssignment(assignmentId),
+    queryKey: queryKeys.workflowAssignment(scope, assignmentId),
     queryFn: async () => {
       const response = await workflowApi.getAssignmentDetail(assignmentId);
       return response.success ? response.data?.assignment ?? null : null;
     },
-    enabled: !!assignmentId && api.isAuthenticated(),
+    enabled: !!assignmentId && isAuthenticated,
   });
 }
 
 export function useStartAssignment() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: (assignmentId: number) => workflowApi.startAssignment(assignmentId),
     onSuccess: (_, assignmentId) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.workflowAssignment(assignmentId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.assignments });
-      queryClient.invalidateQueries({ queryKey: queryKeys.workflowEmployeeDashboard });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workflowAssignment(scope, assignmentId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.assignments(scope) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workflowEmployeeDashboard(scope) });
     },
   });
 }
 
 export function useChecklist(assignmentId: number) {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: queryKeys.workflowChecklist(assignmentId),
+    queryKey: queryKeys.workflowChecklist(scope, assignmentId),
     queryFn: async () => {
       const response = await workflowApi.getChecklist(assignmentId);
       return response.success ? response.data?.checklist ?? null : null;
     },
-    enabled: !!assignmentId && api.isAuthenticated(),
+    enabled: !!assignmentId && isAuthenticated,
   });
 }
 
 export function useCreateOrUpdateChecklist() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: ({ assignmentId, data }: { assignmentId: number; data: Parameters<typeof workflowApi.createOrUpdateChecklist>[1] }) =>
       workflowApi.createOrUpdateChecklist(assignmentId, data),
     onSuccess: (_, { assignmentId }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.workflowChecklist(assignmentId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.workflowAssignment(assignmentId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workflowChecklist(scope, assignmentId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workflowAssignment(scope, assignmentId) });
     },
   });
 }
 
 export function useSubmitChecklist() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: (assignmentId: number) => workflowApi.submitChecklist(assignmentId),
     onSuccess: (_, assignmentId) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.workflowChecklist(assignmentId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.workflowAssignment(assignmentId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.assignments });
-      queryClient.invalidateQueries({ queryKey: queryKeys.workflowEmployeeDashboard });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workflowChecklist(scope, assignmentId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workflowAssignment(scope, assignmentId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.assignments(scope) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workflowEmployeeDashboard(scope) });
     },
   });
 }
 
 export function useWorkRecord(assignmentId: number) {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: queryKeys.workflowWorkRecord(assignmentId),
+    queryKey: queryKeys.workflowWorkRecord(scope, assignmentId),
     queryFn: async () => {
       const response = await workflowApi.getWorkRecord(assignmentId);
       return response.success ? response.data?.work_record ?? null : null;
     },
-    enabled: !!assignmentId && api.isAuthenticated(),
+    enabled: !!assignmentId && isAuthenticated,
   });
 }
 
 export function useCreateWorkRecord() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: ({ assignmentId, data }: { assignmentId: number; data: Parameters<typeof workflowApi.createWorkRecord>[1] }) =>
       workflowApi.createWorkRecord(assignmentId, data),
     onSuccess: (_, { assignmentId }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.workflowWorkRecord(assignmentId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.workflowAssignment(assignmentId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workflowWorkRecord(scope, assignmentId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workflowAssignment(scope, assignmentId) });
     },
   });
 }
 
 export function useUpdateWorkRecord() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: ({ workRecordId, data }: { workRecordId: number; data: Parameters<typeof workflowApi.updateWorkRecord>[1] }) =>
       workflowApi.updateWorkRecord(workRecordId, data),
     onSuccess: (_, { workRecordId }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.workflowWorkRecord(workRecordId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workflowWorkRecord(scope, workRecordId) });
     },
   });
 }
 
 export function useSubmitWorkRecord() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: (assignmentId: number) => workflowApi.submitWorkRecord(assignmentId),
     onSuccess: (_, assignmentId) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.workflowWorkRecord(assignmentId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.workflowAssignment(assignmentId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.assignments });
-      queryClient.invalidateQueries({ queryKey: queryKeys.workflowEmployeeDashboard });
-      queryClient.invalidateQueries({ queryKey: queryKeys.workflowPendingVerifications });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workflowWorkRecord(scope, assignmentId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workflowAssignment(scope, assignmentId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.assignments(scope) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workflowEmployeeDashboard(scope) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workflowPendingVerifications(scope) });
     },
   });
 }
 
 export function useVerifyWorkRecord() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: ({ assignmentId, data }: { assignmentId: number; data: Parameters<typeof workflowApi.verifyWorkRecord>[1] }) =>
       workflowApi.verifyWorkRecord(assignmentId, data),
     onSuccess: (_, { assignmentId }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.workflowAssignment(assignmentId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.workflowWorkRecord(assignmentId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.assignments });
-      queryClient.invalidateQueries({ queryKey: queryKeys.workflowPendingVerifications });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workflowAssignment(scope, assignmentId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workflowWorkRecord(scope, assignmentId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.assignments(scope) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workflowPendingVerifications(scope) });
     },
   });
 }
 
 export function useGenerateInvoice() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
 
   return useMutation({
     mutationFn: ({ assignmentId, data }: { appointmentId: number; data?: Parameters<typeof workflowApi.generateInvoice>[1] }) =>
       workflowApi.generateInvoice(assignmentId, data),
     onSuccess: (_, { appointmentId }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.appointment(appointmentId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.appointments });
-      queryClient.invalidateQueries({ queryKey: queryKeys.allAppointmentsAdmin });
-      queryClient.invalidateQueries({ queryKey: queryKeys.workflowPendingVerifications });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointment(scope, appointmentId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments(scope) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.allAppointmentsAdmin(scope) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workflowPendingVerifications(scope) });
     },
   });
 }
 
 export function useAdminPendingVerifications() {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: queryKeys.workflowPendingVerifications,
+    queryKey: queryKeys.workflowPendingVerifications(scope),
     queryFn: async () => {
       const response = await workflowApi.getAdminPendingVerifications();
       return response.success ? response.data?.assignments ?? [] : [];
     },
-    enabled: api.isAuthenticated(),
+    enabled: isAuthenticated,
   });
 }
 
 export function useEmployeeWorkflowDashboard() {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
   return useQuery({
-    queryKey: queryKeys.workflowEmployeeDashboard,
+    queryKey: queryKeys.workflowEmployeeDashboard(scope),
     queryFn: async () => {
       const response = await workflowApi.getEmployeeDashboardData();
       return response.success ? response.data : null;
     },
-    enabled: api.isAuthenticated(),
+    enabled: isAuthenticated,
   });
 }
