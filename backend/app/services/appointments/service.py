@@ -11,25 +11,51 @@ def get_appointments_query(current_user):
     if current_user['role'] == 'admin':
         appointments = Appointment.query.all()
     elif current_user['role'] == 'employee':
-        appointments = Appointment.query.join(Assignment).filter(
-            Assignment.employee_id == Employee.query.filter_by(
-                user_id=current_user['id']
-            ).with_entities(Employee.id).scalar_subquery()
-        ).all()
+        employee_id_subq = db.session.query(Employee.id).filter_by(user_id=current_user['id']).subquery()
+        if employee_id_subq is None:
+            return []
+        appointments = (
+            Appointment.query
+            .join(Assignment, Assignment.appointment_id == Appointment.id)
+            .filter(Assignment.employee_id.in_(employee_id_subq))
+            .all()
+        )
     else:
         appointments = Appointment.query.filter_by(user_id=current_user['id']).all()
     return appointments
 
 
+def _user_can_access_appointment(appointment, current_user):
+    if current_user['role'] == 'admin':
+        return True
+    if current_user['role'] == 'customer':
+        return appointment.user_id == current_user['id']
+    if current_user['role'] == 'employee':
+        employee_id = (
+            db.session.query(Employee.id)
+            .filter_by(user_id=current_user['id'])
+            .scalar()
+        )
+        if employee_id is None:
+            return False
+        assigned = (
+            db.session.query(Assignment.id)
+            .filter_by(appointment_id=appointment.id, employee_id=employee_id)
+            .first()
+        )
+        return assigned is not None
+    return False
+
+
 def get_appointment_by_id(appointment_id, current_user):
     appointment = Appointment.query.get(appointment_id)
-    
+
     if not appointment:
         raise ValueError('Appointment not found')
-    
-    if current_user['role'] == 'customer' and appointment.user_id != current_user['id']:
+
+    if not _user_can_access_appointment(appointment, current_user):
         raise ValueError('Unauthorized access')
-    
+
     return appointment
 
 
@@ -58,7 +84,7 @@ def apply_discount_safely(discount_code, total_amount):
     if not discount_code:
         return 0.0, total_amount, None
     
-    discount = DiscountCode.query.filter_by(code=discount_code.upper()).first()
+    discount = DiscountCode.query.filter_by(code=discount_code.upper()).with_for_update().first()
     
     if not discount or not discount.is_active:
         return 0.0, total_amount, "Invalid discount code"
@@ -71,9 +97,7 @@ def apply_discount_safely(discount_code, total_amount):
     if discount.end_date and current_date > discount.end_date:
         return 0.0, total_amount, "Discount code has expired"
     
-    discount = DiscountCode.query.filter_by(code=discount_code.upper()).with_for_update().first()
-    
-    if not discount or discount.used_count >= discount.max_uses:
+    if discount.used_count >= discount.max_uses:
         return 0.0, total_amount, "Discount code has reached maximum usage"
     
     if discount.minimum_spend and total_amount < discount.minimum_spend:
@@ -216,13 +240,13 @@ def _notify_admins_new_booking(appointment):
 
 def update_appointment(appointment_id, current_user, data):
     appointment = Appointment.query.get(appointment_id)
-    
+
     if not appointment:
         raise ValueError('Appointment not found')
-    
-    if current_user['role'] == 'customer' and appointment.user_id != current_user['id']:
+
+    if not _user_can_access_appointment(appointment, current_user):
         raise ValueError('Unauthorized access')
-    
+
     original_status = appointment.status
     
     if 'vehicle_id' in data:
@@ -254,22 +278,19 @@ def update_appointment(appointment_id, current_user, data):
     if 'status' in data:
         appointment.status = data['status']
     
-    if 'payment_status' in data:
-        appointment.payment_status = data['payment_status']
-    
     db.session.commit()
     return appointment, original_status
 
 
 def cancel_appointment(appointment_id, current_user):
     appointment = Appointment.query.get(appointment_id)
-    
+
     if not appointment:
         raise ValueError('Appointment not found')
-    
-    if current_user['role'] == 'customer' and appointment.user_id != current_user['id']:
+
+    if not _user_can_access_appointment(appointment, current_user):
         raise ValueError('Unauthorized access')
-    
+
     appointment.status = 'cancelled'
     db.session.commit()
     return appointment
@@ -277,11 +298,11 @@ def cancel_appointment(appointment_id, current_user):
 
 def confirm_vehicle_return(appointment_id, current_user, data):
     appointment = Appointment.query.get(appointment_id)
-    
+
     if not appointment:
         raise ValueError('Appointment not found')
-    
-    if current_user['role'] == 'customer' and appointment.user_id != current_user['id']:
+
+    if not _user_can_access_appointment(appointment, current_user):
         raise ValueError('Unauthorized access')
     
     service_rating = data.get('service_rating')
