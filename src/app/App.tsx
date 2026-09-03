@@ -32,9 +32,9 @@ import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { toast, Toaster } from 'sonner';
 import { services } from '@/app/data/services';
-import { useAppointments, useProfile } from '@/hooks/useApi';
-import { api } from '@/services/api';
-import type { Appointment } from '@/services/api';
+import { useAppointments } from '@/hooks/useApi';
+import { appointmentsApi } from '@/services/api/appointments';
+import type { Appointment } from '@/services/api/types';
 import { useAuth } from '@/contexts/AuthContext';
 
 import { PricingPage } from '@/app/components/PricingPage';
@@ -49,16 +49,25 @@ export default function App() {
   const [successModalOpen, setSuccessModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [lastSubmittedRating, setLastSubmittedRating] = useState(0);
-  const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0);
 
   const { userType, logout } = useAuth();
-  const { data: profile } = useProfile();
-  const { data: appointments = [], isLoading: appointmentsLoading, refetch: refetchAppointments } = useAppointments();
+  const { data: appointments = [], refetch: refetchAppointments } = useAppointments();
 
   const handleCloseBooking = () => {
     setCurrentView('home');
     setSelectedService(undefined);
     refetchAppointments();
+  };
+
+  const handleOpenBooking = (preselectedServiceId?: string) => {
+    if (userType !== 'customer') {
+      setLoginModalOpen(true);
+      toast.error('Please login to book a service');
+      return;
+    }
+    setSelectedService(preselectedServiceId);
+    setCurrentView('booking');
+    window.scrollTo(0, 0);
   };
 
   const handleLogout = async () => {
@@ -84,7 +93,11 @@ export default function App() {
 
   const handleConfirmationSubmit = async (data: ConfirmationData) => {
     try {
-      const response = await api.confirmVehicleReturn(selectedAppointment.id, {
+      if (!selectedAppointment) {
+        toast.error('No appointment selected');
+        return;
+      }
+      const response = await appointmentsApi.confirmVehicleReturn(selectedAppointment.id, {
         service_rating: data.serviceRating,
         condition_rating: data.conditionRating,
         review: data.feedback || undefined
@@ -110,6 +123,11 @@ export default function App() {
   };
 
   const handleNavigate = (view: string) => {
+    if (view === 'pos' && userType !== 'admin' && userType !== 'super_admin') {
+      toast.error('POS Terminal is restricted to administrators only');
+      return;
+    }
+
     if ((view === 'appointments' || view === 'dashboard' || view === 'profile') && userType !== 'customer') {
       setLoginModalOpen(true);
       toast.error('Please login to access this page');
@@ -164,10 +182,15 @@ export default function App() {
   };
 
   useEffect(() => {
-    if ((currentView === 'appointments' || currentView === 'booking' || currentView === 'profile' || currentView === 'dashboard') && userType !== 'customer') {
+    if ((currentView === 'appointments' || currentView === 'booking' || currentView === 'profile' || currentView === 'dashboard' || currentView === 'pos') && 
+        (userType !== 'customer' && userType !== 'admin' && userType !== 'super_admin')) {
       setCurrentView('home');
-      setLoginModalOpen(true);
-      toast.error('Please login to access this page');
+      if (currentView === 'pos') {
+        toast.error('POS Terminal is restricted to administrators only');
+      } else {
+        setLoginModalOpen(true);
+        toast.error('Please login to access this page');
+      }
     }
   }, [currentView, userType]);
 
@@ -182,7 +205,7 @@ export default function App() {
     return () => window.removeEventListener('error', handleFetchError);
   }, []);
 
-  if (userType === 'admin') {
+  if (userType === 'admin' || userType === 'super_admin') {
     return (
       <>
         <AdminDashboard onLogout={handleLogout} />
@@ -239,21 +262,14 @@ export default function App() {
                 </h1>
                 <p className="text-xl text-slate-200 mb-8 max-w-2xl">
                   Skip the garage and car wash lines. Our professional concierge service picks up 
-                  your vehicle, handles all maintenance and cleaning, and returns it to you  all 
+                  your vehicle, handles all maintenance and cleaning, and returns it to you — all 
                   while you focus on what matters.
                 </p>
                 <div className="flex flex-wrap gap-4">
                   <Button
                     size="lg"
                     className="bg-white text-slate-900 hover:bg-slate-100 px-8 py-6 text-lg"
-                    onClick={() => {
-                      if (userType !== 'customer') {
-                        setLoginModalOpen(true);
-                        toast.error('Please login to book a service');
-                        return;
-                      }
-                      setCurrentView('booking');
-                    }}
+                    onClick={() => handleOpenBooking()}
                   >
                     Book a Service
                     <ArrowRight className="ml-2 h-5 w-5" />
@@ -277,7 +293,7 @@ export default function App() {
                     <p className="text-sm text-slate-300">Average Rating</p>
                   </div>
                   <div>
-                    <p className="font-bold text-xl mb-1">{import.meta.env.VITE_APP_SERVICES_COMPLETED || '1000+'}</p>
+                    <p className="font-bold text-xl mb-1">{import.meta.env.VITE_APP_SERVICES_COMPLETED || '10,000+'}</p>
                     <p className="text-sm text-slate-300">Services Completed</p>
                   </div>
                   <div>
@@ -308,7 +324,7 @@ export default function App() {
                   </div>
                   <h3 className="font-bold text-lg mb-2">Trusted Professionals</h3>
                   <p className="text-slate-600">
-                    All concierges are vetted,  and highly experienced with all vehicle types.
+                    All concierges are vetted, insured, and highly experienced with all vehicle types.
                   </p>
                 </div>
                 <div className="text-center group">
@@ -366,20 +382,13 @@ export default function App() {
               <h2 className="text-4xl font-bold mb-6">Ready to Save Time?</h2>
               <p className="text-slate-300 mb-10 max-w-2xl mx-auto text-lg leading-relaxed">
                 Book your first service today and experience the convenience of having a 
-                professional take care of your vehicle needs.
+                professional take care of your vehicle needs. Join {import.meta.env.VITE_APP_HAPPY_CUSTOMERS || '5,000+'} happy car owners.
               </p>
               <div className="flex flex-col sm:flex-row justify-center gap-4">
                 <Button
                   size="lg"
                   className="bg-white text-slate-900 hover:bg-slate-100 px-10 py-6 text-lg font-bold"
-                  onClick={() => {
-                    if (userType !== 'customer') {
-                      setLoginModalOpen(true);
-                      toast.error('Please login to book a service');
-                      return;
-                    }
-                    setCurrentView('booking');
-                  }}
+                  onClick={() => handleOpenBooking()}
                 >
                   Get Started Now
                   <ArrowRight className="ml-2 h-5 w-5" />
@@ -400,8 +409,9 @@ export default function App() {
       {/* Booking View */}
       {currentView === 'booking' && (
         <main className="flex-1 container mx-auto px-4 py-16 bg-white">
-          <BookingForm 
-            selectedService={selectedService} 
+          <BookingForm
+            key={`booking-${selectedService ?? 'none'}`}
+            selectedService={selectedService}
             onClose={handleCloseBooking}
           />
         </main>
@@ -414,13 +424,13 @@ export default function App() {
             <div className="mb-10">
               <h1 className="text-4xl font-bold mb-3 tracking-tight">My Appointments</h1>
               <p className="text-slate-600 text-lg">
-                Track and manage all your vehicle service appointments.
+                Track and manage all your vehicle service appointments in real-time
               </p>
             </div>
 
             <CustomerAppointments
               onConfirmReturn={handleConfirmReturn}
-              onBookAppointment={() => setCurrentView('booking')}
+              onBookAppointment={() => handleOpenBooking()}
             />
           </div>
 
@@ -474,7 +484,10 @@ export default function App() {
 
       {/* POS Terminal View */}
       {currentView === 'pos' && (
-        <POSTerminal onClose={() => setCurrentView('home')} />
+        <POSTerminal 
+          onClose={() => setCurrentView('home')}
+          userType={userType}
+        />
       )}
 
       {/* Footer */}
@@ -523,7 +536,11 @@ export default function App() {
                 <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('appointments')}>My Appointments</li>
                 <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('how-it-works')}>How It Works</li>
                 <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('pricing')}>Pricing Plans</li>
-                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => setCurrentView('pos')}>POS Terminal</li>
+                {userType === 'admin' || userType === 'super_admin' ? (
+                  <li className="hover:text-white transition-colors cursor-pointer" onClick={() => setCurrentView('pos')}>POS Terminal</li>
+                ) : (
+                  <li className="text-slate-600 cursor-not-allowed">POS Terminal</li>
+                )}
                 <li className="hover:text-white transition-colors cursor-pointer" onClick={() => toast.info('Coming soon')}>Safety & Insurance</li>
               </ul>
             </div>

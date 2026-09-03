@@ -27,7 +27,11 @@ export function BookingForm({ selectedService, onClose }: BookingFormProps) {
   const createAppointmentMutation = useCreateAppointment();
 
   useEffect(() => {
-  }, []);
+    setFormData((prev) => ({
+      ...prev,
+      service_id: selectedService ? parseInt(selectedService) : prev.service_id,
+    }));
+  }, [selectedService]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
