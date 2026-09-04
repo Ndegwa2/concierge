@@ -15,6 +15,11 @@ __pycache__/
 celerybeat-schedule.*
 stats.html
 
+# Runtime
+.kilo/
+backend/instance/
+instance/
+
 # Build outputs
 dist/
 build/
