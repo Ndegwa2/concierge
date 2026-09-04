@@ -136,7 +136,7 @@ def create_discount(data):
     return discount
 
 
-def create_pos_checkout(data):
+def create_pos_checkout(data, processed_by_user_id=None, appointment_id=None, customer_user_id=None, send_email_to_customer=False):
     from app.services.fleets.models import Invoice, InvoiceLineItem
     from app.services.invoices.service import _generate_invoice_number
     from app.services.invoices.pdf_generator import generate_invoice_pdf
@@ -165,12 +165,15 @@ def create_pos_checkout(data):
     invoice_number = _generate_invoice_number(0, datetime.now(timezone.utc))
     invoice = Invoice(
         invoice_number=invoice_number,
-        user_id=None,
+        user_id=customer_user_id,
+        appointment_id=appointment_id,
+        processed_by_user_id=processed_by_user_id,
         total_amount=total,
-        status='paid' if payment_method == 'cash' else 'sent',
+        status='pending_verification',
         invoice_type='pos',
         tax_amount=tax_amount,
         currency='KES',
+        payment_method=payment_method,
         notes=notes,
     )
     db.session.add(invoice)
@@ -192,7 +195,7 @@ def create_pos_checkout(data):
     invoice.pdf_path = pdf_path
     db.session.commit()
 
-    if customer_email:
+    if send_email_to_customer and customer_email:
         subject = f'Receipt {invoice_number} - AutoConcierge'
         body = (
             f"Dear {customer_name},\n\n"
@@ -208,6 +211,65 @@ def create_pos_checkout(data):
             body=body,
             attachment_path=pdf_path,
             attachment_filename=f'{invoice_number}.pdf',
+        )
+
+    return invoice
+
+
+def get_pending_verification_invoices():
+    from app.services.fleets.models import Invoice
+    invoices = (
+        Invoice.query
+        .filter(Invoice.status == 'pending_verification')
+        .order_by(Invoice.created_at.desc())
+        .all()
+    )
+    return invoices
+
+
+def verify_invoice_and_email(invoice_id, verified_by_user_id):
+    from app.services.fleets.models import Invoice
+    from app.services.auth.models import User
+    from app.services.appointments.models import Appointment
+    from app.tasks.email_tasks import send_email_with_attachment
+
+    invoice = Invoice.query.get(invoice_id)
+    if not invoice:
+        raise ValueError('Invoice not found')
+
+    if invoice.status not in ('pending_verification', 'sent', 'paid'):
+        raise ValueError(f'Invoice in status "{invoice.status}" cannot be verified')
+
+    customer = User.query.get(invoice.user_id) if invoice.user_id else None
+    appointment = Appointment.query.get(invoice.appointment_id) if invoice.appointment_id else None
+
+    invoice.status = 'verified'
+    invoice.verified_by_user_id = verified_by_user_id
+    invoice.verified_at = datetime.now(timezone.utc)
+    invoice.sent_at = datetime.now(timezone.utc)
+    db.session.commit()
+
+    customer_email = customer.email if customer else None
+    if appointment and appointment.customer and getattr(appointment.customer, 'email', None):
+        customer_email = appointment.customer.email
+
+    if customer_email and invoice.pdf_path:
+        subject = f'Verified Invoice {invoice.invoice_number} - AutoConcierge'
+        body = (
+            f"Dear {customer.name if customer else 'Customer'},\n\n"
+            f"Your invoice has been verified by our team and is ready for your records.\n\n"
+            f"Invoice Number: {invoice.invoice_number}\n"
+            f"Total Amount: KES {float(invoice.total_amount):,.2f}\n"
+            f"Payment Method: {invoice.payment_method or 'N/A'}\n\n"
+            f"Please find the invoice attached.\n\n"
+            f"Thank you for choosing AutoConcierge.\n"
+        )
+        send_email_with_attachment.delay(
+            to=customer_email,
+            subject=subject,
+            body=body,
+            attachment_path=invoice.pdf_path,
+            attachment_filename=f'{invoice.invoice_number}.pdf',
         )
 
     return invoice
