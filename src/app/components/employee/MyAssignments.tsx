@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Search, Filter, Phone, Navigation, CheckCircle2, Clock, XCircle, MapPin } from 'lucide-react';
+import { Search, Filter, Phone, Navigation, CheckCircle2, Clock, XCircle, MapPin, Wallet } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
@@ -17,6 +17,7 @@ interface MyAssignmentsProps {
     name: string;
     id: string;
   };
+  onCheckoutAssignment?: (assignmentId: number) => void;
 }
 
 interface AssignmentDisplay {
@@ -42,7 +43,7 @@ interface AssignmentDisplay {
   customerPhone: string;
 }
 
-export function MyAssignments({ employeeData }: MyAssignmentsProps) {
+export function MyAssignments({ employeeData, onCheckoutAssignment }: MyAssignmentsProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedAssignment, setSelectedAssignment] = useState<AssignmentDisplay | null>(null);
@@ -225,13 +226,24 @@ export function MyAssignments({ employeeData }: MyAssignmentsProps) {
               </Button>
             )}
             {assignment.statusValue === 'verified' && (
-              <Button variant="outline" className="flex-1" size="sm" disabled>
-                Ready for Checkout
+              <Button
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                size="sm"
+                onClick={() => onCheckoutAssignment?.(assignment.assignmentId)}
+              >
+                <Wallet className="h-4 w-4 mr-2" />
+                POS Checkout
               </Button>
             )}
-            {assignment.statusValue === 'completed' && (
-              <Button variant="outline" className="flex-1" size="sm">
-                View Details
+            {assignment.statusValue === 'completed' && onCheckoutAssignment && (
+              <Button
+                variant="outline"
+                className="flex-1"
+                size="sm"
+                onClick={() => onCheckoutAssignment(assignment.assignmentId)}
+              >
+                <Wallet className="h-4 w-4 mr-2" />
+                POS Checkout
               </Button>
             )}
             <Button variant="outline" size="sm" onClick={() => handleCallCustomer(assignment.customerPhone)}>

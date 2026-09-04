@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
-import { 
-  LayoutDashboard, 
-  Calendar, 
+import {
+  LayoutDashboard,
+  Calendar,
   CheckSquare,
   User,
   LogOut,
   Menu,
   X,
   Car,
-  Wrench
+  Wrench,
+  Wallet
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
@@ -18,14 +19,16 @@ import { EmployeeFunctions } from './EmployeeFunctions';
 import { MyAssignments } from './MyAssignments';
 import { MySchedule } from './MySchedule';
 import { EmployeeProfile } from './EmployeeProfile';
+import { EmployeePOSTerminal } from './EmployeePOSTerminal';
 
 interface EmployeeDashboardProps {
   onLogout: () => void;
 }
 
 export function EmployeeDashboard({ onLogout }: EmployeeDashboardProps) {
-  const [currentSection, setCurrentSection] = useState<'overview' | 'functions' | 'assignments' | 'schedule' | 'profile'>('functions');
+  const [currentSection, setCurrentSection] = useState<'overview' | 'functions' | 'assignments' | 'schedule' | 'profile' | 'pos'>('functions');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [pendingAssignmentId, setPendingAssignmentId] = useState<number | null>(null);
 
   const [employeeData, setEmployeeData] = useState<{ name: string; id: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -83,6 +86,7 @@ export function EmployeeDashboard({ onLogout }: EmployeeDashboardProps) {
     { id: 'functions', name: 'Functions', icon: Wrench },
     { id: 'overview', name: 'Overview', icon: LayoutDashboard },
     { id: 'assignments', name: 'My Assignments', icon: CheckSquare },
+    { id: 'pos', name: 'POS Checkout', icon: Wallet },
     { id: 'schedule', name: 'Schedule', icon: Calendar },
     { id: 'profile', name: 'Profile', icon: User },
   ];
@@ -164,7 +168,28 @@ export function EmployeeDashboard({ onLogout }: EmployeeDashboardProps) {
           <div className="max-w-full overflow-hidden">
             {currentSection === 'functions' && <EmployeeFunctions employeeData={employeeData} />}
             {currentSection === 'overview' && <EmployeeOverview employeeData={employeeData} />}
-            {currentSection === 'assignments' && <MyAssignments employeeData={employeeData} />}
+            {currentSection === 'assignments' && (
+              <MyAssignments
+                employeeData={employeeData}
+                onCheckoutAssignment={(assignmentId) => {
+                  setPendingAssignmentId(assignmentId);
+                  setCurrentSection('pos');
+                }}
+              />
+            )}
+            {currentSection === 'pos' && (
+              <EmployeePOSTerminal
+                assignmentId={pendingAssignmentId}
+                onClose={() => {
+                  setPendingAssignmentId(null);
+                  setCurrentSection('functions');
+                }}
+                onBackToAssignments={() => {
+                  setPendingAssignmentId(null);
+                  setCurrentSection('assignments');
+                }}
+              />
+            )}
             {currentSection === 'schedule' && <MySchedule employeeData={employeeData} />}
             {currentSection === 'profile' && <EmployeeProfile employeeData={employeeData} />}
           </div>
