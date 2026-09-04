@@ -95,4 +95,46 @@ export const adminApi = {
       body: JSON.stringify(data),
     });
   },
+
+  async getPendingInvoices(): Promise<ApiResponse<{ invoices: POSInvoice[]; count: number }>> {
+    return apiClient.request('/admin/pos/invoices/pending');
+  },
+
+  async verifyInvoice(invoiceId: number): Promise<ApiResponse<{ invoice: POSInvoice }>> {
+    return apiClient.request(`/admin/pos/invoices/${invoiceId}/verify`, {
+      method: 'POST',
+    });
+  },
+};
+
+export interface POSInvoice {
+  id: number;
+  invoice_number: string;
+  appointment_id?: number | null;
+  user_id?: number | null;
+  processed_by_user_id?: number | null;
+  verified_by_user_id?: number | null;
+  verified_at?: string | null;
+  total_amount: number;
+  status: string;
+  invoice_type: string;
+  tax_amount: number;
+  currency: string;
+  payment_method?: string | null;
+  notes?: string | null;
+  pdf_path?: string | null;
+  sent_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const posApi = {
+  async employeeCheckout(assignmentId: number, data: POSCheckoutRequest): Promise<ApiResponse<{
+    invoice: POSInvoice;
+  }>> {
+    return apiClient.request('/employees/pos/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ ...data, assignment_id: assignmentId }),
+    });
+  },
 };
