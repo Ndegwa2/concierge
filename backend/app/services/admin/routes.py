@@ -18,6 +18,8 @@ from .service import (
     create_notification as svc_create_notification,
     create_discount as svc_create_discount,
     create_pos_checkout as svc_create_pos_checkout,
+    get_pending_verification_invoices as svc_get_pending_invoices,
+    verify_invoice_and_email as svc_verify_invoice,
 )
 from datetime import datetime, timezone
 
@@ -252,8 +254,13 @@ def create_discount():
 @admin_required
 def pos_checkout():
     try:
+        current_user = get_current_user()
         data = request.get_json(silent=True) or {}
-        invoice = svc_create_pos_checkout(data)
+        invoice = svc_create_pos_checkout(
+            data,
+            processed_by_user_id=current_user['id'] if current_user else None,
+            send_email_to_customer=True,
+        )
 
         return jsonify({
             'success': True,
@@ -270,4 +277,52 @@ def pos_checkout():
             'success': False,
             'message': 'Failed to complete checkout',
             'error': 'An internal server error occurred.'
+        }), 500
+
+
+@admin_bp.route('/pos/invoices/pending', methods=['GET'])
+@jwt_required()
+@admin_required
+def list_pending_invoices():
+    try:
+        invoices = svc_get_pending_invoices()
+        return jsonify({
+            'success': True,
+            'data': {
+                'invoices': [inv.to_dict() for inv in invoices],
+                'count': len(invoices),
+            },
+        }), 200
+    except Exception as e:
+        logger.error('List pending invoices failed: %s', e, exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to load pending invoices',
+        }), 500
+
+
+@admin_bp.route('/pos/invoices/<int:invoice_id>/verify', methods=['POST'])
+@jwt_required()
+@admin_required
+def verify_invoice(invoice_id):
+    try:
+        current_user = get_current_user()
+        invoice = svc_verify_invoice(invoice_id, current_user['id'])
+
+        cache_delete_pattern('admin:dashboard:*')
+        cache_delete_pattern('appointments:*')
+
+        return jsonify({
+            'success': True,
+            'message': 'Invoice verified and emailed to customer',
+            'data': {'invoice': invoice.to_dict()},
+        }), 200
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        logger.error('Verify invoice failed: %s', e, exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to verify invoice',
         }), 500

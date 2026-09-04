@@ -612,14 +612,14 @@ def update_assignment_status(assignment_id):
     try:
         current_user = get_current_user()
         data = request.get_json()
-        
+
         assignment = svc_update_assignment_status(assignment_id, current_user, data)
 
         cache_delete_pattern(f"employee:assignments:{current_user['id']}:*")
         cache_delete_pattern(f"employee:dashboard:{current_user['id']}")
         cache_delete_pattern("admin:dashboard:*")
         cache_delete_pattern("appointments:*")
-        
+
         return jsonify({
             'success': True,
             'message': 'Assignment status updated',
@@ -627,13 +627,107 @@ def update_assignment_status(assignment_id):
                 'assignment': assignment.to_dict()
             }
         }), 200
-        
+
     except Exception as e:
         db.session.rollback()
         logger.error(str(e), exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to update assignment',
+            'error': 'An internal server error occurred.'
+        }), 500
+
+
+@employees_bp.route('/pos/checkout', methods=['POST'])
+@jwt_required()
+@employee_required
+def pos_checkout():
+    """Employee-side POS checkout. Creates an invoice in
+    'pending_verification' state linked to the employee's assignment and
+    the appointment's customer. The customer is is email is NOT
+    sent at this stage — an admin must verify and send.
+    """
+    try:
+        current_user = get_current_user()
+        data = request.get_json(silent=True) or {}
+
+        from app.services.admin.service import create_pos_checkout as svc_pos_checkout
+        from app.services.employees.models import Employee
+        from app.services.appointments.models import Assignment
+        from app.services.fleets.models import Invoice
+        from app.services.auth.models import User
+
+        employee = Employee.query.filter_by(user_id=current_user['id']).first()
+        if not employee:
+            return jsonify({'success': False, 'message': 'Employee profile not found'}), 400
+
+        assignment_id = data.get('assignment_id')
+        if not assignment_id:
+            return jsonify({'success': False, 'message': 'assignment_id is required'}), 400
+
+        assignment = Assignment.query.get(assignment_id)
+        if not assignment or assignment.employee_id != employee.id:
+            return jsonify({'success': False, 'message': 'Assignment not found or not assigned to you'}), 403
+
+        appointment = assignment.appointment
+        customer = User.query.get(appointment.user_id) if appointment else None
+
+        if not customer:
+            return jsonify({
+                'success': False,
+                'message': 'Cannot bill this assignment — appointment has no customer'
+            }), 400
+
+        existing_pending = Invoice.query.filter_by(
+            appointment_id=appointment.id,
+            status='pending_verification',
+            processed_by_user_id=current_user['id'],
+        ).first()
+        if existing_pending:
+            return jsonify({
+                'success': False,
+                'message': 'A pending invoice already exists for this assignment',
+                'data': {'invoice': existing_pending.to_dict()},
+            }), 409
+
+        customer_email = customer.email or data.get('customer_email')
+        customer_name = customer.name or data.get('customer_name', 'Customer')
+        customer_phone = customer.phone or data.get('customer_phone')
+
+        forwarded = {
+            **data,
+            'customer_email': customer_email,
+            'customer_name': customer_name,
+            'customer_phone': customer_phone,
+        }
+
+        invoice = svc_pos_checkout(
+            forwarded,
+            processed_by_user_id=current_user['id'],
+            appointment_id=appointment.id,
+            customer_user_id=customer.id,
+            send_email_to_customer=False,
+        )
+
+        cache_delete_pattern(f"employee:assignments:{current_user['id']}:*")
+        cache_delete_pattern("admin:dashboard:*")
+        cache_delete_pattern("appointments:*")
+
+        return jsonify({
+            'success': True,
+            'message': 'Invoice created — awaiting admin verification',
+            'data': {'invoice': invoice.to_dict()},
+        }), 201
+
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        logger.error('Employee POS checkout failed: %s', e, exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to complete checkout',
             'error': 'An internal server error occurred.'
         }), 500
 
