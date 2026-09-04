@@ -115,6 +115,7 @@ class Assignment(db.Model):
     appointment_id = db.Column(db.BigInteger, db.ForeignKey('appointments.id', ondelete='CASCADE'), nullable=False, index=True)
     appointment = db.relationship('Appointment', backref='assignments', lazy='joined')
     employee_id = db.Column(db.BigInteger, db.ForeignKey('employees.id', ondelete='CASCADE'), nullable=False, index=True)
+    employee = db.relationship('Employee', backref='assignments', lazy='select')
     status = db.Column(db.String(20), default='assigned', index=True)
     assigned_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), index=True)
     started_at = db.Column(db.DateTime(timezone=True))
