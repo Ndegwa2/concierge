@@ -1,9 +1,9 @@
-import { useState } from 'react';
-import { Check, Receipt, CreditCard, Wallet, Trash2, Plus, X, Percent, Delete, Shield, Download } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Check, Receipt, CreditCard, Wallet, Trash2, Plus, X, Percent, Delete, Shield, Download, ArrowLeft } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { toast } from 'sonner';
 import { cn } from '@/app/components/ui/utils';
-import { adminApi } from '@/services/api/admin';
+import { adminApi, posApi } from '@/services/api/admin';
 
 interface LineItem {
   id: string;
@@ -12,30 +12,40 @@ interface LineItem {
   amount: number;
 }
 
-interface POSTerminalProps {
+export interface POSTerminalProps {
   onClose?: () => void;
   userType?: 'customer' | 'employee' | 'admin' | 'super_admin' | null;
+  /** When set, the terminal acts in employee mode and bills the
+   *  appointment attached to the given assignment id. */
+  mode?: 'admin' | 'employee';
+  assignmentId?: number;
+  prefill?: {
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    initialLineItems?: Array<{ type: 'pass-through' | 'service-fee'; label: string; amount: number }>;
+  };
 }
 
-export function POSTerminal({ onClose, userType }: POSTerminalProps) {
-  const isAdmin = userType === 'admin' || userType === 'super_admin';
+export function POSTerminal({ onClose, userType, mode = 'admin', assignmentId, prefill }: POSTerminalProps) {
+  const isAdmin = mode === 'admin';
+  const canAccess = isAdmin
+    ? userType === 'admin' || userType === 'super_admin'
+    : userType === 'employee' || userType === 'admin' || userType === 'super_admin';
 
-  if (!isAdmin) {
+  if (!canAccess) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center">
         <div className="text-center space-y-4">
           <Shield className="h-16 w-16 text-red-400 mx-auto" />
           <h1 className="text-3xl font-bold text-white">Access Denied</h1>
           <p className="text-slate-400 max-w-md">
-            The POS Terminal is restricted to administrators only. 
-            Please contact your system administrator if you believe this is an error.
+            {isAdmin
+              ? 'The POS Terminal is restricted to administrators only.'
+              : 'You do not have access to the POS Terminal.'}
           </p>
           {onClose && (
-            <Button 
-              variant="outline" 
-              onClick={onClose}
-              className="mt-4"
-            >
+            <Button variant="outline" onClick={onClose} className="mt-4">
               <X className="h-4 w-4 mr-2" />
               Go Back
             </Button>
@@ -46,21 +56,36 @@ export function POSTerminal({ onClose, userType }: POSTerminalProps) {
   }
 
   const [activePayment, setActivePayment] = useState<'mpesa' | 'card' | 'cash'>('cash');
-  const [keypadInput, setKeypadInput] = useState('16530.00');
-  const [lineItems, setLineItems] = useState<LineItem[]>([
-    { id: '1', type: 'pass-through', label: 'Synthetic Oil Change (Parts)', amount: 6500 },
-    { id: '2', type: 'service-fee', label: 'Concierge Logistics Fee', amount: 2500 },
-    { id: '3', type: 'pass-through', label: 'Brake Pads Replacement', amount: 4200 },
-    { id: '4', type: 'service-fee', label: 'Wheel Alignment', amount: 1800 },
-  ]);
+  const [keypadInput, setKeypadInput] = useState('0');
+  const [lineItems, setLineItems] = useState<LineItem[]>(
+    prefill?.initialLineItems?.length
+        ? prefill.initialLineItems.map((it, i) => ({
+            id: `prefill-${i}`,
+            type: it.type,
+            label: it.label,
+            amount: it.amount,
+          }))
+        : [
+            { id: '1', type: 'pass-through', label: 'Synthetic Oil Change (Parts)', amount: 6500 },
+            { id: '2', type: 'service-fee', label: 'Concierge Logistics Fee', amount: 2500 },
+          ]
+  );
   const [discountPercent, setDiscountPercent] = useState(5);
   const [vatPercent] = useState(16);
-  const [cashTendered, setCashTendered] = useState(17000);
-  const [customerName, setCustomerName] = useState('');
-  const [customerEmail, setCustomerEmail] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
+  const [cashTendered, setCashTendered] = useState(0);
+  const [customerName, setCustomerName] = useState(prefill?.customerName ?? '');
+  const [customerEmail, setCustomerEmail] = useState(prefill?.customerEmail ?? '');
+  const [customerPhone, setCustomerPhone] = useState(prefill?.customerPhone ?? '');
   const [notes, setNotes] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    if (prefill) {
+      if (prefill.customerName !== undefined) setCustomerName(prefill.customerName);
+      if (prefill.customerEmail !== undefined) setCustomerEmail(prefill.customerEmail);
+      if (prefill.customerPhone !== undefined) setCustomerPhone(prefill.customerPhone);
+    }
+  }, [prefill?.customerName, prefill?.customerEmail, prefill?.customerPhone]);
 
   const subtotal = lineItems.reduce((sum, item) => sum + item.amount, 0);
   const discountAmount = Math.round(subtotal * (discountPercent / 100));
@@ -125,7 +150,7 @@ export function POSTerminal({ onClose, userType }: POSTerminalProps) {
     setIsProcessing(true);
 
     try {
-      const response = await adminApi.posCheckout({
+      const payload = {
         customer_name: customerName || undefined,
         customer_email: customerEmail || undefined,
         customer_phone: customerPhone || undefined,
@@ -140,10 +165,18 @@ export function POSTerminal({ onClose, userType }: POSTerminalProps) {
         tax_amount: vatAmount,
         notes: notes || undefined,
         cash_tendered: activePayment === 'cash' ? cashTendered : undefined,
-      });
+      };
+
+      const response = isAdmin
+        ? await adminApi.posCheckout(payload)
+        : await posApi.employeeCheckout(assignmentId!, payload);
 
       if (response.success) {
-        toast.success(`Checkout completed! KES ${grandTotal.toLocaleString('en-KE', { minimumFractionDigits: 2 })}`);
+        toast.success(
+          isAdmin
+            ? `Checkout completed! KES ${grandTotal.toLocaleString('en-KE', { minimumFractionDigits: 2 })}`
+            : `Invoice queued for admin verification (KES ${grandTotal.toLocaleString('en-KE', { minimumFractionDigits: 2 })})`,
+        );
         onClose?.();
       } else {
         toast.error(response.message || 'Checkout failed');
@@ -162,7 +195,25 @@ export function POSTerminal({ onClose, userType }: POSTerminalProps) {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
       {/* Top Header Bar */}
       <header className="border-b border-slate-800 bg-slate-900 px-6 py-3 flex items-center justify-between">
-        <h1 className="text-sm font-medium text-slate-400 tracking-wide">Auto-Concierge POS Terminal v1.2</h1>
+        <div className="flex items-center gap-3">
+          {onClose && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-slate-400 hover:text-white"
+              onClick={onClose}
+              aria-label="Close POS Terminal"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          )}
+          <h1 className="text-sm font-medium text-slate-400 tracking-wide">
+            Auto-Concierge POS Terminal v1.2
+            <span className="ml-3 text-xs uppercase tracking-wider text-slate-500">
+              {isAdmin ? 'Admin mode' : 'Employee mode'}
+            </span>
+          </h1>
+        </div>
         {onClose && (
           <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white" onClick={onClose}>
             <X className="h-5 w-5" />
