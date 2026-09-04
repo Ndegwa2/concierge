@@ -12,7 +12,13 @@ def _generate_invoice_number(appointment_id, created_at=None):
     created_at = created_at or datetime.now(timezone.utc)
     date_part = created_at.strftime('%Y%m%d')
     seq_part = f"{appointment_id:04d}"
-    return f"INV-{date_part}-{seq_part}"
+    base = f"INV-{date_part}-{seq_part}"
+    candidate = base
+    suffix = 1
+    while Invoice.query.filter_by(invoice_number=candidate).first() is not None:
+        suffix += 1
+        candidate = f"{base}-{suffix:02d}"
+    return candidate
 
 
 def _assert_appointment_access(appointment, current_user):
