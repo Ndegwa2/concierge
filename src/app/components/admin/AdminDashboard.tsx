@@ -10,7 +10,9 @@ import {
   X,
   Truck,
   FileText,
-  BarChart3
+  BarChart3,
+  Wallet,
+  ClipboardCheck
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { DashboardOverview } from './DashboardOverview';
@@ -23,12 +25,13 @@ import { EmployeesManager } from './EmployeesManager';
 import { FleetCommandCenter } from './FleetCommandCenter';
 import { FleetBilling } from './FleetBilling';
 import { FleetAnalytics } from './FleetAnalytics';
+import { POSView } from './POSView';
 
 interface AdminDashboardProps {
   onLogout: () => void;
 }
 
-type Section = 'overview' | 'appointments' | 'pending-verifications' | 'employees' | 'customers' | 'partners' | 'pending-requests' | 'fleet' | 'fleet-billing' | 'fleet-analytics';
+type Section = 'overview' | 'appointments' | 'pending-verifications' | 'employees' | 'customers' | 'partners' | 'pending-requests' | 'fleet' | 'fleet-billing' | 'fleet-analytics' | 'pos' | 'pending-invoices';
 
 export function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [currentSection, setCurrentSection] = useState<Section>('overview');
@@ -43,6 +46,8 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
     { id: 'overview', name: 'Overview', icon: LayoutDashboard },
     { id: 'appointments', name: 'Appointments', icon: Calendar },
     { id: 'pending-verifications', name: 'Verifications', icon: FileText },
+    { id: 'pending-invoices', name: 'Pending Invoices', icon: ClipboardCheck },
+    { id: 'pos', name: 'POS Terminal', icon: Wallet },
     { id: 'employees', name: 'Employees', icon: UserCheck },
     { id: 'customers', name: 'Customers', icon: Users },
     { id: 'partners', name: 'Service Partners', icon: Car },
@@ -127,6 +132,8 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
           {currentSection === 'overview' && <DashboardOverview />}
           {currentSection === 'appointments' && <AppointmentsManager />}
           {currentSection === 'pending-verifications' && <PendingVerificationsManager />}
+          {currentSection === 'pending-invoices' && <POSView />}
+          {currentSection === 'pos' && <POSView mode="admin" />}
           {currentSection === 'employees' && <EmployeesManager />}
           {currentSection === 'customers' && <CustomersManager />}
           {currentSection === 'partners' && <ServicePartnersManager />}
