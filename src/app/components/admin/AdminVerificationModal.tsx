@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
 import { Check, X, FileText, Send, Download, Receipt, DollarSign } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { Card, CardHeader, CardTitle, CardContent } from '@/app/components/ui/card';
+import { Input } from '@/app/components/ui/input';
 import { Badge } from '@/app/components/ui/badge';
 import { Textarea } from '@/app/components/ui/textarea';
 import { Label } from '@/app/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
 import { toast } from 'sonner';
 import { workflowApi } from '@/services/api';
-import { useVerifyWorkRecord, useGenerateInvoice, type WorkRecord, type Assignment } from '@/hooks/useApi';
+import type { WorkRecord, Assignment } from '@/services/api';
+import { useVerifyWorkRecord, useGenerateInvoice } from '@/hooks/useApi';
 
 interface AdminVerificationModalProps {
   assignment: Assignment | null;
