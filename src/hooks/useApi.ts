@@ -6,7 +6,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { authApi, employeesApi, servicesApi, vehiclesApi, appointmentsApi, adminApi, partnersApi, workflowApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import type { User, Vehicle, Appointment, ServicePartner, Employee, EmployeeAssignment, TimeOffRequest, IssueReport, TimeLog } from '../services/api';
+import type { User, Vehicle, Appointment, ServicePartner, Employee, EmployeeAssignment, TimeOffRequest, TimeOffDecision, IssueReport, TimeLog } from '../services/api';
 
 // Query Keys
 // User-scoped keys include a `userScope` segment so React Query caches
@@ -58,6 +58,8 @@ export const queryKeys = {
     [uid === anonScope ? 'anon' : `user-${uid}`, 'workflow', 'pending-verifications'] as const,
   workflowEmployeeDashboard: (uid: number | string) =>
     [uid === anonScope ? 'anon' : `user-${uid}`, 'workflow', 'employee-dashboard'] as const,
+  adminTimeOffRequests: (uid: number | string) =>
+    [uid === anonScope ? 'anon' : `user-${uid}`, 'workflow', 'admin-time-off'] as const,
 };
 
 export const userScope = (userId: number | null | undefined): number | string =>
@@ -461,14 +463,44 @@ export function useRequestTimeOff() {
       end_date: string;
       reason?: string;
     }) => employeesApi.requestTimeOff(data),
-    onSuccess: () => {
+     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.timeOffRequests(scope) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminTimeOffRequests(scope) });
     },
   });
 }
 
 // ============================================================
-// EMPLOYEE ISSUE REPORTING HOOKS
+// ADMIN TIME-OFF HOOKS
+// ============================================================
+
+export function useAdminTimeOffRequests() {
+  const { user, isAuthenticated } = useAuth();
+  const scope = userScope(user?.id);
+
+  return useQuery({
+    queryKey: queryKeys.adminTimeOffRequests(scope),
+    queryFn: async () => {
+      const response = await employeesApi.getPendingTimeOffRequests();
+      return response.success ? response.data?.requests ?? [] : [];
+    },
+    enabled: isAuthenticated,
+  });
+}
+
+export function useDecideTimeOffRequest() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const scope = userScope(user?.id);
+
+  return useMutation({
+    mutationFn: ({ requestId, data }: { requestId: number; data: TimeOffDecision }) =>
+      employeesApi.decideTimeOffRequest(requestId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminTimeOffRequests(scope) });
+    },
+  });
+}
 // ============================================================
 
 export function useIssueReports() {

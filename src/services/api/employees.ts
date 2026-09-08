@@ -111,8 +111,23 @@ export const employeesApi = {
   async getTimeOffRequests(): Promise<ApiResponse<{
     time_off_requests: any[];
     count: number;
+    pending_count: number;
   }>> {
     return apiClient.request('/employees/time-off');
+  },
+
+  async getPendingTimeOffRequests(): Promise<ApiResponse<{
+    requests: any[];
+    count: number;
+  }>> {
+    return apiClient.request('/employees/admin/time-off-requests');
+  },
+
+  async decideTimeOffRequest(requestId: number, data: { approved: boolean; notes?: string }): Promise<ApiResponse<{ time_off_request: any }>> {
+    return apiClient.request(`/employees/admin/time-off-requests/${requestId}/decision`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   },
 
   async getEmployees(status?: string, location?: string, search?: string): Promise<ApiResponse<{

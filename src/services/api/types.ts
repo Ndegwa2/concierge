@@ -225,3 +225,34 @@ export interface VehicleChecklist {
   created_at: string;
   updated_at: string;
 }
+
+export interface TimeOffRequest {
+  id: number;
+  employee_id: number;
+  request_type: 'vacation' | 'sick' | 'personal' | 'other';
+  start_date: string;
+  end_date: string;
+  reason?: string;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  admin_notes?: string;
+  created_at: string;
+  updated_at: string;
+  employee?: {
+    id: number;
+    employee_id: string;
+    location?: string;
+    department?: string;
+    title?: string;
+  };
+  user?: {
+    id: number;
+    name: string;
+    email: string;
+    phone?: string;
+  };
+}
+
+export interface TimeOffDecision {
+  approved: boolean;
+  notes?: string;
+}
