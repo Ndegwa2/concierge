@@ -298,20 +298,21 @@ def confirm_vehicle_return(appointment_id, current_user, data):
 
     if not _user_can_access_appointment(appointment, current_user):
         raise ValueError('Unauthorized access')
-    
+
     service_rating = data.get('service_rating')
     condition_rating = data.get('condition_rating')
+    concierge_rating = data.get('concierge_behavior_rating')
     review = data.get('review', '')
-    
+
     if not service_rating or not condition_rating:
         raise ValueError('Service rating and condition rating are required')
-    
+
     if not (1 <= service_rating <= 5) or not (1 <= condition_rating <= 5):
         raise ValueError('Ratings must be between 1 and 5')
-    
+
     service = Service.query.get(appointment.service_id)
     vehicle = Vehicle.query.get(appointment.vehicle_id)
-    
+
     service_history = ServiceHistory()
     service_history.user_id = appointment.user_id
     service_history.vehicle_id = appointment.vehicle_id
@@ -322,11 +323,67 @@ def confirm_vehicle_return(appointment_id, current_user, data):
     service_history.cost = appointment.total_amount
     service_history.rating = service_rating
     service_history.review = review[:2000] if review else None
-    
+
     db.session.add(service_history)
-    
+
     if appointment.status != 'completed':
         appointment.status = 'completed'
-    
+
     db.session.commit()
+
+    # Sync rating back to the employee assigned to this appointment
+    _sync_employee_rating(appointment_id, service_rating, concierge_rating)
+
     return service_history
+
+
+def _sync_employee_rating(appointment_id, service_rating, concierge_rating=None):
+    """Update the assigned employee's average rating after a client rates the service.
+
+    Uses the concierge behavior rating when provided, otherwise falls back
+    to the overall service rating so the employee's score reflects the
+    quality of work done.
+    """
+    from app.services.employees.models import Employee
+    from app.services.appointments.models import Assignment
+
+    assignment = Assignment.query.filter_by(appointment_id=appointment_id).first()
+    if not assignment or not assignment.employee_id:
+        return
+
+    employee = Employee.query.get(assignment.employee_id)
+    if not employee:
+        return
+
+    # Prefer concierge behavior rating (direct measure of the employee's work)
+    # but fall back to service rating if concierge rating is missing.
+    effective_rating = concierge_rating if concierge_rating else service_rating
+    if not effective_rating:
+        return
+
+    try:
+        effective_rating = float(effective_rating)
+    except (ValueError, TypeError):
+        return
+
+    if not (1 <= effective_rating <= 5):
+        return
+
+    # Recalculate the employee's average rating across all completed
+    # assignments that have a client rating.
+    rated_history = (
+        db.session.query(ServiceHistory)
+        .join(Assignment, Assignment.appointment_id == ServiceHistory.appointment_id)
+        .filter(Assignment.employee_id == employee.id, ServiceHistory.rating.isnot(None))
+        .all()
+    )
+
+    if rated_history:
+        total = sum(float(h.rating) for h in rated_history) + effective_rating
+        count = len(rated_history) + 1
+        new_avg = round(total / count, 2)
+    else:
+        new_avg = round(effective_rating, 2)
+
+    employee.rating = new_avg
+    db.session.commit()

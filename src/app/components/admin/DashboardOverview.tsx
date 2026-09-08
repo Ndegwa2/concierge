@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { 
   TrendingUp, 
   Calendar, 
@@ -8,12 +7,13 @@ import {
   ArrowDown,
   Clock,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  ArrowRight
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
-import { adminApi, appointmentsApi } from '@/services/api';
+import { useAdminDashboard, useAllAppointmentsAdmin } from '@/hooks/useApi';
 import type { Appointment } from '@/services/api';
 
 interface DashboardStats {
@@ -26,45 +26,21 @@ interface DashboardStats {
   total_revenue: number;
 }
 
-interface DashboardOverviewProps {}
+interface DashboardOverviewProps {
+  onNavigate?: (section: string) => void;
+}
 
-export function DashboardOverview({}: DashboardOverviewProps) {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [recentAppointments, setRecentAppointments] = useState<Appointment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function DashboardOverview({ onNavigate }: DashboardOverviewProps) {
+  const { data: dashboardData, isLoading, error, refetch } = useAdminDashboard();
+  const { data: allAppointments = [] } = useAllAppointmentsAdmin();
+  
+  const stats = dashboardData?.statistics ?? null;
+  const recentAppointments = allAppointments
+    .sort((a, b) => new Date(b.appointment_date).getTime() - new Date(a.appointment_date).getTime())
+    .slice(0, 5);
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [dashboardResponse, appointmentsResponse] = await Promise.all([
-        adminApi.getAdminDashboard(),
-        appointmentsApi.getAllAppointmentsAdmin(),
-      ]);
-
-      if (dashboardResponse.success && dashboardResponse.data) {
-        setStats(dashboardResponse.data.statistics);
-        setRecentAppointments(dashboardResponse.data.recent_appointments || []);
-      }
-
-      if (appointmentsResponse.success && appointmentsResponse.data) {
-        const allAppointments = appointmentsResponse.data.appointments || [];
-        const sorted = allAppointments
-          .sort((a, b) => new Date(b.appointment_date).getTime() - new Date(a.appointment_date).getTime())
-          .slice(0, 5);
-        setRecentAppointments(sorted);
-      }
-    } catch (err) {
-      setError('Failed to load dashboard data');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+  const handleCardClick = (section: string) => {
+    onNavigate?.(section);
   };
 
   const getStatusColor = (status: string) => {
@@ -89,7 +65,7 @@ export function DashboardOverview({}: DashboardOverviewProps) {
     return status.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-8">
         <div>
@@ -119,7 +95,7 @@ export function DashboardOverview({}: DashboardOverviewProps) {
         <div>
           <h1 className="text-3xl font-bold mb-2">Dashboard Overview</h1>
           <p className="text-red-600">{error}</p>
-          <Button onClick={fetchDashboardData} className="mt-4">Retry</Button>
+          <Button onClick={refetch} className="mt-4">Retry</Button>
         </div>
       </div>
     );
@@ -132,7 +108,9 @@ export function DashboardOverview({}: DashboardOverviewProps) {
       change: `${stats.completed_appointments} completed`,
       trend: 'up' as const,
       icon: DollarSign,
-      description: 'all time'
+      description: 'all time',
+      section: 'financials',
+      clickable: true
     },
     {
       title: 'Total Appointments',
@@ -140,7 +118,9 @@ export function DashboardOverview({}: DashboardOverviewProps) {
       change: `${stats.active_appointments} active`,
       trend: 'up' as const,
       icon: Calendar,
-      description: 'all time'
+      description: 'all time',
+      section: 'appointments',
+      clickable: true
     },
     {
       title: 'Total Customers',
@@ -148,7 +128,9 @@ export function DashboardOverview({}: DashboardOverviewProps) {
       change: `${stats.total_vehicles} vehicles`,
       trend: 'up' as const,
       icon: Users,
-      description: 'registered'
+      description: 'registered',
+      section: 'customers',
+      clickable: true
     },
     {
       title: 'Active Appointments',
@@ -156,15 +138,23 @@ export function DashboardOverview({}: DashboardOverviewProps) {
       change: `${stats.total_services} services`,
       trend: 'up' as const,
       icon: Clock,
-      description: 'available'
+      description: 'available',
+      section: 'appointments',
+      clickable: true
     }
   ] : [];
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold mb-2">Dashboard Overview</h1>
-        <p className="text-slate-600">Monitor your auto concierge operations at a glance</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Dashboard Overview</h1>
+          <p className="text-slate-600">Monitor your auto concierge operations at a glance</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={refetch}>
+          <ArrowRight className="h-4 w-4 mr-1" />
+          Refresh
+        </Button>
       </div>
 
       {/* Stats Grid */}
@@ -173,7 +163,11 @@ export function DashboardOverview({}: DashboardOverviewProps) {
           const Icon = stat.icon;
           const isPositive = stat.trend === 'up';
           return (
-            <Card key={stat.title}>
+            <Card 
+              key={stat.title} 
+              className={stat.clickable ? 'cursor-pointer hover:shadow-md transition-shadow border-slate-200' : ''}
+              onClick={() => stat.clickable && handleCardClick(stat.section)}
+            >
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardDescription>{stat.title}</CardDescription>
@@ -193,6 +187,12 @@ export function DashboardOverview({}: DashboardOverviewProps) {
                   <span className="text-green-600 font-medium">{stat.change}</span>
                   <span className="text-slate-500">{stat.description}</span>
                 </div>
+                {stat.clickable && (
+                  <div className="mt-3 flex items-center text-xs text-slate-400">
+                    <span>Click to view</span>
+                    <ArrowRight className="h-3 w-3 ml-1" />
+                  </div>
+                )}
               </CardContent>
             </Card>
           );
@@ -213,7 +213,7 @@ export function DashboardOverview({}: DashboardOverviewProps) {
                 <span className="text-sm">Pending</span>
               </div>
               <span className="font-semibold">
-                {recentAppointments.filter(a => a.status === 'scheduled' || a.status === 'pending').length}
+                {allAppointments.filter(a => a.status === 'scheduled' || a.status === 'pending').length}
               </span>
             </div>
             <div className="flex items-center justify-between">
@@ -222,7 +222,7 @@ export function DashboardOverview({}: DashboardOverviewProps) {
                 <span className="text-sm">In Progress</span>
               </div>
               <span className="font-semibold">
-                {recentAppointments.filter(a => a.status === 'in-progress' || a.status === 'confirmed').length}
+                {allAppointments.filter(a => a.status === 'in-progress' || a.status === 'confirmed').length}
               </span>
             </div>
             <div className="flex items-center justify-between">
@@ -238,8 +238,12 @@ export function DashboardOverview({}: DashboardOverviewProps) {
         {/* Recent Appointments */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Recent Appointments</CardTitle>
-            <CardDescription>Latest service bookings and their status</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Recent Appointments</CardTitle>
+                <CardDescription>Latest service bookings and their status</CardDescription>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             {recentAppointments.length === 0 ? (

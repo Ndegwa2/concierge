@@ -1,7 +1,7 @@
 from app import db
 from app.services.auth.models import User
 from app.services.employees.models import Employee, EmployeeDocument, EmployeeTimeLog, TimeOffRequest, IssueReport
-from app.services.appointments.models import Appointment, Assignment
+from app.services.appointments.models import Appointment, Assignment, ServiceHistory
 from datetime import datetime, timezone, timedelta
 from io import StringIO
 import csv
@@ -614,6 +614,12 @@ def get_my_assignments_query(current_user):
         vehicle = appointment.vehicle
         service = appointment.service
         
+        # Pull the client rating/review from ServiceHistory so the employee
+        # can see the quality of work they received for each completed job.
+        service_history = (
+            ServiceHistory.query.filter_by(appointment_id=appointment.id).first()
+        )
+        
         enriched_assignments.append({
             **assignment.to_dict(),
             'appointment': {
@@ -625,7 +631,8 @@ def get_my_assignments_query(current_user):
                 },
                 'vehicle': vehicle.to_dict() if vehicle else None,
                 'service': service.to_dict() if service else None
-            }
+            },
+            'service_history': service_history.to_dict() if service_history else None,
         })
     
     return enriched_assignments

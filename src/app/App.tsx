@@ -1,16 +1,9 @@
 import { useState, useEffect } from 'react';
 import {
-  Wrench,
-  Settings,
-  Shield,
   ArrowRight,
   Clock,
   CheckCircle2,
-  Star,
-  Car,
-  ClipboardCheck,
-  MapPin,
-  Headphones
+  Star
 } from 'lucide-react';
 import { JobGallery } from '@/app/components/JobGallery';
 import { HeroSlideshow } from '@/app/components/HeroSlideshow';
@@ -50,7 +43,7 @@ export default function App() {
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [lastSubmittedRating, setLastSubmittedRating] = useState(0);
 
-  const { userType, logout } = useAuth();
+  const { user, userType, logout } = useAuth();
   const { data: appointments = [], refetch: refetchAppointments } = useAppointments();
 
   const handleCloseBooking = () => {
@@ -100,6 +93,7 @@ export default function App() {
       const response = await appointmentsApi.confirmVehicleReturn(selectedAppointment.id, {
         service_rating: data.serviceRating,
         condition_rating: data.conditionRating,
+        concierge_behavior_rating: data.conciergeBehaviorRating,
         review: data.feedback || undefined
       });
       
@@ -108,6 +102,8 @@ export default function App() {
         setConfirmationModalOpen(false);
         setSuccessModalOpen(true);
         refetchAppointments();
+        // Dispatch global event for real-time cache invalidation
+        window.dispatchEvent(new CustomEvent('appointment:status-changed', { detail: { appointmentId: selectedAppointment.id } }));
         toast.success('Thank you for your feedback!');
       } else {
         toast.error(response.message || 'Failed to submit confirmation');
@@ -148,36 +144,6 @@ export default function App() {
     } else {
       setCurrentView(view as any);
       window.scrollTo(0, 0);
-    }
-  };
-
-  const handleFooterLink = (action: string) => {
-    switch (action) {
-      case 'services':
-        handleNavigate('home');
-        setTimeout(() => {
-          document.getElementById('services-section')?.scrollIntoView({ behavior: 'smooth' });
-        }, currentView === 'home' ? 0 : 100);
-        break;
-      case 'appointments':
-        handleNavigate('appointments');
-        break;
-      case 'how-it-works':
-        handleNavigate('how-it-works');
-        break;
-      case 'pricing':
-        handleNavigate('pricing');
-        break;
-      case 'privacy':
-      case 'terms':
-      case 'cookies':
-        toast.info('This page is coming soon.');
-        break;
-      case 'pos-login':
-        toast.info('POS Login portal coming soon.');
-        break;
-      default:
-        toast.info('Coming soon');
     }
   };
 
@@ -233,6 +199,8 @@ export default function App() {
         onProfileClick={() => handleNavigate('profile')}
         onLogoutClick={handleLogout}
         isLoggedIn={userType === 'customer'}
+        userName={user?.name}
+        userEmail={user?.email}
       />
 
       <LoginModal
@@ -459,7 +427,7 @@ export default function App() {
       {/* Dashboard View */}
       {currentView === 'dashboard' && (
         <main className="flex-1">
-          <CustomerDashboard onLogout={handleLogout} />
+          <CustomerDashboard onLogout={handleLogout} onBookService={() => handleOpenBooking()} />
         </main>
       )}
 
@@ -490,98 +458,6 @@ export default function App() {
         />
       )}
 
-      {/* Footer */}
-      {currentView !== 'pricing' && currentView !== 'pos' && (
-        <footer className="bg-slate-900 text-white py-16">
-        <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-4 gap-12 mb-12">
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="bg-white p-2 rounded-lg">
-                  <Car className="h-6 w-6 text-slate-900" />
-                </div>
-                <span className="font-bold text-2xl tracking-tight">AutoConcierge</span>
-              </div>
-              <p className="text-slate-400 text-sm leading-relaxed max-w-xs">
-                Premium door-to-door vehicle care services for professionals and families. We handle the errands so you can enjoy your life.
-              </p>
-              <div className="flex items-center gap-4 pt-4">
-                <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center hover:bg-slate-700 cursor-pointer transition-colors">
-                  <Star className="h-5 w-5 text-slate-400" />
-                </div>
-                <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center hover:bg-slate-700 cursor-pointer transition-colors">
-                  <Settings className="h-5 w-5 text-slate-400" />
-                </div>
-                <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center hover:bg-slate-700 cursor-pointer transition-colors">
-                  <Shield className="h-5 w-5 text-slate-400" />
-                </div>
-              </div>
-            </div>
-            
-            <div>
-              <h3 className="font-bold text-lg mb-6">Our Services</h3>
-              <ul className="space-y-4 text-slate-400 text-sm">
-                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('services')}>Premium Car Wash</li>
-                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('services')}>Oil Change & Fluids</li>
-                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('services')}>Mechanical Repairs</li>
-                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('services')}>Vehicle Inspection</li>
-                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('services')}>Tire & Wheel Care</li>
-              </ul>
-            </div>
-            
-            <div>
-              <h3 className="font-bold text-lg mb-6">Quick Links</h3>
-              <ul className="space-y-4 text-slate-400 text-sm">
-                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('services')}>Services</li>
-                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('appointments')}>My Appointments</li>
-                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('how-it-works')}>How It Works</li>
-                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => handleFooterLink('pricing')}>Pricing Plans</li>
-                {userType === 'admin' || userType === 'super_admin' ? (
-                  <li className="hover:text-white transition-colors cursor-pointer" onClick={() => setCurrentView('pos')}>POS Terminal</li>
-                ) : (
-                  <li className="text-slate-600 cursor-not-allowed">POS Terminal</li>
-                )}
-                <li className="hover:text-white transition-colors cursor-pointer" onClick={() => toast.info('Coming soon')}>Safety & Insurance</li>
-              </ul>
-            </div>
-            
-            <div>
-              <h3 className="font-bold text-lg mb-6">Get In Touch</h3>
-              <ul className="space-y-4 text-slate-400 text-sm">
-                <li className="flex items-center gap-3">
-                  <MapPin className="h-5 w-5 text-slate-500" />
-                  <span>Westlands Business Park, Suite 200<br />Nairobi, Kenya 00100</span>
-                </li>
-                <li className="flex items-center gap-3">
-                  <Headphones className="h-5 w-5 text-slate-500" />
-                  <span>support@autoconcierge.co.ke</span>
-                </li>
-                <li className="flex items-center gap-3">
-                  <Clock className="h-5 w-5 text-slate-500" />
-                  <span>24/7 Support Available</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-          
-          <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="text-slate-500 text-sm">
-              © {new Date().getFullYear()} AutoConcierge. All rights reserved. Built with passion for car care.
-            </div>
-            <div className="flex gap-6 text-sm text-slate-500">
-              <span className="hover:text-white cursor-pointer transition-colors" onClick={() => handleFooterLink('privacy')}>Privacy Policy</span>
-              <span className="hover:text-white cursor-pointer transition-colors" onClick={() => handleFooterLink('terms')}>Terms of Service</span>
-              <span className="hover:text-white cursor-pointer transition-colors" onClick={() => handleFooterLink('cookies')}>Cookies</span>
-              <div className="flex items-center gap-2 ml-4 px-3 py-1 bg-green-900/30 text-green-400 rounded-full border border-green-800/50">
-                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                <span className="text-xs font-medium">Systems Operational</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </footer>
-      )}
-      
       <AIChatBox />
     </div>
   );

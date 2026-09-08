@@ -1,9 +1,3 @@
-/**
- * Authentication Context for AutoConcierge
- *
- * Provides authentication state and methods throughout the application.
- * Supports JWT authentication with role-based access control.
- */
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { authApi, apiClient } from '../services/api';
@@ -65,7 +59,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setUser(null);
     };
     window.addEventListener('auth:logout', onForcedLogout);
-    return () => window.removeEventListener('auth:logout', onForcedLogout);
+
+    // Global appointment status change listener - invalidates relevant caches
+    const onAppointmentStatusChange = () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'appointments'] });
+    };
+    window.addEventListener('appointment:status-changed', onAppointmentStatusChange);
+
+    return () => {
+      window.removeEventListener('auth:logout', onForcedLogout);
+      window.removeEventListener('appointment:status-changed', onAppointmentStatusChange);
+    };
   }, [queryClient]);
 
   // Whenever the active user id changes (login, logout, account-switch),

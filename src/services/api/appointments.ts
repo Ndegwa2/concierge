@@ -77,6 +77,7 @@ export const appointmentsApi = {
   async confirmVehicleReturn(appointmentId: number, data: {
     service_rating: number;
     condition_rating: number;
+    concierge_behavior_rating?: number;
     review?: string;
   }): Promise<ApiResponse<any>> {
     return apiClient.request(`/appointments/${appointmentId}/confirm-return`, {

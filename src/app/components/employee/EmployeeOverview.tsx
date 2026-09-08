@@ -11,12 +11,16 @@ import {
   Users,
   PauseCircle,
   PlayCircle,
+  Car,
+  MessageSquare,
+  Award,
+  Briefcase,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
-import { useEmployeeDashboard, useClockInOut, useTimeLogs } from '@/hooks/useApi';
+import { useEmployeeDashboard, useClockInOut, useTimeLogs, useMyAssignments } from '@/hooks/useApi';
 import { useRequestTimeOff } from '@/hooks/useApi';
 import { useReportIssue } from '@/hooks/useApi';
 import { ClockInOutModal } from './ClockInOutModal';
@@ -34,6 +38,7 @@ interface EmployeeOverviewProps {
 export function EmployeeOverview({ employeeData }: EmployeeOverviewProps) {
   const { data: dashboard, isLoading, error } = useEmployeeDashboard();
   const { data: timeLogs, isLoading: timeLogsLoading } = useTimeLogs();
+  const { data: assignments = [] } = useMyAssignments();
   const clockInOutMutation = useClockInOut();
   const requestTimeOffMutation = useRequestTimeOff();
   const reportIssueMutation = useReportIssue();
@@ -45,6 +50,15 @@ export function EmployeeOverview({ employeeData }: EmployeeOverviewProps) {
   const [globalError, setGlobalError] = useState<string | null>(null);
 
   const isInOffice = timeLogs?.is_clocked_in ?? false;
+
+  // Portfolio: completed assignments that have received a client rating
+  const completedPortfolio = assignments.filter(
+    a => a.status === 'completed' && a.service_history?.rating && a.service_history.rating > 0
+  );
+
+  const averageRating = completedPortfolio.length > 0
+    ? completedPortfolio.reduce((sum, a) => sum + (a.service_history?.rating || 0), 0) / completedPortfolio.length
+    : (dashboard?.employee?.rating || 0);
 
   interface TimeOffPayload {
     request_type: 'vacation' | 'sick' | 'personal' | 'other';
@@ -193,9 +207,11 @@ export function EmployeeOverview({ employeeData }: EmployeeOverviewProps) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold mb-1">
-              {dashboard?.employee?.rating ? dashboard.employee.rating.toFixed(1) : '0.0'}
+              {averageRating ? averageRating.toFixed(1) : '0.0'}
             </div>
-            <p className="text-sm text-slate-500">Based on all reviews</p>
+            <p className="text-sm text-slate-500">
+              Based on {completedPortfolio.length} rated service{completedPortfolio.length !== 1 ? 's' : ''}
+            </p>
           </CardContent>
         </Card>
 
@@ -399,19 +415,95 @@ export function EmployeeOverview({ employeeData }: EmployeeOverviewProps) {
         </div>
       </div>
 
-      {/* Recent Feedback */}
+      {/* Portfolio: Completed Works with Ratings */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Customer Feedback</CardTitle>
-          <CardDescription>Latest reviews from your services</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Briefcase className="h-5 w-5" />
+                Completed Works Portfolio
+              </CardTitle>
+              <CardDescription>
+                Your completed services with client ratings and reviews
+              </CardDescription>
+            </div>
+            <Badge variant="outline" className="text-sm">
+              {completedPortfolio.length} rated
+            </Badge>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
+          {completedPortfolio.length > 0 ? (
+            <div className="space-y-4">
+              {completedPortfolio.map((assignment) => {
+                const sh = assignment.service_history!;
+                const appt = assignment.appointment;
+                return (
+                  <div
+                    key={assignment.id}
+                    className="p-4 border border-slate-200 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <h4 className="font-semibold text-slate-900">
+                          {appt.service?.name || 'Service'}
+                        </h4>
+                        <p className="text-sm text-slate-600">
+                          {appt.vehicle ? `${appt.vehicle.make} ${appt.vehicle.model} (${appt.vehicle.year})` : 'Vehicle'} - {appt.customer?.name || 'Customer'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <div className="flex items-center gap-1">
+                          <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                          <span className="font-bold text-slate-900">
+                            {sh.rating}/5
+                          </span>
+                        </div>
+                        {sh.completed_date && (
+                          <p className="text-xs text-slate-500">
+                            {new Date(sh.completed_date).toLocaleDateString('en-KE', {
+                              month: 'short', day: 'numeric', year: 'numeric'
+                            })}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {sh.review && (
+                      <div className="flex items-start gap-2 mt-2 p-2 bg-white rounded border border-slate-200">
+                        <MessageSquare className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                        <p className="text-sm text-slate-700 italic">&ldquo;{sh.review}&rdquo;</p>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-4 mt-3 pt-3 border-t border-slate-200 text-xs text-slate-500">
+                      <span className="flex items-center gap-1">
+                        <Car className="h-3 w-3" />
+                        {appt.vehicle?.license_plate || 'No plate'}
+                      </span>
+                      {sh.cost && (
+                        <span className="flex items-center gap-1">
+                          <DollarSign className="h-3 w-3" />
+                          KES {Number(sh.cost).toLocaleString()}
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1">
+                        <Award className="h-3 w-3" />
+                        Job #{assignment.id}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
             <div className="text-center py-8 text-slate-500">
               <Users className="h-8 w-8 mx-auto mb-2 text-slate-300" />
-              <p>Customer feedback will appear here once reviews are submitted</p>
+              <p>Completed works with client ratings will appear here</p>
+              <p className="text-xs mt-1">Ratings sync automatically when a client confirms vehicle return</p>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 

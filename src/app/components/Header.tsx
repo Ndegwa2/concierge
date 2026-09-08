@@ -1,6 +1,15 @@
 import { useState } from 'react';
-import { Menu, X, Car, User, Calendar, LayoutDashboard, LogOut, Image } from 'lucide-react';
+import { Menu, X, Car, User, Calendar, LayoutDashboard, LogOut, Settings, Shield } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/app/components/ui/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/app/components/ui/dropdown-menu';
 import { usePermission } from '@/hooks/usePermission';
 import { NotificationBell } from '@/app/components/NotificationBell';
 
@@ -11,9 +20,20 @@ interface HeaderProps {
   onProfileClick?: () => void;
   onLogoutClick?: () => void;
   isLoggedIn?: boolean;
+  userName?: string;
+  userEmail?: string;
 }
 
-export function Header({ currentView, onNavigate, onLoginClick, onProfileClick, onLogoutClick, isLoggedIn }: HeaderProps) {
+function getInitials(name: string) {
+  return name
+    .split(' ')
+    .map(part => part[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+}
+
+export function Header({ currentView, onNavigate, onLoginClick, onProfileClick, onLogoutClick, isLoggedIn, userName, userEmail }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { hasPermission, isLoading } = usePermission();
 
@@ -22,7 +42,7 @@ export function Header({ currentView, onNavigate, onLoginClick, onProfileClick, 
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <div 
+          <div
             className="flex items-center gap-2 cursor-pointer"
             onClick={() => onNavigate('home')}
           >
@@ -50,22 +70,26 @@ export function Header({ currentView, onNavigate, onLoginClick, onProfileClick, 
             >
               Pricing
             </button>
-            <button
-              onClick={() => onNavigate('dashboard')}
-              className={`hover:text-slate-900 transition-colors ${
-                currentView === 'dashboard' ? 'text-slate-900 font-medium' : 'text-slate-600'
-              }`}
-            >
-              Dashboard
-            </button>
-            <button
-              onClick={() => onNavigate('appointments')}
-              className={`hover:text-slate-900 transition-colors ${
-                currentView === 'appointments' ? 'text-slate-900 font-medium' : 'text-slate-600'
-              }`}
-            >
-              My Appointments
-            </button>
+            {isLoggedIn && (
+              <>
+                <button
+                  onClick={() => onNavigate('dashboard')}
+                  className={`hover:text-slate-900 transition-colors ${
+                    currentView === 'dashboard' ? 'text-slate-900 font-medium' : 'text-slate-600'
+                  }`}
+                >
+                  Dashboard
+                </button>
+                <button
+                  onClick={() => onNavigate('appointments')}
+                  className={`hover:text-slate-900 transition-colors ${
+                    currentView === 'appointments' ? 'text-slate-900 font-medium' : 'text-slate-600'
+                  }`}
+                >
+                  My Appointments
+                </button>
+              </>
+            )}
             <button
               onClick={() => onNavigate('how-it-works')}
               className="text-slate-600 hover:text-slate-900 transition-colors"
@@ -80,26 +104,56 @@ export function Header({ currentView, onNavigate, onLoginClick, onProfileClick, 
             >
               Gallery
             </button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={isLoggedIn ? onProfileClick : onLoginClick}
-            >
-              <User className="h-4 w-4 mr-2" />
-              {isLoggedIn ? 'Profile' : 'Sign In'}
+
+            {isLoggedIn ? (
+              <div className="flex items-center gap-2">
+                <NotificationBell />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="relative h-9 w-9 rounded-full">
+                      <Avatar className="h-9 w-9">
+                        <AvatarImage src="" alt={userName || 'User'} />
+                        <AvatarFallback className="bg-slate-900 text-white text-xs font-medium">
+                          {userName ? getInitials(userName) : 'U'}
+                        </AvatarFallback>
+                      </Avatar>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel className="font-normal">
+                      <div className="flex flex-col space-y-1">
+                        <p className="text-sm font-medium leading-none">{userName || 'User'}</p>
+                        <p className="text-xs leading-none text-muted-foreground">{userEmail || ''}</p>
+                      </div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => onProfileClick?.()}>
+                      <User className="mr-2 h-4 w-4" />
+                      Profile
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onNavigate('dashboard')}>
+                      <LayoutDashboard className="mr-2 h-4 w-4" />
+                      Dashboard
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onNavigate('appointments')}>
+                      <Calendar className="mr-2 h-4 w-4" />
+                      My Appointments
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={onLogoutClick} variant="destructive">
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Logout
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ) : (
+              <Button variant="outline" size="sm" onClick={onLoginClick}>
+                <User className="h-4 w-4 mr-2" />
+                Sign In
               </Button>
-              {isLoggedIn && <NotificationBell />}
-              {isLoggedIn && onLogoutClick && (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={onLogoutClick}
-                >
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Logout
-                </Button>
-              )}
-            </nav>
+            )}
+          </nav>
 
           {/* Mobile Menu Button */}
           <button
@@ -118,73 +172,91 @@ export function Header({ currentView, onNavigate, onLoginClick, onProfileClick, 
         {mobileMenuOpen && (
           <div className="md:hidden py-4 border-t">
             <nav className="flex flex-col gap-4">
-                <button
-                  onClick={() => {
-                    onNavigate('home');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="text-left px-2 py-1 hover:text-slate-900"
-                >
-                  Services
-                </button>
-                <button
-                  onClick={() => {
-                    onNavigate('pricing');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="text-left px-2 py-1 hover:text-slate-900"
-                >
-                  Pricing
-                </button>
-                <button
-                  onClick={() => {
-                    onNavigate('dashboard');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="text-left px-2 py-1 hover:text-slate-900"
-                >
-                  Dashboard
-                </button>
               <button
                 onClick={() => {
-                  onNavigate('appointments');
+                  onNavigate('home');
                   setMobileMenuOpen(false);
                 }}
                 className="text-left px-2 py-1 hover:text-slate-900"
               >
-                My Appointments
+                Services
               </button>
-                <button
-                  onClick={() => {
-                    onNavigate('how-it-works');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="text-left px-2 py-1 hover:text-slate-900"
-                >
-                  How It Works
-                </button>
-                <button
-                  onClick={() => {
-                    onNavigate('gallery');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="text-left px-2 py-1 hover:text-slate-900"
-                >
-                  Gallery
-                </button>
-              <Button variant="outline" size="sm" className="w-fit" onClick={isLoggedIn ? onProfileClick : onLoginClick}>
-                <User className="h-4 w-4 mr-2" />
-                {isLoggedIn ? 'Profile' : 'Sign In'}
-              </Button>
+              <button
+                onClick={() => {
+                  onNavigate('pricing');
+                  setMobileMenuOpen(false);
+                }}
+                className="text-left px-2 py-1 hover:text-slate-900"
+              >
+                Pricing
+              </button>
               {isLoggedIn && (
-                <div className="w-fit">
-                  <NotificationBell />
-                </div>
+                <>
+                  <button
+                    onClick={() => {
+                      onNavigate('dashboard');
+                      setMobileMenuOpen(false);
+                    }}
+                    className="text-left px-2 py-1 hover:text-slate-900"
+                  >
+                    Dashboard
+                  </button>
+                  <button
+                    onClick={() => {
+                      onNavigate('appointments');
+                      setMobileMenuOpen(false);
+                    }}
+                    className="text-left px-2 py-1 hover:text-slate-900"
+                  >
+                    My Appointments
+                  </button>
+                </>
               )}
-              {isLoggedIn && onLogoutClick && (
-                <Button variant="ghost" size="sm" className="w-fit" onClick={onLogoutClick}>
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Logout
+              <button
+                onClick={() => {
+                  onNavigate('how-it-works');
+                  setMobileMenuOpen(false);
+                }}
+                className="text-left px-2 py-1 hover:text-slate-900"
+              >
+                How It Works
+              </button>
+              <button
+                onClick={() => {
+                  onNavigate('gallery');
+                  setMobileMenuOpen(false);
+                }}
+                className="text-left px-2 py-1 hover:text-slate-900"
+              >
+                Gallery
+              </button>
+              {isLoggedIn ? (
+                <div className="flex flex-col gap-2 pt-2 border-t">
+                  <div className="flex items-center gap-3 px-2">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src="" alt={userName || 'User'} />
+                      <AvatarFallback className="bg-slate-900 text-white text-xs">
+                        {userName ? getInitials(userName) : 'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="text-sm font-medium">{userName || 'User'}</p>
+                      <p className="text-xs text-slate-500">{userEmail || ''}</p>
+                    </div>
+                  </div>
+                  <Button variant="outline" size="sm" className="w-fit" onClick={onProfileClick}>
+                    <User className="h-4 w-4 mr-2" />
+                    Profile
+                  </Button>
+                  <Button variant="ghost" size="sm" className="w-fit" onClick={onLogoutClick}>
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Logout
+                  </Button>
+                </div>
+              ) : (
+                <Button variant="outline" size="sm" className="w-fit" onClick={onLoginClick}>
+                  <User className="h-4 w-4 mr-2" />
+                  Sign In
                 </Button>
               )}
             </nav>

@@ -4,6 +4,7 @@ import { Button } from '@/app/components/ui/button';
 import { toast } from 'sonner';
 import { cn } from '@/app/components/ui/utils';
 import { adminApi, posApi } from '@/services/api/admin';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface LineItem {
   id: string;
@@ -28,10 +29,12 @@ export interface POSTerminalProps {
 }
 
 export function POSTerminal({ onClose, userType, mode = 'admin', assignmentId, prefill }: POSTerminalProps) {
+  const { userType: authUserType } = useAuth();
+  const effectiveUserType = userType ?? authUserType;
   const isAdmin = mode === 'admin';
   const canAccess = isAdmin
-    ? userType === 'admin' || userType === 'super_admin'
-    : userType === 'employee' || userType === 'admin' || userType === 'super_admin';
+    ? effectiveUserType === 'admin' || effectiveUserType === 'super_admin'
+    : effectiveUserType === 'employee' || effectiveUserType === 'admin' || effectiveUserType === 'super_admin';
 
   if (!canAccess) {
     return (

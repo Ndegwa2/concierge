@@ -244,6 +244,16 @@ export function useAppointments(status?: string) {
       return response.success ? response.data?.appointments ?? [] : [];
     },
     enabled: isAuthenticated,
+    staleTime: 30 * 1000, // 30 seconds
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) => {
+      // Poll every 15 seconds if user has active appointments
+      const data = query.state.data;
+      if (data && data.some((a: any) => ['scheduled', 'confirmed', 'in-progress'].includes(a.status))) {
+        return 15 * 1000; // 15 seconds for active appointments
+      }
+      return 60 * 1000; // 60 seconds otherwise
+    },
   });
 }
 
@@ -485,6 +495,9 @@ export function useAdminTimeOffRequests() {
       return response.success ? response.data?.requests ?? [] : [];
     },
     enabled: isAuthenticated,
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: true,
+    refetchInterval: 60 * 1000,
   });
 }
 
@@ -550,6 +563,9 @@ export function useAdminDashboard() {
       return response.success ? response.data : null;
     },
     enabled: isAuthenticated,
+    staleTime: 15 * 1000, // Consider data fresh for 15 seconds
+    refetchOnWindowFocus: true,
+    refetchInterval: 30 * 1000, // Auto-refetch every 30 seconds for admin dashboard
   });
 }
 
@@ -564,6 +580,9 @@ export function useAllAppointmentsAdmin(status?: string) {
       return response.success ? response.data?.appointments ?? [] : [];
     },
     enabled: isAuthenticated,
+    staleTime: 30 * 1000, // Consider data fresh for 30 seconds
+    refetchOnWindowFocus: true,
+    refetchInterval: 60 * 1000, // Auto-refetch every 60 seconds for admin
   });
 }
 
@@ -1024,6 +1043,9 @@ export function useAdminPendingVerifications() {
       return response.success ? response.data?.assignments ?? [] : [];
     },
     enabled: isAuthenticated,
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: true,
+    refetchInterval: 60 * 1000,
   });
 }
 

@@ -1,20 +1,24 @@
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Calendar,
   Car,
-  TrendingUp,
   CheckCircle2,
-  Star,
   Activity,
-  Wallet,
   Gauge,
-  LogOut
+  BookOpen,
+  Wrench,
+  FileText,
+  ShieldAlert,
+  BarChart3,
+  Droplets,
+  BatteryCharging,
+  Disc,
+  Sparkles,
+  PieChart,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
-import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { useProfile, useAppointments, useVehicles } from '@/hooks/useApi';
 import type { Appointment, Vehicle } from '@/services/api';
 
@@ -58,12 +62,213 @@ const item = {
   show: { opacity: 1, y: 0 },
 };
 
-export function CustomerDashboard({ onLogout }: { onLogout?: () => void } = {}) {
+function HealthPill({ icon: Icon, label, value, status }: { icon: any; label: string; value: string; status: 'good' | 'warn' | 'alert' }) {
+  const colors = {
+    good: 'text-emerald-700 bg-emerald-50 border-emerald-200',
+    warn: 'text-amber-700 bg-amber-50 border-amber-200',
+    alert: 'text-red-700 bg-red-50 border-red-200',
+  };
+  return (
+    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium ${colors[status]}`}>
+      <Icon className="h-3.5 w-3.5" />
+      <span>{label}: {value}</span>
+    </div>
+  );
+}
+
+function NextServiceWidget({ vehicle, onBookService }: { vehicle: Vehicle; onBookService?: () => void }) {
+  const currentOdo = Number(vehicle.odometer) || 0;
+  const serviceInterval = 10000;
+  const lastServiceOdo = Math.floor(currentOdo / serviceInterval) * serviceInterval;
+  const remaining = Math.max(serviceInterval - (currentOdo - lastServiceOdo), 0);
+  const progress = Math.min(((serviceInterval - remaining) / serviceInterval) * 100, 100);
+  const nextService = remaining < 1500 ? 'Due Soon' : 'On Track';
+
+  return (
+    <Card className="relative overflow-hidden border-0 shadow-sm hover:shadow-md transition-shadow h-full">
+      <div className="absolute inset-0 bg-blue-500 opacity-[0.06]" />
+      <CardContent className="pt-5 pb-5 h-full flex flex-col">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="p-2 rounded-xl bg-blue-50">
+            <Wrench className="h-5 w-5 text-blue-600" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-slate-500">Next Service</p>
+            <p className="text-xs text-slate-400">Oil & Filter Change</p>
+          </div>
+        </div>
+        <div className="flex items-end justify-between mb-2">
+          <div>
+            <p className="text-2xl font-bold text-slate-900 leading-none">
+              {remaining.toLocaleString()} <span className="text-sm font-medium text-slate-500">km</span>
+            </p>
+            <p className="text-xs text-slate-500 mt-1">remaining</p>
+          </div>
+          <Badge variant="outline" className={`text-[10px] ${remaining < 1500 ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200'}`}>
+            {nextService}
+          </Badge>
+        </div>
+        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-4">
+          <motion.div
+            className="h-full bg-blue-500 rounded-full"
+            initial={{ width: 0 }}
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 1, ease: 'easeOut' }}
+          />
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-full mt-auto"
+          onClick={onBookService}
+        >
+          Schedule Maintenance
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function QuickActions({ onBookService }: { onBookService?: () => void }) {
+  const actions = [
+    { label: 'Wash', icon: Sparkles, color: 'bg-sky-50 text-sky-700 hover:bg-sky-100 border-sky-200', onClick: onBookService },
+    { label: 'Maintenance', icon: Wrench, color: 'bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200', onClick: onBookService },
+    { label: 'Bill', icon: FileText, color: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200', onClick: () => {} },
+    { label: 'Towing', icon: ShieldAlert, color: 'bg-red-50 text-red-700 hover:bg-red-100 border-red-200', onClick: () => {} },
+  ];
+
+  return (
+    <Card className="relative overflow-hidden border-0 shadow-sm hover:shadow-md transition-shadow h-full">
+      <div className="absolute inset-0 bg-emerald-500 opacity-[0.06]" />
+      <CardContent className="pt-5 pb-5 h-full flex flex-col">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="p-2 rounded-xl bg-emerald-50">
+            <BarChart3 className="h-5 w-5 text-emerald-600" />
+          </div>
+          <p className="text-sm font-medium text-slate-500">Express Book</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 flex-1">
+          {actions.map((action, i) => (
+            <motion.button
+              key={action.label}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.1 * i }}
+              onClick={action.onClick}
+              className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl border transition-colors cursor-pointer ${action.color}`}
+            >
+              <action.icon className="h-6 w-6" />
+              <span className="text-xs font-semibold">{action.label}</span>
+            </motion.button>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function VehicleHealthCard({ vehicles }: { vehicles: Vehicle[] }) {
+  const primary = vehicles[0];
+  if (!primary) return null;
+
+  const year = new Date().getFullYear();
+  const vehicleAge = year - primary.year;
+  const batteryHealth = vehicleAge <= 2 ? 98 : vehicleAge <= 4 ? 92 : 85;
+  const brakeStatus = (Number(primary.odometer) || 0) > 80000 ? 'Inspect Soon' : 'Good';
+
+  return (
+    <Card className="relative overflow-hidden border-0 shadow-sm hover:shadow-md transition-shadow h-full">
+      <div className="absolute inset-0 bg-emerald-500 opacity-[0.06]" />
+      <CardContent className="pt-5 pb-5 h-full flex flex-col">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-xl bg-emerald-50">
+              <Car className="h-5 w-5 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-500">Vehicle Health</p>
+              <p className="text-xs text-slate-400">{primary.year} {primary.make} {primary.model}</p>
+            </div>
+          </div>
+          <Badge variant="outline" className="text-[10px] text-emerald-700 bg-emerald-50 border-emerald-200">
+            {primary.license_plate || 'No plate'}
+          </Badge>
+        </div>
+        <div className="flex flex-wrap gap-2 mb-4">
+          <HealthPill icon={Droplets} label="Tires" value="Normal" status="good" />
+          <HealthPill icon={BatteryCharging} label={`Battery ${batteryHealth}%`} value="Good" status="good" />
+          <HealthPill icon={Disc} label="Brakes" value={brakeStatus} status={brakeStatus === 'Good' ? 'good' : 'warn'} />
+        </div>
+        <Button variant="ghost" size="sm" className="w-full mt-auto text-xs text-slate-600">
+          View Full Telematics
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function MiniAnalytics({ appointments }: { appointments: Appointment[] }) {
+  const completed = appointments.filter(a => a.status === 'completed');
+  const thisMonth = completed.filter(a => {
+    const d = new Date(a.appointment_date);
+    const now = new Date();
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  });
+  const thisMonthSpend = thisMonth.reduce((s, a) => s + (a.total_amount || 0), 0);
+
+  const categories = useMemo(() => {
+    const map: Record<string, number> = {};
+    completed.forEach(a => {
+      const cat = a.service?.category || 'Other';
+      map[cat] = (map[cat] || 0) + (a.total_amount || 0);
+    });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]);
+  }, [completed]);
+
+  const total = categories.reduce((s, [, v]) => s + v, 0);
+
+  return (
+    <Card className="relative overflow-hidden border-0 shadow-sm hover:shadow-md transition-shadow h-full">
+      <div className="absolute inset-0 bg-purple-500 opacity-[0.06]" />
+      <CardContent className="pt-5 pb-5 h-full flex flex-col">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="p-2 rounded-xl bg-purple-50">
+            <PieChart className="h-5 w-5 text-purple-600" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-slate-500">Spending</p>
+            <p className="text-xs text-slate-400">This month</p>
+          </div>
+        </div>
+        <div className="flex items-baseline gap-2 mb-2">
+          <p className="text-2xl font-bold text-slate-900 leading-none">
+            {formatCurrency(thisMonthSpend).replace('KES', 'Ksh')}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-[10px] text-slate-400">Sparkline:</span>
+          <div className="flex-1 h-4 bg-slate-100 rounded-full relative overflow-hidden">
+            <motion.div
+              className="absolute inset-y-0 left-0 bg-purple-500 rounded-full"
+              initial={{ width: 0 }}
+              animate={{ width: completed.length > 0 ? '60%' : '0%' }}
+              transition={{ duration: 1, ease: 'easeOut' }}
+            />
+          </div>
+        </div>
+        <div className="mt-auto pt-3 border-t border-slate-100">
+          <p className="text-xs font-medium text-slate-600 mb-2">Active Plan</p>
+          <p className="text-sm font-semibold text-emerald-700">Premium Care</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function CustomerDashboard({ onLogout, onBookService }: { onLogout?: () => void; onBookService?: () => void } = {}) {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const { data: appointments = [], isLoading: appointmentsLoading } = useAppointments();
   const { data: vehicles = [], isLoading: vehiclesLoading } = useVehicles();
-
-  const [activeTab, setActiveTab] = useState('overview');
 
   const isLoading = profileLoading || appointmentsLoading || vehiclesLoading;
 
@@ -82,18 +287,20 @@ export function CustomerDashboard({ onLogout }: { onLogout?: () => void } = {}) 
     .sort((a, b) => new Date(b.appointment_date).getTime() - new Date(a.appointment_date).getTime())
     .slice(0, 5);
 
+  const nextAppointment = upcomingAppointments[0];
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <motion.div className="animate-pulse space-y-6" variants={container} initial="hidden" animate="show">
             <div className="h-10 bg-slate-200 rounded w-64" />
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[1, 2, 3, 4].map(i => (
-                <motion.div key={i} className="h-32 bg-slate-200 rounded-2xl" variants={item} />
+                <motion.div key={i} className="h-40 bg-slate-200 rounded-2xl" variants={item} />
               ))}
             </div>
-            <div className="h-96 bg-slate-200 rounded-2xl" />
+            <div className="h-48 bg-slate-200 rounded-2xl" />
           </motion.div>
         </div>
       </div>
@@ -104,488 +311,136 @@ export function CustomerDashboard({ onLogout }: { onLogout?: () => void } = {}) 
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <Shield className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+          <Activity className="h-12 w-12 text-slate-400 mx-auto mb-4" />
           <p className="text-slate-600">Please log in to view your dashboard.</p>
         </div>
       </div>
     );
   }
 
-  const StatCard = ({ icon: Icon, label, value, subtext, color, delay }: any) => (
-    <motion.div variants={item} transition={{ delay }}>
-      <Card className="relative overflow-hidden border-0 shadow-sm hover:shadow-md transition-shadow">
-        <div className={`absolute inset-0 ${color} opacity-5`} />
-        <CardContent className="pt-6 pb-6">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-500 mb-1">{label}</p>
-              <motion.p
-                className="text-3xl font-bold text-slate-900"
-                initial={{ opacity: 0, scale: 0.5 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ type: 'spring', stiffness: 100, delay: delay + 0.2 }}
-              >
-                {value}
-              </motion.p>
-              {subtext && <p className="text-xs text-slate-400 mt-1">{subtext}</p>}
-            </div>
-            <div className={`p-3 rounded-xl ${color} bg-opacity-10`}>
-              <Icon className={`h-6 w-6 ${color.replace('bg-', 'text-')}`} />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
-  );
-
-  const ProgressBar = ({ value, max, color }: { value: number; max: number; color: string }) => {
-    const percentage = max > 0 ? (value / max) : 0;
-    return (
-      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-        <motion.div
-          className={`h-full ${color} rounded-full`}
-          initial={{ width: 0 }}
-          animate={{ width: `${Math.min(percentage * 100, 100)}%` }}
-          transition={{ duration: 1, ease: 'easeOut' }}
-        />
-      </div>
-    );
-  };
-
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
+        {/* Hero Greeting */}
         <motion.div
-          className="mb-8"
+          className="mb-6"
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
         >
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
-              <p className="text-slate-600 mt-1">Welcome back, {profile.name}</p>
+              <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+                Welcome back, {profile.name}
+              </h1>
+              <p className="text-slate-600 mt-1 text-lg">
+                Here's what's happening with your vehicles today.
+              </p>
             </div>
-            <div className="flex items-center gap-3">
-              <Badge variant="outline" className="capitalize">
-                {profile.role}
-              </Badge>
-              {onLogout && (
-                <Button variant="outline" size="sm" onClick={onLogout}>
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Logout
-                </Button>
-              )}
-            </div>
+            <Button
+              size="lg"
+              className="bg-slate-900 text-white hover:bg-slate-800 px-6 py-3 font-medium"
+              onClick={onBookService}
+            >
+              <BookOpen className="mr-2 h-5 w-5" />
+              Book Service
+            </Button>
           </div>
         </motion.div>
 
-        {/* Stats Grid */}
+        {/* 2x2 Widget Grid */}
         <motion.div
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
+          className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6"
           variants={container}
           initial="hidden"
           animate="show"
         >
-          <StatCard
-            icon={Calendar}
-            label="Total Appointments"
-            value={appointments.length}
-            subtext={`${upcomingAppointments.length} upcoming`}
-            color="bg-blue-500"
-            delay={0}
-          />
-          <StatCard
-            icon={Car}
-            label="Vehicles"
-            value={vehicles.length}
-            subtext={`${activeVehicles} active`}
-            color="bg-emerald-500"
-            delay={0.1}
-          />
-          <StatCard
-            icon={Wallet}
-            label="Total Spent"
-            value={formatCurrency(totalSpent)}
-            subtext={`${completedAppointments.length} completed`}
-            color="bg-amber-500"
-            delay={0.2}
-          />
-          <StatCard
-            icon={Star}
-            label="Loyalty Points"
-            value={loyaltyPoints.toLocaleString()}
-            subtext={`Avg rating: ${avgRating}`}
-            color="bg-purple-500"
-            delay={0.3}
-          />
+          <motion.div variants={item} transition={{ delay: 0 }}>
+            <VehicleHealthCard vehicles={vehicles} />
+          </motion.div>
+
+          <motion.div variants={item} transition={{ delay: 0.1 }}>
+            {vehicles.length > 0 ? (
+              <NextServiceWidget vehicle={vehicles[0]} onBookService={onBookService} />
+            ) : (
+              <Card className="border-0 shadow-sm h-full flex items-center justify-center">
+                <CardContent className="text-center py-8">
+                  <Car className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-sm text-slate-500">Add a vehicle to track service readiness.</p>
+                </CardContent>
+              </Card>
+            )}
+          </motion.div>
+
+          <motion.div variants={item} transition={{ delay: 0.2 }}>
+            <QuickActions onBookService={onBookService} />
+          </motion.div>
+
+          <motion.div variants={item} transition={{ delay: 0.3 }}>
+            <MiniAnalytics appointments={appointments} />
+          </motion.div>
         </motion.div>
 
-        {/* Main Content Tabs */}
+        {/* Recent Activity Timeline */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4, duration: 0.4 }}
         >
           <Card className="border-0 shadow-sm">
-            <CardHeader className="border-b border-slate-100">
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="bg-slate-100 p-1 rounded-xl">
-                  <TabsTrigger value="overview" className="rounded-lg">Overview</TabsTrigger>
-                  <TabsTrigger value="appointments">Appointments</TabsTrigger>
-                  <TabsTrigger value="vehicles">Vehicles</TabsTrigger>
-                  <TabsTrigger value="spending">Spending</TabsTrigger>
-                </TabsList>
-              </Tabs>
+            <CardHeader className="border-b border-slate-100 pb-3">
+              <CardTitle className="text-base font-semibold text-slate-900">Recent Activity Timeline</CardTitle>
             </CardHeader>
             <CardContent className="p-6">
-              <AnimatePresence mode="wait">
-                {activeTab === 'overview' && (
-                  <motion.div
-                    key="overview"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.3 }}
-                    className="space-y-6"
-                  >
-                    {/* Activity Chart Placeholder */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                      <Card className="lg:col-span-2 border border-slate-100">
-                        <CardHeader>
-                          <CardTitle className="text-base flex items-center gap-2">
-                            <Activity className="h-4 w-4 text-slate-500" />
-                            Service Activity
-                          </CardTitle>
-                          <CardDescription>Your service history over time</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="h-48 flex items-end justify-between gap-2 px-4">
-                            {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'].map((month, i) => {
-                              const height = ((i * 37 + 15) % 60) + 20;
-                              return (
-                                <motion.div
-                                  key={month}
-                                  className="flex-1 flex flex-col items-center gap-2"
-                                  initial={{ opacity: 0, y: 20 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  transition={{ delay: i * 0.1 }}
-                                >
-                                  <motion.div
-                                    className="w-full bg-slate-900 rounded-t-lg"
-                                    initial={{ height: 0 }}
-                                    animate={{ height: `${height}%` }}
-                                    transition={{ duration: 0.8, delay: i * 0.1, ease: 'easeOut' }}
-                                  />
-                                  <span className="text-xs text-slate-500">{month}</span>
-                                </motion.div>
-                              );
-                            })}
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      <Card className="border border-slate-100">
-                        <CardHeader>
-                          <CardTitle className="text-base flex items-center gap-2">
-                            <TrendingUp className="h-4 w-4 text-slate-500" />
-                            Spending Breakdown
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          <div>
-                            <div className="flex justify-between text-sm mb-1">
-                              <span className="text-slate-600">Completed</span>
-                              <span className="font-medium">{completedAppointments.length}</span>
-                            </div>
-                            <ProgressBar value={completedAppointments.length} max={appointments.length || 1} color="bg-emerald-500" />
+              {recentCompleted.length === 0 ? (
+                <div className="text-center py-10">
+                  <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                    <Activity className="h-6 w-6 text-slate-400" />
+                  </div>
+                  <p className="text-sm font-medium text-slate-700 mb-1">No recent activity</p>
+                  <p className="text-xs text-slate-500 mb-4">Complete your first service to see it here.</p>
+                  <Button variant="outline" size="sm" onClick={onBookService}>
+                    Book Your First Service
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {recentCompleted.map((apt, i) => {
+                    const status = statusConfig[apt.status] || statusConfig.completed;
+                    return (
+                      <motion.div
+                        key={apt.id}
+                        className="flex items-center justify-between p-4 bg-slate-50 rounded-xl"
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.1 }}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={`p-2 rounded-lg ${status.bg}`}>
+                            <CheckCircle2 className={`h-5 w-5 ${status.color}`} />
                           </div>
                           <div>
-                            <div className="flex justify-between text-sm mb-1">
-                              <span className="text-slate-600">Upcoming</span>
-                              <span className="font-medium">{upcomingAppointments.length}</span>
-                            </div>
-                            <ProgressBar value={upcomingAppointments.length} max={appointments.length || 1} color="bg-blue-500" />
+                            <p className="font-medium text-sm text-slate-900">
+                              {apt.service?.name || `Appointment #${apt.id}`}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              {formatDate(apt.appointment_date)}
+                            </p>
                           </div>
-                          <div>
-                            <div className="flex justify-between text-sm mb-1">
-                              <span className="text-slate-600">Cancelled</span>
-                              <span className="font-medium">{appointments.filter(a => a.status === 'cancelled').length}</span>
-                            </div>
-                            <ProgressBar value={appointments.filter(a => a.status === 'cancelled').length} max={appointments.length || 1} color="bg-red-500" />
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-
-                    {/* Recent Activity */}
-                    <Card className="border border-slate-100">
-                      <CardHeader>
-                        <CardTitle className="text-base">Recent Activity</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        {recentCompleted.length === 0 ? (
-                          <div className="text-center py-8">
-                            <Activity className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-                            <p className="text-sm text-slate-500">No recent activity</p>
-                          </div>
-                        ) : (
-                          <div className="space-y-4">
-                            {recentCompleted.map((apt, i) => {
-                              const status = statusConfig[apt.status] || statusConfig.completed;
-                              return (
-                                <motion.div
-                                  key={apt.id}
-                                  className="flex items-center justify-between p-4 bg-slate-50 rounded-xl"
-                                  initial={{ opacity: 0, x: -20 }}
-                                  animate={{ opacity: 1, x: 0 }}
-                                  transition={{ delay: i * 0.1 }}
-                                >
-                                  <div className="flex items-center gap-4">
-                                    <div className={`p-2 rounded-lg ${status.bg}`}>
-                                      <CheckCircle2 className={`h-5 w-5 ${status.color}`} />
-                                    </div>
-                                    <div>
-                                      <p className="font-medium text-sm text-slate-900">
-                                        {apt.service?.name || `Appointment #${apt.id}`}
-                                      </p>
-                                      <p className="text-xs text-slate-500 mt-0.5">
-                                        {formatDate(apt.appointment_date)}
-                                      </p>
-                                    </div>
-                                  </div>
-                                  <div className="text-right">
-                                    <p className="font-semibold text-sm text-slate-900">
-                                      {apt.total_amount ? formatCurrency(apt.total_amount) : '—'}
-                                    </p>
-                                    <Badge variant="outline" className={`text-xs ${status.color} ${status.bg} border-0`}>
-                                      {status.label}
-                                    </Badge>
-                                  </div>
-                                </motion.div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                )}
-
-                {activeTab === 'appointments' && (
-                  <motion.div
-                    key="appointments"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.3 }}
-                    className="space-y-4"
-                  >
-                    {upcomingAppointments.length === 0 ? (
-                      <div className="text-center py-12">
-                        <Calendar className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-                        <p className="text-slate-500">No upcoming appointments</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {upcomingAppointments.map((apt, i) => {
-                          const status = statusConfig[apt.status] || statusConfig.scheduled;
-                          return (
-                            <motion.div
-                              key={apt.id}
-                              className="flex items-center justify-between p-5 bg-slate-50 rounded-xl border border-slate-100"
-                              initial={{ opacity: 0, y: 20 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: i * 0.08 }}
-                            >
-                              <div className="flex items-center gap-4">
-                                <div className={`p-3 rounded-xl ${status.bg}`}>
-                                  <Calendar className={`h-5 w-5 ${status.color}`} />
-                                </div>
-                                <div>
-                                  <p className="font-medium text-slate-900">
-                                    {apt.service?.name || `Appointment #${apt.id}`}
-                                  </p>
-                                  <p className="text-sm text-slate-500 mt-0.5">
-                                    {formatDate(apt.appointment_date)}
-                                  </p>
-                                  {apt.vehicle && (
-                                    <p className="text-xs text-slate-400 mt-1">
-                                      {apt.vehicle.year} {apt.vehicle.make} {apt.vehicle.model}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                              <Badge className={`${status.color} ${status.bg} border-0`}>
-                                {status.label}
-                              </Badge>
-                            </motion.div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </motion.div>
-                )}
-
-                {activeTab === 'vehicles' && (
-                  <motion.div
-                    key="vehicles"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.3 }}
-                    className="space-y-4"
-                  >
-                    {vehicles.length === 0 ? (
-                      <div className="text-center py-12">
-                        <Car className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-                        <p className="text-slate-500">No vehicles registered yet</p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {vehicles.map((vehicle, i) => (
-                          <motion.div
-                            key={vehicle.id}
-                            className="p-5 bg-slate-50 rounded-xl border border-slate-100"
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: i * 0.08 }}
-                          >
-                            <div className="flex items-start justify-between">
-                              <div className="flex items-center gap-3">
-                                <div className="p-2 bg-slate-900 rounded-lg">
-                                  <Car className="h-5 w-5 text-white" />
-                                </div>
-                                <div>
-                                  <p className="font-medium text-slate-900">
-                                    {vehicle.year} {vehicle.make} {vehicle.model}
-                                  </p>
-                                  <p className="text-xs text-slate-500 mt-0.5">
-                                    {vehicle.license_plate || 'No plate'}
-                                  </p>
-                                </div>
-                              </div>
-                              <Badge variant={vehicle.is_active ? 'default' : 'secondary'} className="text-xs">
-                                {vehicle.is_active ? 'Active' : 'Inactive'}
-                              </Badge>
-                            </div>
-                            <div className="mt-4 flex items-center gap-4 text-xs text-slate-500">
-                              {vehicle.color && (
-                                <span className="flex items-center gap-1">
-                                  <div className="w-3 h-3 rounded-full bg-slate-300" />
-                                  {vehicle.color}
-                                </span>
-                              )}
-                              {vehicle.odometer && (
-                                <span className="flex items-center gap-1">
-                                  <Gauge className="h-3 w-3" />
-                                  {Number(vehicle.odometer).toLocaleString()} km
-                                </span>
-                              )}
-                            </div>
-                          </motion.div>
-                        ))}
-                      </div>
-                    )}
-                  </motion.div>
-                )}
-
-                {activeTab === 'spending' && (
-                  <motion.div
-                    key="spending"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.3 }}
-                    className="space-y-6"
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <Card className="border border-slate-100">
-                        <CardContent className="pt-6">
-                          <p className="text-sm text-slate-500 mb-1">Total Spent</p>
-                          <motion.p
-                            className="text-2xl font-bold text-slate-900"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                          >
-                            {formatCurrency(totalSpent)}
-                          </motion.p>
-                        </CardContent>
-                      </Card>
-                      <Card className="border border-slate-100">
-                        <CardContent className="pt-6">
-                          <p className="text-sm text-slate-500 mb-1">Avg. per Service</p>
-                          <motion.p
-                            className="text-2xl font-bold text-slate-900"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.1 }}
-                          >
-                            {completedAppointments.length > 0
-                              ? formatCurrency(totalSpent / completedAppointments.length)
-                              : formatCurrency(0)}
-                          </motion.p>
-                        </CardContent>
-                      </Card>
-                      <Card className="border border-slate-100">
-                        <CardContent className="pt-6">
-                          <p className="text-sm text-slate-500 mb-1">Loyalty Points</p>
-                          <motion.p
-                            className="text-2xl font-bold text-amber-600"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.2 }}
-                          >
-                            {loyaltyPoints.toLocaleString()}
-                          </motion.p>
-                        </CardContent>
-                      </Card>
-                    </div>
-
-                    {recentCompleted.length === 0 ? (
-                      <div className="text-center py-12">
-                        <Wallet className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-                        <p className="text-slate-500">No completed services yet</p>
-                      </div>
-                    ) : (
-                      <Card className="border border-slate-100">
-                        <CardHeader>
-                          <CardTitle className="text-base">Recent Transactions</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="space-y-3">
-                            {recentCompleted.map((apt, i) => (
-                              <motion.div
-                                key={apt.id}
-                                className="flex items-center justify-between p-4 bg-slate-50 rounded-xl"
-                                initial={{ opacity: 0, x: -20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ delay: i * 0.08 }}
-                              >
-                                <div className="flex items-center gap-3">
-                                  <div className="p-2 bg-emerald-50 rounded-lg">
-                                    <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                                  </div>
-                                  <div>
-                                    <p className="font-medium text-sm text-slate-900">
-                                      {apt.service?.name || `Appointment #${apt.id}`}
-                                    </p>
-                                    <p className="text-xs text-slate-500">{formatDate(apt.appointment_date)}</p>
-                                  </div>
-                                </div>
-                                <p className="font-semibold text-slate-900">
-                                  {apt.total_amount ? formatCurrency(apt.total_amount) : '—'}
-                                </p>
-                              </motion.div>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-sm text-slate-900">
+                            {apt.total_amount ? formatCurrency(apt.total_amount) : '—'}
+                          </p>
+                          <Badge variant="outline" className={`text-xs ${status.color} ${status.bg} border-0`}>
+                            {status.label}
+                          </Badge>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>

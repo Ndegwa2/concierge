@@ -159,6 +159,21 @@ export interface Assignment {
   checklist?: VehicleChecklist;
   work_record?: WorkRecord;
   invoice?: Invoice;
+  service_history?: ServiceHistory;
+}
+
+export interface ServiceHistory {
+  id: number;
+  user_id: number;
+  vehicle_id: number;
+  service_id: number;
+  appointment_id?: number;
+  completed_date?: string;
+  notes?: string;
+  cost?: number;
+  rating?: number;
+  review?: string;
+  created_at?: string;
 }
 
 export interface WorkRecordItem {

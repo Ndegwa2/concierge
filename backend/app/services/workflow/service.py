@@ -1,7 +1,7 @@
 from app import db
 from app.services.auth.models import User
 from app.services.employees.models import Employee
-from app.services.appointments.models import Appointment, Assignment
+from app.services.appointments.models import Appointment, Assignment, ServiceHistory
 from app.services.fleets.models import Invoice
 from app.services.workflow.models import WorkRecord, VehicleChecklist
 from app.services.invoices.service import _generate_invoice_number, _load_appointment_entities
@@ -372,17 +372,21 @@ def get_employee_dashboard_data(current_user):
 
     enriched = []
     for assignment in assignments:
+        appointment = assignment.appointment
+        service_history = (
+            ServiceHistory.query.filter_by(appointment_id=appointment.id).first()
+        )
         enriched.append({
             **assignment.to_dict(),
             'appointment': {
-                **assignment.appointment.to_dict(),
+                **appointment.to_dict(),
                 'customer': {
-                    'id': assignment.appointment.customer.id,
-                    'name': assignment.appointment.customer.name,
-                    'phone': assignment.appointment.customer.phone,
+                    'id': appointment.customer.id,
+                    'name': appointment.customer.name,
+                    'phone': appointment.customer.phone,
                 },
-                'vehicle': assignment.appointment.vehicle.to_dict() if assignment.appointment.vehicle else None,
-                'service': assignment.appointment.service.to_dict() if assignment.appointment.service else None,
+                'vehicle': appointment.vehicle.to_dict() if appointment.vehicle else None,
+                'service': appointment.service.to_dict() if appointment.service else None,
             },
             'employee': {
                 'id': employee.id,
@@ -395,6 +399,7 @@ def get_employee_dashboard_data(current_user):
             },
             'checklist': assignment.checklist.to_dict() if assignment.checklist else None,
             'work_record': assignment.work_record.to_dict() if assignment.work_record else None,
+            'service_history': service_history.to_dict() if service_history else None,
         })
 
     return {

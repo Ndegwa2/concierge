@@ -249,6 +249,7 @@ def confirm_vehicle_return(appointment_id):
         cache_delete_pattern("admin:appointments:*")
         cache_delete_pattern("admin:dashboard:*")
         cache_delete_pattern("employee:dashboard:*")
+        cache_delete_pattern("employee:assignments:*")
         
         logger.info(f"[{request_id}] Vehicle return confirmed for appointment {appointment_id} by user {current_user['id']}")
         
