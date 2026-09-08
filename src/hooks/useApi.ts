@@ -969,8 +969,11 @@ export function useGenerateInvoice() {
   return useMutation({
     mutationFn: ({ assignmentId, data }: { assignmentId: number; data?: Parameters<typeof workflowApi.generateInvoice>[1] }) =>
       workflowApi.generateInvoice(assignmentId, data),
-    onSuccess: (_, { assignmentId }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.appointment(scope, appointmentId) });
+    onSuccess: (response, { assignmentId }) => {
+      const appointmentId = response?.data?.invoice?.appointment_id;
+      if (appointmentId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.appointment(scope, appointmentId) });
+      }
       queryClient.invalidateQueries({ queryKey: queryKeys.appointments(scope) });
       queryClient.invalidateQueries({ queryKey: queryKeys.allAppointmentsAdmin(scope) });
       queryClient.invalidateQueries({ queryKey: queryKeys.workflowPendingVerifications(scope) });

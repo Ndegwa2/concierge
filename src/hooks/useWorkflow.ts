@@ -88,7 +88,7 @@ export function useWorkflowAssignment(assignmentId: number) {
 
   const verifyWorkRecord = (approved: boolean, notes?: string) => {
     verifyWorkRecordMutation.mutate(
-      { appointmentId: assignmentId, data: { approved, notes } },
+      { assignmentId, data: { approved, notes } },
       {
         onSuccess: () => {
           toast.success(approved ? 'Work record verified' : 'Work record rejected');
@@ -101,7 +101,7 @@ export function useWorkflowAssignment(assignmentId: number) {
 
   const generateInvoice = (taxAmount?: number, discountAmount?: number, notes?: string) => {
     generateInvoiceMutation.mutate(
-      { appointmentId: assignmentId, data: { tax_amount: taxAmount, discount_amount: discountAmount, notes } },
+      { assignmentId, data: { tax_amount: taxAmount, discount_amount: discountAmount, notes } },
       {
         onSuccess: () => {
           toast.success('Invoice generated');
