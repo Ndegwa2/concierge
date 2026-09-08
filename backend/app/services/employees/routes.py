@@ -86,13 +86,14 @@ def get_all_employees():
         status = request.args.get('status')
         location = request.args.get('location')
         search = request.args.get('search')
+        department = request.args.get('department')
 
-        cache_key = f"employees:all:{status or 'all'}:{location or 'all'}:{search or 'all'}"
+        cache_key = f"employees:all:{status or 'all'}:{location or 'all'}:{search or 'all'}:{department or 'all'}"
         cached = cache_get(cache_key)
         if cached is not None:
             return jsonify(cached), 200
 
-        employees = get_all_employees_query(status, location, search)
+        employees = get_all_employees_query(status, location, search, department)
 
         result = {
             'success': True,
@@ -319,8 +320,9 @@ def export_employees_csv():
         status = request.args.get('status')
         location = request.args.get('location')
         search = request.args.get('search')
+        department = request.args.get('department')
         
-        employees = export_employees_csv_query(status, location, search)
+        employees = export_employees_csv_query(status, location, search, department)
         
         output = StringIO()
         writer = csv.writer(output)
@@ -840,7 +842,7 @@ def clock_in_out():
 
         result = svc_clock_in_out(current_user, action, data.get('notes', ''))
         
-        cache_delete_pattern(f"employee:time_logs:{result['time_log'].employee_id}:*")
+        cache_delete(f"employee:time_logs:{current_user['id']}")
 
         return jsonify({
             'success': True,

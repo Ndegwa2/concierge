@@ -6,6 +6,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { authApi, employeesApi, servicesApi, vehiclesApi, appointmentsApi, adminApi, partnersApi, workflowApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { toast } from 'sonner';
 import type { User, Vehicle, Appointment, ServicePartner, Employee, EmployeeAssignment, TimeOffRequest, TimeOffDecision, IssueReport, TimeLog } from '../services/api';
 
 // Query Keys
@@ -440,6 +441,9 @@ export function useClockInOut() {
       queryClient.invalidateQueries({ queryKey: queryKeys.timeLogs(scope) });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(scope) });
     },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to clock in/out');
+    },
   });
 }
 
@@ -600,14 +604,14 @@ export function useAllUsers() {
 }
 
 // Employee Management
-export function useEmployees(status?: string, location?: string, search?: string) {
+export function useEmployees(status?: string, location?: string, search?: string, department?: string) {
   const { user, isAuthenticated } = useAuth();
   const scope = userScope(user?.id);
 
   return useQuery({
-    queryKey: [...queryKeys.employees(scope), status ?? 'all', location ?? '', search ?? ''],
+    queryKey: [...queryKeys.employees(scope), status ?? 'all', location ?? '', search ?? '', department ?? ''],
     queryFn: async () => {
-      const response = await employeesApi.getEmployees(status, location, search);
+      const response = await employeesApi.getEmployees(status, location, search, department);
       return response.success ? response.data?.employees ?? [] : [];
     },
     enabled: isAuthenticated,

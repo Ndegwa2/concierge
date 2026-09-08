@@ -82,6 +82,10 @@ class ApiClient {
       const shouldRetry =
         response.status === 401 && !isAuthEndpoint && !!this.refreshToken;
 
+      if (!response.ok) {
+        throw new Error(data.message || data.error || `HTTP ${response.status}`);
+      }
+
       if (shouldRetry) {
         const refreshed = await this.refreshAccessToken();
 
