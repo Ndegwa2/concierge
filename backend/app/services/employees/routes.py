@@ -32,6 +32,8 @@ from .service import (
     get_time_logs_query,
     request_time_off as svc_request_time_off,
     get_time_off_requests_query,
+    get_pending_time_off_requests as svc_get_pending_time_off_requests,
+    decide_time_off_request as svc_decide_time_off_request,
     report_issue as svc_report_issue,
     get_issue_reports_query,
     download_employee_document_file,
@@ -898,8 +900,9 @@ def request_time_off():
         data = request.get_json()
         
         time_off = svc_request_time_off(current_user, data)
-        
+
         cache_delete_pattern(f"employee:time_off:{time_off.employee_id}:*")
+        cache_delete_pattern('admin:time-off*')
 
         return jsonify({
             'success': True,
@@ -951,6 +954,71 @@ def get_time_off_requests():
         return jsonify({
             'success': False,
             'message': 'Failed to get time-off requests',
+            'error': 'An internal server error occurred.'
+        }), 500
+
+
+@employees_bp.route('/admin/time-off-requests', methods=['GET'])
+@jwt_required()
+@admin_required
+def get_admin_time_off_requests():
+    try:
+        current_user = get_current_user()
+
+        requests = svc_get_pending_time_off_requests(current_user)
+
+        result = {
+            'success': True,
+            'data': {
+                'requests': requests,
+                'count': len(requests),
+            }
+        }
+
+        return jsonify(result), 200
+
+    except PermissionError as e:
+        return jsonify({'success': False, 'message': str(e)}), 403
+    except Exception as e:
+        logger.error(str(e), exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to get pending time-off requests',
+            'error': 'An internal server error occurred.'
+        }), 500
+
+
+@employees_bp.route('/admin/time-off-requests/<int:request_id>/decision', methods=['POST'])
+@jwt_required()
+@admin_required
+def decide_time_off_request(request_id):
+    try:
+        current_user = get_current_user()
+        data = request.get_json()
+        if not data or 'approved' not in data:
+            return jsonify({'success': False, 'message': 'approved field is required'}), 400
+
+        time_off = svc_decide_time_off_request(request_id, current_user, data)
+
+        cache_delete_pattern('admin:time-off*')
+
+        return jsonify({
+            'success': True,
+            'message': 'Time-off request approved' if data['approved'] else 'Time-off request rejected',
+            'data': {'time_off_request': time_off}
+        }), 200
+
+    except PermissionError as e:
+        return jsonify({'success': False, 'message': str(e)}), 403
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        logger.error(str(e), exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to process time-off request',
             'error': 'An internal server error occurred.'
         }), 500
 

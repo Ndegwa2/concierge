@@ -6,6 +6,9 @@ from datetime import datetime, timezone, timedelta
 from io import StringIO
 import csv
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def register_employee(data):
@@ -933,6 +936,8 @@ def request_time_off(current_user, data):
     
     db.session.add(time_off)
     db.session.commit()
+
+    _notify_admins_time_off_request(time_off, employee)
     return time_off
 
 
@@ -945,6 +950,161 @@ def get_time_off_requests_query(current_user):
     return TimeOffRequest.query.filter_by(
         employee_id=employee.id
     ).order_by(TimeOffRequest.created_at.desc()).all()
+
+
+def get_pending_time_off_requests(current_user):
+    """Return all time-off requests with status 'pending', enriched with employee + user info."""
+    if current_user.get('role') not in ('admin', 'super_admin'):
+        raise PermissionError('Admin access required')
+
+    requests = (
+        TimeOffRequest.query
+        .join(Employee)
+        .join(User)
+        .filter(TimeOffRequest.status == 'pending')
+        .order_by(TimeOffRequest.created_at.desc())
+        .all()
+    )
+
+    result = []
+    for req in requests:
+        employee = req.employee
+        user = employee.user if employee else None
+        result.append({
+            'id': req.id,
+            'employee_id': req.employee_id,
+            'request_type': req.request_type,
+            'start_date': req.start_date.isoformat() if req.start_date else None,
+            'end_date': req.end_date.isoformat() if req.end_date else None,
+            'reason': req.reason,
+            'status': req.status,
+            'admin_notes': req.admin_notes,
+            'created_at': req.created_at.isoformat() if req.created_at else None,
+            'updated_at': req.updated_at.isoformat() if req.updated_at else None,
+            'employee': {
+                'id': employee.id,
+                'employee_id': employee.employee_id,
+                'location': employee.location,
+                'department': employee.department,
+                'title': employee.title,
+            } if employee else None,
+            'user': {
+                'id': user.id,
+                'name': user.name,
+                'email': user.email,
+                'phone': user.phone,
+            } if user else None,
+        })
+    return result
+
+
+def decide_time_off_request(request_id, current_user, data):
+    """Approve or reject a pending time-off request.
+
+    Args:
+        request_id: The TimeOffRequest ID.
+        current_user: The authenticated user dict (admin).
+        data: dict with 'approved' (bool) and optional 'notes' (str).
+
+    Returns:
+        The updated TimeOffRequest dict.
+    """
+    if current_user.get('role') not in ('admin', 'super_admin'):
+        raise PermissionError('Admin access required')
+
+    request_obj = TimeOffRequest.query.get(request_id)
+    if not request_obj:
+        raise ValueError('Time-off request not found')
+
+    if request_obj.status != 'pending':
+        raise ValueError(f'Time-off request is already {request_obj.status} and cannot be modified')
+
+    approved = data.get('approved', False)
+    notes = data.get('notes', '')
+
+    if approved:
+        request_obj.status = 'approved'
+    else:
+        request_obj.status = 'rejected'
+
+    request_obj.admin_notes = notes
+    request_obj.updated_at = datetime.now(timezone.utc)
+    db.session.commit()
+
+    _notify_employee_time_off_decision(request_obj, approved)
+
+    return request_obj.to_dict()
+
+
+def _notify_employee_time_off_decision(time_off_request, approved):
+    """Create an in-app Notification for the employee when their time-off request is decided."""
+    from app.services.notifications.models import Notification
+    from app.services.auth.models import User
+
+    user = User.query.get(time_off_request.employee.user_id) if time_off_request.employee else None
+    if not user:
+        return
+
+    status_text = 'approved' if approved else 'rejected'
+    title = f'Time-off request {status_text}'
+    message = (
+        f'Your {time_off_request.request_type} request '
+        f'({time_off_request.start_date.strftime("%b %d") if time_off_request.start_date else "N/A"} - '
+        f'{time_off_request.end_date.strftime("%b %d") if time_off_request.end_date else "N/A"}) '
+        f'has been {status_text}.'
+    )
+    if time_off_request.admin_notes:
+        message += f' Admin notes: {time_off_request.admin_notes}'
+
+    try:
+        note = Notification(
+            user_id=user.id,
+            title=title,
+            message=message,
+            notification_type='time_off',
+        )
+        db.session.add(note)
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        logger.warning('Failed to create time-off notification: %s', exc)
+
+
+def _notify_admins_time_off_request(time_off_request, employee):
+    """Create in-app notifications for every admin when an employee submits a time-off request."""
+    from app.services.notifications.models import Notification
+    from app.services.auth.models import User
+
+    admins = User.query.filter(
+        User.role.in_(['admin', 'super_admin'])
+    ).all()
+    if not admins:
+        return
+
+    req_type = time_off_request.request_type.replace('_', ' ').title()
+    start = time_off_request.start_date.strftime('%b %d, %Y') if time_off_request.start_date else 'N/A'
+    end = time_off_request.end_date.strftime('%b %d, %Y') if time_off_request.end_date else 'N/A'
+    employee_name = employee.user.name if employee and employee.user else f'Employee #{employee.id}' if employee else 'Unknown'
+
+    title = 'New time-off request'
+    message = f'{employee_name} has submitted a {req_type} request for {start} to {end}.'
+
+    for admin in admins:
+        try:
+            note = Notification(
+                user_id=admin.id,
+                title=title,
+                message=message,
+                notification_type='time_off',
+            )
+            db.session.add(note)
+        except Exception as exc:
+            logger.warning('Failed to create admin time-off notification: %s', exc)
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 
 def report_issue(current_user, data):
