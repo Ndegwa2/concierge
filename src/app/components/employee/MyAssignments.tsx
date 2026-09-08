@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Search, Filter, Phone, Navigation, CheckCircle2, Clock, XCircle, MapPin, Wallet } from 'lucide-react';
+import { Search, Filter, Phone, Navigation, CheckCircle2, Clock, XCircle, MapPin, Wallet, Star, MessageSquare } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
@@ -41,6 +41,9 @@ interface AssignmentDisplay {
   serviceInfo: { name: string; duration: number } | null;
   notes: string;
   customerPhone: string;
+  rating?: number | null;
+  review?: string | null;
+  completedDate?: string | null;
 }
 
 export function MyAssignments({ employeeData, onCheckoutAssignment }: MyAssignmentsProps) {
@@ -59,6 +62,7 @@ export function MyAssignments({ employeeData, onCheckoutAssignment }: MyAssignme
   const assignmentDisplays: AssignmentDisplay[] = useMemo(() =>
     assignments.map(a => {
       const appt = a.appointment;
+      const sh = a.service_history;
       return {
         id: `A-${appt.id}`,
         assignmentId: a.id,
@@ -80,6 +84,9 @@ export function MyAssignments({ employeeData, onCheckoutAssignment }: MyAssignme
         notes: appt.notes || '',
         customerPhone: appt.customer?.phone || '',
         statusValue: a.status || 'pending',
+        rating: sh?.rating ?? null,
+        review: sh?.review ?? null,
+        completedDate: sh?.completed_date ?? null,
       };
     }),
   [assignments]);
@@ -147,9 +154,29 @@ export function MyAssignments({ employeeData, onCheckoutAssignment }: MyAssignme
 
   const AssignmentCard = ({ assignment }: { assignment: AssignmentDisplay }) => {
     const handleContinueWork = () => {
-      setSelectedAssignment(assignment);
-      setWorkflowStep('checklist');
+      startMutation.mutate(assignment.assignmentId, {
+        onSuccess: () => {
+          setSelectedAssignment(assignment);
+          setWorkflowStep('checklist');
+        },
+        onError: () => toast.error('Failed to start assignment'),
+      });
     };
+
+    const renderStars = (rating: number) => (
+      <div className="flex items-center gap-1">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <Star
+            key={star}
+            className={`h-4 w-4 ${
+              star <= rating
+                ? 'fill-yellow-400 text-yellow-400'
+                : 'text-slate-300'
+            }`}
+          />
+        ))}
+      </div>
+    );
 
     return (
       <Card className="hover:shadow-lg transition-shadow">
@@ -192,6 +219,30 @@ export function MyAssignments({ employeeData, onCheckoutAssignment }: MyAssignme
               </div>
             </div>
           </div>
+
+          {assignment.rating && assignment.rating > 0 && (
+            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2">
+                  <Star className="h-4 w-4 text-yellow-600 fill-yellow-400" />
+                  <span className="text-sm font-medium text-yellow-900">
+                    Client Rating: {assignment.rating}/5
+                  </span>
+                </div>
+                {assignment.completedDate && (
+                  <span className="text-xs text-yellow-700">
+                    {new Date(assignment.completedDate).toLocaleDateString('en-KE')}
+                  </span>
+                )}
+              </div>
+              {assignment.review && (
+                <p className="text-sm text-yellow-800 italic flex items-start gap-1">
+                  <MessageSquare className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                  <span>&ldquo;{assignment.review}&rdquo;</span>
+                </p>
+              )}
+            </div>
+          )}
 
           {assignment.specialInstructions && (
             <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -407,22 +458,22 @@ export function MyAssignments({ employeeData, onCheckoutAssignment }: MyAssignme
                {selectedAssignment?.customer} - {selectedAssignment?.service}
              </DialogDescription>
            </DialogHeader>
-           {selectedAssignment && workflowStep === 'checklist' && (
-             <VehicleChecklistForm
-               assignmentId={selectedAssignment.appointmentId}
-               appointmentId={selectedAssignment.appointmentId}
-               vehicleInfo={selectedAssignment.vehicleInfo || undefined}
-               serviceInfo={selectedAssignment.serviceInfo || undefined}
-               onComplete={() => setWorkflowStep('workrecord')}
-             />
-           )}
-           {selectedAssignment && workflowStep === 'workrecord' && (
-             <WorkRecordForm
-               assignmentId={selectedAssignment.appointmentId}
-               appointmentId={selectedAssignment.appointmentId}
-               serviceInfo={selectedAssignment.serviceInfo || undefined}
-             />
-           )}
+{selectedAssignment && workflowStep === 'checklist' && (
+              <VehicleChecklistForm
+                assignmentId={selectedAssignment.assignmentId}
+                appointmentId={selectedAssignment.appointmentId}
+                vehicleInfo={selectedAssignment.vehicleInfo || undefined}
+                serviceInfo={selectedAssignment.serviceInfo || undefined}
+                onComplete={() => setWorkflowStep('workrecord')}
+              />
+            )}
+            {selectedAssignment && workflowStep === 'workrecord' && (
+              <WorkRecordForm
+                assignmentId={selectedAssignment.assignmentId}
+                appointmentId={selectedAssignment.appointmentId}
+                serviceInfo={selectedAssignment.serviceInfo || undefined}
+              />
+            )}
          </DialogContent>
        </Dialog>
     </div>
