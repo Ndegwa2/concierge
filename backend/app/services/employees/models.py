@@ -182,6 +182,7 @@ class TimeOffRequest(db.Model):
 
     id = db.Column(db.BigInteger, primary_key=True)
     employee_id = db.Column(db.BigInteger, db.ForeignKey('employees.id', ondelete='CASCADE'), nullable=False, index=True)
+    employee = db.relationship('Employee', backref='time_off_requests', lazy=True)
     request_type = db.Column(db.String(20), nullable=False)
     start_date = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
     end_date = db.Column(db.DateTime(timezone=True), nullable=False, index=True)

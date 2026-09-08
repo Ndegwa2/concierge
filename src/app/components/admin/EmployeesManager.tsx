@@ -92,7 +92,7 @@ export function EmployeesManager() {
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState>({ id: 0, name: '', isOpen: false });
   const [deactivateConfirm, setDeactivateConfirm] = useState<DeleteConfirmState>({ id: 0, name: '', isOpen: false });
 
-  const { data: employees = [], isLoading, error, refetch } = useEmployees();
+  const { data: employees = [], isLoading, error, refetch } = useEmployees(undefined, undefined, undefined, departmentFilter);
   const deleteEmployeeMutation = useDeleteEmployee();
   const updateStatusMutation = useUpdateEmployeeStatus();
 
@@ -112,10 +112,6 @@ export function EmployeesManager() {
 
     if (statusFilter !== 'all') {
       result = result.filter((emp) => emp.employee?.status === statusFilter || emp.employee?.account_status === statusFilter);
-    }
-
-    if (departmentFilter !== 'all') {
-      result = result.filter((emp) => emp.employee?.department === departmentFilter);
     }
 
     if (typeFilter !== 'all') {
@@ -151,7 +147,7 @@ export function EmployeesManager() {
     });
 
     return result;
-  }, [employees, searchQuery, statusFilter, departmentFilter, typeFilter, roleFilter, sortBy, sortOrder]);
+  }, [employees, searchQuery, statusFilter, typeFilter, roleFilter, sortBy, sortOrder]);
 
   const paginatedEmployees = useMemo(() => {
     const startIndex = (currentPage - 1) * rowsPerPage;

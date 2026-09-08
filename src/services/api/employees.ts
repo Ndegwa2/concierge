@@ -130,13 +130,14 @@ export const employeesApi = {
     });
   },
 
-  async getEmployees(status?: string, location?: string, search?: string): Promise<ApiResponse<{
+  async getEmployees(status?: string, location?: string, search?: string, department?: string): Promise<ApiResponse<{
     employees: Array<{ user: User; employee: EmployeeProfile }>;
   }>> {
     const params = new URLSearchParams();
     if (status) params.append('status', status);
     if (location) params.append('location', location);
     if (search) params.append('search', search);
+    if (department) params.append('department', department);
     const query = params.toString() ? `?${params.toString()}` : '';
     return apiClient.request(`/employees/admin/employees${query}`);
   },

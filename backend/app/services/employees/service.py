@@ -61,7 +61,7 @@ def register_employee(data):
     return employee
 
 
-def get_all_employees_query(status=None, location=None, search=None):
+def get_all_employees_query(status=None, location=None, search=None, department=None):
     query = Employee.query.join(User)
     
     if status:
@@ -69,6 +69,9 @@ def get_all_employees_query(status=None, location=None, search=None):
     
     if location:
         query = query.filter(Employee.location.ilike(f'%{location}%'))
+    
+    if department:
+        query = query.filter(Employee.department.ilike(f'%{department}%'))
     
     if search:
         query = query.filter(
@@ -296,7 +299,7 @@ def delete_employee_document(employee_id, doc_id):
     db.session.commit()
 
 
-def export_employees_csv_query(status=None, location=None, search=None):
+def export_employees_csv_query(status=None, location=None, search=None, department=None):
     query = Employee.query.join(User)
     
     if status:
@@ -304,6 +307,9 @@ def export_employees_csv_query(status=None, location=None, search=None):
     
     if location:
         query = query.filter(Employee.location.ilike(f'%{location}%'))
+    
+    if department:
+        query = query.filter(Employee.department.ilike(f'%{department}%'))
     
     if search:
         query = query.filter(
