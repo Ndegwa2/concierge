@@ -160,3 +160,68 @@ export interface Assignment {
   work_record?: WorkRecord;
   invoice?: Invoice;
 }
+
+export interface WorkRecordItem {
+  description: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+}
+
+export interface WorkRecord {
+  id: number;
+  assignment_id: number;
+  appointment_id: number;
+  employee_id: number;
+  customer_id: number;
+  items: WorkRecordItem[];
+  overall_notes?: string;
+  labor_hours?: number;
+  labor_rate?: number;
+  subtotal: number;
+  tax_amount: number;
+  total_amount: number;
+  status: 'draft' | 'submitted' | 'verified' | 'invoiced';
+  submitted_at?: string;
+  verified_at?: string;
+  verified_by?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InvoiceLineItem {
+  id: number;
+  invoice_id: number;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+  created_at: string;
+}
+
+export interface Invoice {
+  id: number;
+  invoice_number: string;
+  appointment_id?: number;
+  user_id?: number;
+  total_amount: number;
+  currency: string;
+  status: 'draft' | 'pending_verification' | 'verified' | 'paid' | 'cancelled';
+  payment_method?: string;
+  notes?: string;
+  tax_amount: number;
+  discount_amount: number;
+  line_items: InvoiceLineItem[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VehicleChecklist {
+  id: number;
+  assignment_id: number;
+  overall_condition: string;
+  notes?: string;
+  items: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}

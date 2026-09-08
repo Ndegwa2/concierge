@@ -967,9 +967,9 @@ export function useGenerateInvoice() {
   const scope = userScope(user?.id);
 
   return useMutation({
-    mutationFn: ({ assignmentId, data }: { appointmentId: number; data?: Parameters<typeof workflowApi.generateInvoice>[1] }) =>
+    mutationFn: ({ assignmentId, data }: { assignmentId: number; data?: Parameters<typeof workflowApi.generateInvoice>[1] }) =>
       workflowApi.generateInvoice(assignmentId, data),
-    onSuccess: (_, { appointmentId }) => {
+    onSuccess: (_, { assignmentId }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.appointment(scope, appointmentId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.appointments(scope) });
       queryClient.invalidateQueries({ queryKey: queryKeys.allAppointmentsAdmin(scope) });

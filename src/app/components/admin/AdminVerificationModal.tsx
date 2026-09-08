@@ -43,7 +43,7 @@ export function AdminVerificationModal({ assignment, open, onOpenChange }: Admin
   if (!assignment || !assignment.work_record) return null;
 
   const workRecord = assignment.work_record;
-  const subtotal = workRecord.subtotal || workRecord.items.reduce((sum, i) => sum + i.total_price, 0);
+  const subtotal = (workRecord.subtotal ?? 0) || (workRecord.items?.length ? workRecord.items.reduce((sum, i) => sum + (i.total_price || 0), 0) : 0);
   const taxValue = (subtotal * taxAmount) / 100;
   const discountValue = (subtotal * discountAmount) / 100;
   const total = subtotal + taxValue - discountValue;
@@ -51,7 +51,7 @@ export function AdminVerificationModal({ assignment, open, onOpenChange }: Admin
   const handleVerify = (approved: boolean) => {
     setIsVerifying(true);
     verifyWorkRecord({
-      appointmentId: assignment.appointment_id,
+      assignmentId: assignment.id,
       data: { approved, notes: verificationNotes },
     }, {
       onSettled: () => setIsVerifying(false),
@@ -67,7 +67,7 @@ export function AdminVerificationModal({ assignment, open, onOpenChange }: Admin
     if (!assignment) return;
     setIsInvoicing(true);
     generateInvoice({
-      appointmentId: assignment.appointment_id,
+      assignmentId: assignment.id,
       data: {
         tax_amount: taxValue,
         discount_amount: discountValue,
