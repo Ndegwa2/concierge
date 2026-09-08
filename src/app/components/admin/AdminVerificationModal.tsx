@@ -40,7 +40,7 @@ export function AdminVerificationModal({ assignment, open, onOpenChange }: Admin
     }
   }, [open, assignment]);
 
-  if (!assignment || !assignment.work_record) return null;
+  if (!assignment || !assignment.appointment || !assignment.work_record) return null;
 
   const workRecord = assignment.work_record;
   const subtotal = (workRecord.subtotal ?? 0) || (workRecord.items?.length ? workRecord.items.reduce((sum, i) => sum + (i.total_price || 0), 0) : 0);
