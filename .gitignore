@@ -19,6 +19,8 @@ stats.html
 .kilo/
 backend/instance/
 instance/
+backend/uploads/
+backend/celerybeat-schedule*
 
 # Build outputs
 dist/
