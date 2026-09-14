@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/ta
 import { toast } from 'sonner';
 import { useAppointments, useCancelAppointment } from '@/hooks/useApi';
 import { appointmentsApi } from '@/services/api';
+import { ProofOfWorkGallery } from './ProofOfWorkGallery';
 import type { Appointment } from '@/services/api';
 
 function formatDate(dateString: string) {
@@ -204,6 +205,7 @@ export function CustomerAppointments({ onConfirmReturn, onBookAppointment }: { o
 
             <AnimatePresence mode="wait">
               {appointment.status === 'completed' && (
+              <>
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
@@ -235,17 +237,32 @@ export function CustomerAppointments({ onConfirmReturn, onBookAppointment }: { o
                       </Button>
                     </div>
                   ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                      onClick={() => handleSendInvoice(appointment)}
-                    >
-                      <Send className="h-4 w-4 mr-2" />
-                      Get Invoice
-                    </Button>
-                  )}
+                 <Button
+                   variant="outline"
+                   size="sm"
+                   className="w-full"
+                   onClick={() => handleSendInvoice(appointment)}
+                 >
+                   <Send className="h-4 w-4 mr-2" />
+                   Get Invoice
+                 </Button>
+               )}
+               </motion.div>
+
+               <motion.div
+                 initial={{ opacity: 0, height: 0 }}
+                 animate={{ opacity: 1, height: 'auto' }}
+                 exit={{ opacity: 0, height: 0 }}
+                 className="pt-3"
+               >
+                 <ProofOfWorkGallery
+                   appointmentId={appointment.id}
+                   readOnly
+                   title="Proof of Work"
+                   emptyMessage="Your concierge hasn't added proof-of-work photos for this service yet."
+                  />
                 </motion.div>
+                </>
               )}
 
               {(appointment.status === 'scheduled' || appointment.status === 'confirmed') && (

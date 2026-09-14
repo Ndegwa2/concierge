@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { useMyAssignments, useUpdateAssignmentStatus, useStartAssignment, useSubmitChecklist, useSubmitWorkRecord } from '@/hooks/useApi';
 import { VehicleChecklistForm } from './VehicleChecklistForm';
 import { WorkRecordForm } from './WorkRecordForm';
+import { ProofOfWorkGallery } from '../ProofOfWorkGallery';
 
 interface MyAssignmentsProps {
   employeeData: {
@@ -244,12 +245,31 @@ export function MyAssignments({ employeeData, onCheckoutAssignment }: MyAssignme
             </div>
           )}
 
-          {assignment.specialInstructions && (
-            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="text-sm font-medium text-yellow-900 mb-1">Special Instructions:</p>
-              <p className="text-sm text-yellow-800">{assignment.specialInstructions}</p>
-            </div>
-          )}
+           {assignment.specialInstructions && (
+             <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+               <p className="text-sm font-medium text-yellow-900 mb-1">Special Instructions:</p>
+               <p className="text-sm text-yellow-800">{assignment.specialInstructions}</p>
+             </div>
+           )}
+
+           {(assignment.statusValue === 'in-progress' ||
+             assignment.statusValue === 'work_pending' ||
+             assignment.statusValue === 'submitted') && (
+             <ProofOfWorkGallery
+               assignmentId={assignment.assignmentId}
+               title="Proof of Work"
+               emptyMessage="Attach before/after photos here as work progresses."
+             />
+           )}
+           {(assignment.statusValue === 'verified' || assignment.statusValue === 'completed') && (
+             <ProofOfWorkGallery
+               assignmentId={assignment.assignmentId}
+               readOnly
+               title="Proof of Work"
+               emptyMessage="No proof-of-work media for this job."
+             />
+           )}
+
 
           <div className="flex items-center justify-between pt-2 border-t">
             <div className="flex items-center gap-2 text-sm text-slate-600">
