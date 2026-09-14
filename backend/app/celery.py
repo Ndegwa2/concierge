@@ -27,6 +27,7 @@ def make_celery(app=None):
             'app.tasks.payment_tasks',
             'app.tasks.pdf_tasks',
             'app.tasks.appointment_tasks',
+            'app.tasks.media_tasks',
         ]
     )
 

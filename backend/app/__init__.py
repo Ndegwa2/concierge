@@ -10,7 +10,7 @@ from flask_limiter.util import get_remote_address
 import os
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 db = SQLAlchemy()
 migrate = Migrate()
@@ -45,6 +45,8 @@ def create_app(config_class=None):
                 SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL'),
                 SQLALCHEMY_TRACK_MODIFICATIONS=False,
                 JWT_SECRET_KEY=os.environ.get('JWT_SECRET_KEY'),
+                MAX_CONTENT_LENGTH=int(os.environ.get('MAX_CONTENT_LENGTH', str(100 * 1024 * 1024))),
+                PROOF_OF_WORK_UPLOAD_FOLDER=os.environ.get('PROOF_OF_WORK_UPLOAD_FOLDER') or os.path.join(os.getcwd(), 'uploads', 'proof_of_work'),
                 JWT_TOKEN_LOCATION=['headers', 'json'],
                 JWT_REFRESH_JSON_KEY='refresh_token',
                 # Access tokens expire after 30 minutes (short-lived)
@@ -159,9 +161,9 @@ def create_app(config_class=None):
             'error': 'fresh_token_required'
         }), 401
 
-    # Request size limit (10MB)
-    app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB
-    
+    # Request size limit — configured above from MAX_CONTENT_LENGTH (env,
+    # default 100MB) to allow video proof-of-work uploads.
+
     # Rate limiting setup
     limiter.init_app(app)
     
@@ -195,6 +197,7 @@ def create_app(config_class=None):
     from app.services.ai_chat import ai_chat_bp
     from app.services.payments import payments_bp
     from app.services.workflow import workflow_bp
+    from app.services.proof_of_work import proof_of_work_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(services_bp, url_prefix='/api/services')
@@ -210,6 +213,7 @@ def create_app(config_class=None):
     app.register_blueprint(ai_chat_bp, url_prefix='/api/ai-chat')
     app.register_blueprint(payments_bp, url_prefix='/api/payments')
     app.register_blueprint(workflow_bp, url_prefix='/api/workflow')
+    app.register_blueprint(proof_of_work_bp, url_prefix='/api')
 
     # CSRF protection strategy:
     # All API endpoints use JWT Bearer tokens sent via the Authorization header.
@@ -230,6 +234,7 @@ def create_app(config_class=None):
     csrf.exempt(ai_chat_bp)
     csrf.exempt(payments_bp)
     csrf.exempt(workflow_bp)
+    csrf.exempt(proof_of_work_bp)
 
     from app.services.notifications.scheduler import start_scheduler
     start_scheduler(app)
