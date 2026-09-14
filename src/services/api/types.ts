@@ -271,3 +271,23 @@ export interface TimeOffDecision {
   approved: boolean;
   notes?: string;
 }
+
+export interface ProofOfWorkMedia {
+  id: number;
+  assignment_id: number;
+  client_id: number;
+  uploaded_by: number;
+  media_type: 'image' | 'video';
+  mime_type: string;
+  original_filename: string;
+  file_size?: number;
+  width?: number;
+  height?: number;
+  duration_seconds?: number;
+  caption?: string;
+  is_public: boolean;
+  created_at: string;
+  updated_at: string;
+  thumbnail_url: string;
+  original_url: string;
+}

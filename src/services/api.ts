@@ -7,5 +7,5 @@
  *   import { fleetsApi } from '@/services/api/fleets';
  */
 
-export { apiClient, apiClient as api, authApi, appointmentsApi, vehiclesApi, employeesApi, fleetsApi, notificationsApi, partnersApi, servicesApi, adminApi, aiChatApi, paymentsApi, workflowApi } from './api/index';
+export { apiClient, apiClient as api, authApi, appointmentsApi, vehiclesApi, employeesApi, fleetsApi, notificationsApi, partnersApi, servicesApi, adminApi, aiChatApi, paymentsApi, workflowApi, proofOfWorkApi } from './api/index';
 export * from './api/types';

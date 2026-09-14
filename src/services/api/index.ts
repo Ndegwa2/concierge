@@ -12,4 +12,5 @@ export type { POSLineItem, POSCheckoutRequest, POSInvoice } from './admin';
 export { aiChatApi } from './aiChat';
 export { paymentsApi } from './payments';
 export { workflowApi } from './workflow';
+export { proofOfWorkApi } from './proofOfWork';
 export * from './types';
