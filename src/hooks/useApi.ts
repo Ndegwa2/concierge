@@ -133,6 +133,44 @@ export function useUpdateProfile() {
 }
 
 // ============================================================
+// PASSWORD RESET HOOKS
+// ============================================================
+
+export function useResetOwnPassword() {
+  return useMutation({
+    mutationFn: ({
+      currentPassword,
+      newPassword,
+    }: {
+      currentPassword: string;
+      newPassword: string;
+    }) => authApi.resetOwnPassword(currentPassword, newPassword),
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to reset password');
+    },
+  });
+}
+
+export function useAdminResetPassword() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      userId,
+      newPassword,
+      sendEmail,
+    }: {
+      userId: number;
+      newPassword: string;
+      sendEmail?: boolean;
+    }) => authApi.adminResetPassword(userId, newPassword, sendEmail),
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to reset password');
+    },
+  });
+}
+
+// ============================================================
 // SERVICES HOOKS
 // ============================================================
 
@@ -246,14 +284,13 @@ export function useAppointments(status?: string) {
     },
     enabled: isAuthenticated,
     staleTime: 30 * 1000, // 30 seconds
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
     refetchInterval: (query) => {
-      // Poll every 15 seconds if user has active appointments
       const data = query.state.data;
       if (data && data.some((a: any) => ['scheduled', 'confirmed', 'in-progress'].includes(a.status))) {
-        return 15 * 1000; // 15 seconds for active appointments
+        return 60 * 1000; // 60 seconds for active appointments
       }
-      return 60 * 1000; // 60 seconds otherwise
+      return false; // Don't poll when no active appointments
     },
   });
 }
@@ -500,7 +537,7 @@ export function useAdminTimeOffRequests() {
     },
     enabled: isAuthenticated,
     staleTime: 30 * 1000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
     refetchInterval: 60 * 1000,
   });
 }
@@ -567,9 +604,9 @@ export function useAdminDashboard() {
       return response.success ? response.data : null;
     },
     enabled: isAuthenticated,
-    staleTime: 15 * 1000, // Consider data fresh for 15 seconds
-    refetchOnWindowFocus: true,
-    refetchInterval: 30 * 1000, // Auto-refetch every 30 seconds for admin dashboard
+    staleTime: 15 * 1000,
+    refetchOnWindowFocus: false,
+    refetchInterval: 60 * 1000,
   });
 }
 
@@ -584,9 +621,9 @@ export function useAllAppointmentsAdmin(status?: string) {
       return response.success ? response.data?.appointments ?? [] : [];
     },
     enabled: isAuthenticated,
-    staleTime: 30 * 1000, // Consider data fresh for 30 seconds
-    refetchOnWindowFocus: true,
-    refetchInterval: 60 * 1000, // Auto-refetch every 60 seconds for admin
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: false,
+    refetchInterval: 60 * 1000,
   });
 }
 

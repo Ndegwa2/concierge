@@ -93,6 +93,26 @@ export const authApi = {
     });
   },
 
+  async resetOwnPassword(currentPassword: string, newPassword: string): Promise<ApiResponse<{}>> {
+    return apiClient.request('/auth/profile/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    });
+  },
+
+  async adminResetPassword(userId: number, newPassword: string, sendEmail = false): Promise<ApiResponse<{ user: User }>> {
+    return apiClient.request(`/auth/admin/users/${userId}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({
+        new_password: newPassword,
+        send_email: sendEmail,
+      }),
+    });
+  },
+
   async verifyToken(): Promise<ApiResponse<{ user: User }>> {
     return apiClient.request('/auth/verify-token');
   },

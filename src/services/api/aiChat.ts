@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { API_BASE_URL } from './types';
 import type {
   ApiResponse,
 } from './types';
@@ -9,7 +10,7 @@ export const aiChatApi = {
     conversation_history?: Array<{ role: string; content: string }>;
   }): Promise<ApiResponse<{ response: string }>> {
     const token = apiClient.getToken();
-    const response = await fetch(`${apiClient['API_BASE_URL']}/ai-chat/chat`, {
+    const response = await fetch(`${API_BASE_URL}/ai-chat/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

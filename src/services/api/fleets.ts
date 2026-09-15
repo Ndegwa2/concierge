@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { API_BASE_URL } from './types';
 import type {
   ApiResponse,
   Company,
@@ -116,7 +117,7 @@ export const fleetsApi = {
 
   async downloadFleetInvoicePdf(id: number): Promise<Blob> {
     const token = apiClient.getToken();
-    const response = await fetch(`${apiClient['API_BASE_URL']}/fleets/invoices/${id}/pdf`, {
+    const response = await fetch(`${API_BASE_URL}/fleets/invoices/${id}/pdf`, {
       headers: {
         ...(token && { Authorization: `Bearer ${token}` }),
       },

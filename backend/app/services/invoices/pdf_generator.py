@@ -3,20 +3,27 @@ from datetime import datetime, timezone
 from pathlib import Path
 from fpdf import FPDF
 from flask import current_app
+from fpdf.enums import AccessPermission
 
 from app.services.appointments.models import Appointment
 from app.services.auth.models import User
-from app.services.vehicles.models import Vehicle
 from app.services.catalog.models import Service
 from app.services.fleets.models import Invoice, InvoiceLineItem
 
 
 class InvoicePDF(FPDF):
     def header(self):
+        self.set_xy(self.w / 2, self.h / 2)
+        with self.rotation(45, self.w / 2, self.h / 2):
+            self.set_font('Helvetica', 'B', 40)
+            self.set_text_color(200, 200, 200)
+            self.cell(0, 10, 'AutoConcierge', align='C')
+        self.set_text_color(0, 0, 0)
+        self.set_xy(self.l_margin, self.t_margin)
         self.set_font('Helvetica', 'B', 16)
-        self.cell(0, 10, 'Ndegwa Auto Concierge', ln=True, align='C')
+        self.cell(0, 10, 'Auto Concierge', ln=True, align='C')
         self.set_font('Helvetica', '', 10)
-        self.cell(0, 6, 'contact@autoconcierge.com | +254 700 000 000', ln=True, align='C')
+        self.cell(0, 6, 'Nairobi, Kenya | contact@autoconcierge.com | +254 717540110', ln=True, align='C')
         self.ln(4)
         self.line(10, self.get_y(), 200, self.get_y())
         self.ln(4)
@@ -45,14 +52,18 @@ def generate_invoice_pdf(appointment, customer, vehicle, service, invoice_number
 
     pdf.set_font('Helvetica', 'B', 12)
     pdf.cell(0, 8, 'INVOICE', ln=True)
+    pdf.ln(2)
+
     pdf.set_font('Helvetica', '', 10)
     if appointment:
-        pdf.cell(95, 7, f'# {invoice_number}', ln=False)
-        pdf.cell(0, 7, f"Date: {appointment.appointment_date.strftime('%Y-%m-%d')}", ln=True)
+        date_str = f"{appointment.appointment_date.strftime('%B')} {appointment.appointment_date.day}, {appointment.appointment_date.year}"
     else:
-        pdf.cell(95, 7, f'# {invoice_number}', ln=False)
-        pdf.cell(0, 7, f"Date: {datetime.now(timezone.utc).strftime('%Y-%m-%d')}", ln=True)
-    pdf.ln(2)
+        now = datetime.now(timezone.utc)
+        date_str = f"{now.strftime('%B')} {now.day}, {now.year}"
+    pdf.cell(0, 6, f'Invoice Number: {invoice_number}', ln=True)
+    pdf.cell(0, 6, f'Invoice Date: {date_str}', ln=True)
+    pdf.cell(0, 6, 'Due Date: Upon Receipt', ln=True)
+    pdf.ln(4)
 
     if customer:
         pdf.set_font('Helvetica', 'B', 10)
@@ -62,36 +73,6 @@ def generate_invoice_pdf(appointment, customer, vehicle, service, invoice_number
         pdf.cell(0, 6, customer.email, ln=True)
         if customer.phone:
             pdf.cell(0, 6, customer.phone, ln=True)
-        pdf.ln(2)
-
-    if vehicle:
-        pdf.set_font('Helvetica', 'B', 10)
-        pdf.cell(0, 7, 'Vehicle:', ln=True)
-        pdf.set_font('Helvetica', '', 10)
-        vehicle_text = f"{vehicle.make} {vehicle.model} {vehicle.year or ''}".strip()
-        if vehicle.license_plate:
-            vehicle_text += f" ({vehicle.license_plate})"
-        pdf.cell(0, 6, vehicle_text, ln=True)
-        pdf.ln(2)
-
-    if service:
-        pdf.set_font('Helvetica', 'B', 10)
-        pdf.cell(0, 7, 'Service:', ln=True)
-        pdf.set_font('Helvetica', '', 10)
-        pdf.multi_cell(0, 6, service.name)
-        if service.description:
-            pdf.multi_cell(0, 6, service.description)
-        pdf.ln(2)
-
-    if appointment:
-        pdf.set_font('Helvetica', 'B', 10)
-        pdf.cell(0, 7, 'Work Done:', ln=True)
-        pdf.set_font('Helvetica', '', 10)
-        notes = (appointment.notes or '').strip()
-        if notes:
-            pdf.multi_cell(0, 6, notes)
-        else:
-            pdf.cell(0, 6, 'No additional notes.', ln=True)
         pdf.ln(4)
 
     if invoice and invoice.line_items:
@@ -112,41 +93,54 @@ def generate_invoice_pdf(appointment, customer, vehicle, service, invoice_number
         total = 0
 
     pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(120, 8, 'Description', border=1)
-    pdf.cell(25, 8, 'Qty', border=1, align='C')
-    pdf.cell(45, 8, 'Total', border=1, align='R', ln=True)
+    pdf.cell(90, 8, 'Description', border=1)
+    pdf.cell(20, 8, 'Qty', border=1, align='C')
+    pdf.cell(40, 8, 'Rate (KSh)', border=1, align='R')
+    pdf.cell(40, 8, 'Amount (KSh)', border=1, align='R', ln=True)
 
     pdf.set_font('Helvetica', '', 10)
     for item in line_items:
-        pdf.cell(120, 8, item.description, border=1)
-        pdf.cell(25, 8, str(item.quantity), border=1, align='C')
-        pdf.cell(45, 8, _format_currency(float(item.total_price)), border=1, align='R', ln=True)
+        pdf.cell(90, 8, item.description, border=1)
+        pdf.cell(20, 8, str(item.quantity), border=1, align='C')
+        pdf.cell(40, 8, _format_currency(float(item.unit_price)), border=1, align='R')
+        pdf.cell(40, 8, _format_currency(float(item.total_price)), border=1, align='R', ln=True)
 
     subtotal = total - float(invoice.tax_amount if invoice else 0)
     pdf.set_font('Helvetica', '', 10)
-    pdf.cell(120, 8, 'Subtotal:', border=0, align='R')
-    pdf.cell(45, 8, _format_currency(subtotal), border=0, align='R', ln=True)
+    pdf.cell(90, 8, 'Subtotal:', border=0, align='R')
+    pdf.cell(20, 8, '', border=0)
+    pdf.cell(40, 8, '', border=0, align='R')
+    pdf.cell(40, 8, _format_currency(subtotal), border=0, align='R', ln=True)
 
     tax = float(invoice.tax_amount if invoice else 0)
-    pdf.cell(120, 8, f'Tax ({_format_currency(tax)}):', border=0, align='R')
-    pdf.cell(45, 8, _format_currency(tax), border=0, align='R', ln=True)
+    pdf.cell(90, 8, f'VAT (16%):', border=0, align='R')
+    pdf.cell(20, 8, '', border=0)
+    pdf.cell(40, 8, '', border=0, align='R')
+    pdf.cell(40, 8, _format_currency(tax), border=0, align='R', ln=True)
 
     pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(120, 8, 'TOTAL:', border=0, align='R')
-    pdf.cell(45, 8, _format_currency(total), border=0, align='R', ln=True)
+    pdf.cell(90, 8, 'Total Due:', border=0, align='R')
+    pdf.cell(20, 8, '', border=0)
+    pdf.cell(40, 8, '', border=0, align='R')
+    pdf.cell(40, 8, _format_currency(total), border=0, align='R', ln=True)
 
     pdf.ln(6)
     pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(0, 7, 'Payment Information:', ln=True)
+    pdf.cell(0, 7, 'Payment Instructions:', ln=True)
     pdf.set_font('Helvetica', '', 10)
-    if invoice and invoice.status == 'paid':
-        pdf.multi_cell(0, 6, 'Payment received. Thank you.')
-    else:
-        pdf.multi_cell(0, 6, 'Payment integration is not yet configured. Please contact us for payment details.')
+    pdf.multi_cell(0, 6, 'A prompt to your bank/mobile will be made upon receipting')
+    pdf.ln(2)
+    pdf.multi_cell(0, 6, 'For alternative payment methods or billing inquiries, please reach out to us at contact@autoconcierge.com.')
     pdf.ln(4)
 
     pdf.set_font('Helvetica', '', 10)
-    pdf.cell(0, 6, 'Thank you for your business!', ln=True, align='C')
+    pdf.cell(0, 6, 'Thank you for choosing Auto Concierge. We appreciate your business!', ln=True, align='C')
+
+    pdf.set_encryption(
+        owner_password='autoconcierge',
+        user_password='',
+        permissions=AccessPermission.none(),
+    )
 
     pdf.output(str(pdf_path))
     return str(pdf_path)

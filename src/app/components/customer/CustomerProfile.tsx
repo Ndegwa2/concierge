@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Car, Calendar, Crown, Mail, Phone, MapPin, Clock, CheckCircle2, XCircle, Plus, Edit2, Trash2, Shield, Award, Gauge, LogOut } from 'lucide-react';
+import { User, Car, Calendar, Crown, Mail, Phone, MapPin, Clock, CheckCircle2, XCircle, Plus, Edit2, Trash2, Shield, Award, Gauge, LogOut, Key, Eye, EyeOff } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
@@ -8,7 +8,7 @@ import { Label } from '@/app/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
 import { Separator } from '@/app/components/ui/separator';
 import { toast } from 'sonner';
-import { useProfile, useAppointments, useVehicles, useCreateVehicle, useUpdateVehicle, useDeleteVehicle } from '@/hooks/useApi';
+import { useProfile, useAppointments, useVehicles, useCreateVehicle, useUpdateVehicle, useDeleteVehicle, useResetOwnPassword } from '@/hooks/useApi';
 import type { Vehicle } from '@/services/api';
 
 function formatDate(dateString: string) {
@@ -37,147 +37,147 @@ const statusConfig: Record<string, { variant: 'default' | 'secondary' | 'destruc
   cancelled: { variant: 'destructive', label: 'Cancelled', icon: <XCircle className="h-3 w-3" /> },
 };
 
-function VehicleFormModal({
+function PasswordResetModal({
   open,
   onClose,
-  vehicle,
-  onSubmit
+  onSubmit,
+  isSubmitting,
 }: {
   open: boolean;
   onClose: () => void;
-  vehicle?: Vehicle;
-  onSubmit: (data: Partial<Vehicle>) => Promise<void>;
+  onSubmit: (currentPassword: string, newPassword: string) => Promise<void>;
+  isSubmitting: boolean;
 }) {
-  const [formData, setFormData] = useState({
-    make: vehicle?.make || '',
-    model: vehicle?.model || '',
-    year: vehicle?.year || new Date().getFullYear(),
-    color: vehicle?.color || '',
-    license_plate: vehicle?.license_plate || '',
-    vin: vehicle?.vin || '',
-    odometer: vehicle?.odometer || '',
-    is_active: vehicle?.is_active ?? true,
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  React.useEffect(() => {
-    if (open) {
-      setFormData({
-        make: vehicle?.make || '',
-        model: vehicle?.model || '',
-        year: vehicle?.year || new Date().getFullYear(),
-        color: vehicle?.color || '',
-        license_plate: vehicle?.license_plate || '',
-        vin: vehicle?.vin || '',
-        odometer: vehicle?.odometer || '',
-        is_active: vehicle?.is_active ?? true,
-      });
-    }
-  }, [open, vehicle]);
+  const reset = () => {
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setError(null);
+    setShowCurrent(false);
+    setShowNew(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
-    
+    setError(null);
+
+    if (newPassword !== confirmPassword) {
+      setError('New password and confirmation do not match');
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setError('New password must be at least 8 characters long');
+      return;
+    }
+
     try {
-      const data = {
-        ...formData,
-        year: formData.year ? Number(formData.year) : undefined,
-        odometer: formData.odometer ? Number(formData.odometer) : undefined,
-      };
-      await onSubmit(data);
+      await onSubmit(currentPassword, newPassword);
+      reset();
       onClose();
-    } finally {
-      setIsSubmitting(false);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to reset password');
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog
+      open={open}
+      onOpenChange={(open) => {
+        if (!open) {
+          reset();
+          onClose();
+        }
+      }}
+    >
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{vehicle ? 'Edit Vehicle' : 'Add New Vehicle'}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <Key className="h-5 w-5 text-slate-700" />
+            Change Password
+          </DialogTitle>
           <DialogDescription>
-            {vehicle ? 'Update your vehicle details' : 'Register a new vehicle to your account'}
+            Enter your current password and choose a new one.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="make">Make *</Label>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          {error && (
+            <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="current-password">Current Password</Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                id="make"
-                value={formData.make}
-                onChange={(e) => setFormData({ ...formData, make: e.target.value })}
-                placeholder="e.g., Toyota"
+                id="current-password"
+                type={showCurrent ? 'text' : 'password'}
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="pl-10 pr-10"
                 required
+                disabled={isSubmitting}
               />
+              <button
+                type="button"
+                onClick={() => setShowCurrent(!showCurrent)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="model">Model *</Label>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-password">New Password</Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                id="model"
-                value={formData.make}
-                onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                placeholder="e.g., Camry"
+                id="new-password"
+                type={showNew ? 'text' : 'password'}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="pl-10 pr-10"
                 required
+                disabled={isSubmitting}
               />
+              <button
+                type="button"
+                onClick={() => setShowNew(!showNew)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
+            <p className="text-xs text-slate-400">Must be at least 8 characters with uppercase, lowercase, and a number.</p>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="year">Year</Label>
+          <div className="space-y-2">
+            <Label htmlFor="confirm-password">Confirm New Password</Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                id="year"
-                type="number"
-                value={formData.year}
-                onChange={(e) => setFormData({ ...formData, year: parseInt(e.target.value) || 0 })}
-                placeholder="2024"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="color">Color</Label>
-              <Input
-                id="color"
-                value={formData.color}
-                onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                placeholder="e.g., Black"
+                id="confirm-password"
+                type={showNew ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="pl-10"
+                required
+                disabled={isSubmitting}
               />
             </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="license_plate">License Plate</Label>
-            <Input
-              id="license_plate"
-              value={formData.license_plate}
-              onChange={(e) => setFormData({ ...formData, license_plate: e.target.value })}
-              placeholder="e.g., KCA 123A"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="vin">VIN</Label>
-            <Input
-              id="vin"
-              value={formData.vin}
-              onChange={(e) => setFormData({ ...formData, vin: e.target.value })}
-              placeholder="Vehicle Identification Number"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="odometer">Current Mileage (km)</Label>
-            <Input
-              id="odometer"
-              type="number"
-              value={formData.odometer}
-              onChange={(e) => setFormData({ ...formData, odometer: e.target.value })}
-              placeholder="e.g., 50000"
-            />
-          </div>
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-3 pt-2">
             <Button type="submit" className="flex-1" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving...' : vehicle ? 'Update Vehicle' : 'Add Vehicle'}
+              {isSubmitting ? 'Updating...' : 'Update Password'}
             </Button>
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={() => { reset(); onClose(); }}>
               Cancel
             </Button>
           </div>
@@ -191,11 +191,8 @@ export function CustomerProfile({ onLogout }: { onLogout?: () => void } = {}) {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const { data: appointments = [], isLoading: appointmentsLoading } = useAppointments();
   const { data: vehicles = [], isLoading: vehiclesLoading, refetch: refetchVehicles } = useVehicles();
-  
-  const createVehicle = useCreateVehicle();
-  const updateVehicle = useUpdateVehicle();
-  const deleteVehicle = useDeleteVehicle();
-
+  const resetOwnPassword = useResetOwnPassword();
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [vehicleModalOpen, setVehicleModalOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | undefined>();
 
@@ -286,6 +283,22 @@ export function CustomerProfile({ onLogout }: { onLogout?: () => void } = {}) {
     }
   };
 
+  const handlePasswordReset = async (currentPassword: string, newPassword: string) => {
+    try {
+      const response = await resetOwnPassword.mutateAsync({
+        currentPassword,
+        newPassword,
+      });
+      if (response.success) {
+        toast.success('Password updated successfully');
+      } else {
+        throw new Error(response.message || 'Failed to reset password');
+      }
+    } catch (error: any) {
+      throw error;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -351,6 +364,19 @@ export function CustomerProfile({ onLogout }: { onLogout?: () => void } = {}) {
                       <p className="text-xs text-slate-500 uppercase tracking-wider">Member Since</p>
                       <p className="text-slate-900">{formatDate(profile.created_at)}</p>
                     </div>
+                  </div>
+                  <Separator />
+                  <div className="pt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start text-slate-700"
+                      onClick={() => setPasswordModalOpen(true)}
+                    >
+                      <Key className="h-4 w-4 mr-2" />
+                      Change Password
+                    </Button>
                   </div>
                 </div>
               </CardContent>
@@ -598,6 +624,14 @@ export function CustomerProfile({ onLogout }: { onLogout?: () => void } = {}) {
         onClose={() => setVehicleModalOpen(false)}
         vehicle={editingVehicle}
         onSubmit={handleVehicleSubmit}
+      />
+
+      {/* Password Reset Modal */}
+      <PasswordResetModal
+        open={passwordModalOpen}
+        onClose={() => setPasswordModalOpen(false)}
+        onSubmit={handlePasswordReset}
+        isSubmitting={resetOwnPassword.isPending}
       />
     </div>
   );

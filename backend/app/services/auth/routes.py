@@ -841,6 +841,141 @@ def approve_employee(user_id):
         }), 500
 
 
+def _reset_user_password(user, new_password):
+    """Validate and apply a new password to a User record."""
+    pwd_valid, pwd_msg = validate_password(new_password)
+    if not pwd_valid:
+        return None, pwd_msg
+    user.set_password(new_password)
+    db.session.commit()
+    return True, None
+
+
+@auth_bp.route('/profile/reset-password', methods=['POST'])
+@jwt_required()
+@limiter.limit("5 per minute")
+def reset_own_password():
+    """Self-service password reset. Requires the current password."""
+    request_id = g.get('request_id', 'unknown')
+    try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({
+                'success': False,
+                'message': 'Authentication required',
+                'error': 'MISSING_TOKEN'
+            }), 401
+
+        data = request.get_json(silent=True) or {}
+        current_password = data.get('current_password', '')
+        new_password = data.get('new_password', '')
+
+        if not current_password or not new_password:
+            return jsonify({
+                'success': False,
+                'message': 'Current password and new password are required'
+            }), 400
+
+        user = User.query.get(current_user['id'])
+        if not user or not user.check_password(current_password):
+            log_audit('PASSWORD_RESET', 'User', user.id if user else None,
+                      status='failed', error_message='Current password incorrect',
+                      user_id=current_user['id'])
+            return jsonify({
+                'success': False,
+                'message': 'Current password is incorrect'
+            }), 401
+
+        ok, err = _reset_user_password(user, new_password)
+        if not ok:
+            return jsonify({'success': False, 'message': err}), 400
+
+        log_audit('PASSWORD_RESET', 'User', user.id,
+                  new_values={'method': 'self_service'}, user_id=user.id)
+        return jsonify({
+            'success': True,
+            'message': 'Password updated successfully'
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"[{request_id}] Password reset error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to reset password'
+        }), 500
+
+
+@auth_bp.route('/admin/users/<int:user_id>/reset-password', methods=['POST'])
+@jwt_required()
+@admin_required
+@limiter.limit("10 per minute")
+def admin_reset_user_password(user_id):
+    """Admin reset a user's password. Does NOT require the current password."""
+    request_id = g.get('request_id', 'unknown')
+    try:
+        current_user = get_current_user()
+        data = request.get_json(silent=True) or {}
+        new_password = data.get('new_password', '')
+        send_email = data.get('send_email', False)
+
+        if not new_password:
+            return jsonify({
+                'success': False,
+                'message': 'New password is required'
+            }), 400
+
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({
+                'success': False,
+                'message': 'User not found'
+            }), 404
+
+        ok, err = _reset_user_password(user, new_password)
+        if not ok:
+            return jsonify({'success': False, 'message': err}), 400
+
+        admin_id = current_user['id'] if current_user else None
+        log_audit('PASSWORD_RESET', 'User', user.id,
+                  new_values={'method': 'admin_reset', 'reset_by': admin_id},
+                  user_id=user.id, admin_id=admin_id)
+
+        response = {
+            'success': True,
+            'message': 'Password reset successfully',
+            'data': {
+                'user': user.to_dict(mask_sensitive=False)
+            }
+        }
+
+        if send_email:
+            try:
+                from app.utils.email import send_email
+                send_email(
+                    user.email,
+                    'Your AutoConcierge password has been reset',
+                    f"Hello {user.name},\n\n"
+                    f"Your password was reset by an administrator on "
+                    f"{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}.\n\n"
+                    f"If you did not request this change, please contact support immediately.\n\n"
+                    f"Please log in and update your password at your earliest convenience.\n\n"
+                    f"AutoConcierge Support"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to send reset email to {user.email}: {str(e)}")
+
+        return jsonify(response), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"[{request_id}] Admin password reset error: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to reset password'
+        }), 500
+
+
 @auth_bp.route('/admin/employees/<int:user_id>/status', methods=['PUT'])
 @jwt_required()
 def update_employee_status(user_id):

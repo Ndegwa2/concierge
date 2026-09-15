@@ -1,11 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Mail, Phone, MapPin, Star, Award, Calendar, DollarSign, Edit, Users, BarChart3 } from 'lucide-react';
+import { Mail, Phone, MapPin, Star, Award, Calendar, DollarSign, Edit, Users, BarChart3, Key, Eye, EyeOff, Lock } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Avatar, AvatarFallback } from '@/app/components/ui/avatar';
+import { Input } from '@/app/components/ui/input';
+import { Label } from '@/app/components/ui/label';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
+import { toast } from 'sonner';
 import { api, type User } from '@/services/api';
 import { employeesApi } from '@/services/api/employees';
+import { useResetOwnPassword } from '@/hooks/useApi';
 
 interface EmployeeProfileProps {
   employeeData: {
@@ -17,6 +22,156 @@ interface EmployeeProfileProps {
   };
 }
 
+function PasswordResetModal({
+  open,
+  onClose,
+  onSubmit,
+  isSubmitting,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (currentPassword: string, newPassword: string) => Promise<void>;
+  isSubmitting: boolean;
+}) {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const reset = () => {
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setError(null);
+    setShowCurrent(false);
+    setShowNew(false);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (newPassword !== confirmPassword) {
+      setError('New password and confirmation do not match');
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setError('New password must be at least 8 characters long');
+      return;
+    }
+
+    try {
+      await onSubmit(currentPassword, newPassword);
+      reset();
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || 'Failed to reset password');
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(open) => {
+        if (!open) {
+          reset();
+          onClose();
+        }
+      }}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Key className="h-5 w-5 text-slate-700" />
+            Change Password
+          </DialogTitle>
+          <DialogDescription>
+            Enter your current password and choose a new one.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          {error && (
+            <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="current-password">Current Password</Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="current-password"
+                type={showCurrent ? 'text' : 'password'}
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="pl-10 pr-10"
+                required
+                disabled={isSubmitting}
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrent(!showCurrent)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-password">New Password</Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="new-password"
+                type={showNew ? 'text' : 'password'}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="pl-10 pr-10"
+                required
+                disabled={isSubmitting}
+              />
+              <button
+                type="button"
+                onClick={() => setShowNew(!showNew)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            <p className="text-xs text-slate-400">Must be at least 8 characters with uppercase, lowercase, and a number.</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="confirm-password">Confirm New Password</Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="confirm-password"
+                type={showNew ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="pl-10"
+                required
+                disabled={isSubmitting}
+              />
+            </div>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button type="submit" className="flex-1" disabled={isSubmitting}>
+              {isSubmitting ? 'Updating...' : 'Update Password'}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => { reset(); onClose(); }}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function EmployeeProfile({ employeeData }: EmployeeProfileProps) {
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('');
@@ -25,6 +180,8 @@ export function EmployeeProfile({ employeeData }: EmployeeProfileProps) {
   const [profile, setProfile] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const resetOwnPassword = useResetOwnPassword();
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -75,6 +232,22 @@ export function EmployeeProfile({ employeeData }: EmployeeProfileProps) {
     { label: 'Total Earnings', value: 'View Reports', icon: DollarSign }
   ];
 
+  const handlePasswordReset = async (currentPassword: string, newPassword: string) => {
+    try {
+      const response = await resetOwnPassword.mutateAsync({
+        currentPassword,
+        newPassword,
+      });
+      if (response.success) {
+        toast.success('Password updated successfully');
+      } else {
+        throw new Error(response.message || 'Failed to reset password');
+      }
+    } catch (error: any) {
+      throw error;
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -122,6 +295,17 @@ export function EmployeeProfile({ employeeData }: EmployeeProfileProps) {
                   <MapPin className="h-4 w-4" />
                   <span className="text-sm">{employee?.location || employeeData.location || 'N/A'}</span>
                 </div>
+              </div>
+              <div className="mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="justify-start"
+                  onClick={() => setPasswordModalOpen(true)}
+                >
+                  <Key className="h-4 w-4 mr-2" />
+                  Change Password
+                </Button>
               </div>
             </div>
           </div>
@@ -211,8 +395,21 @@ export function EmployeeProfile({ employeeData }: EmployeeProfileProps) {
           <CardDescription>Manage your account preferences</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Button variant="outline" className="w-full justify-start">
-            Change Password
+          <div className="flex items-center gap-3">
+            <span className="h-4 w-4" />
+            <div>
+              <p className="font-medium">Change Password</p>
+              <p className="text-xs text-slate-400">Update your account password</p>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto w-full justify-start"
+            onClick={() => setPasswordModalOpen(true)}
+          >
+            <Key className="h-4 w-4 mr-2" />
+            Change
           </Button>
           <Button variant="outline" className="w-full justify-start">
             Notification Preferences
@@ -225,6 +422,13 @@ export function EmployeeProfile({ employeeData }: EmployeeProfileProps) {
           </Button>
         </CardContent>
       </Card>
+
+      <PasswordResetModal
+        open={passwordModalOpen}
+        onClose={() => setPasswordModalOpen(false)}
+        onSubmit={handlePasswordReset}
+        isSubmitting={resetOwnPassword.isPending}
+      />
     </div>
   );
 }

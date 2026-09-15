@@ -1,10 +1,12 @@
+import { useState } from 'react';
 import { Badge } from '@/app/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
-import { Clock, MapPin, Calendar, Car, CheckCircle2, Star, Download, Send, XCircle } from 'lucide-react';
+import { Clock, MapPin, Calendar, Car, CheckCircle2, Star, Download, Send, Mail, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { appointmentsApi } from '@/services/api';
 import { useCancelAppointment } from '@/hooks/useApi';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
 import type { Appointment } from '@/services/api';
 
 interface AppointmentListProps {
@@ -23,6 +25,8 @@ export function AppointmentList({
   refreshTrigger 
 }: AppointmentListProps) {
    const cancelMutation = useCancelAppointment();
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
+  const [invoiceAppointment, setInvoiceAppointment] = useState<Appointment | null>(null);
 
   const getStatusColor = (status: Appointment['status']) => {
     switch (status) {
@@ -74,17 +78,38 @@ export function AppointmentList({
     }
   };
 
-  const handleSendInvoice = async (appointment: Appointment) => {
+  const handleInvoiceOption = async (option: 'email' | 'download') => {
+    if (!invoiceAppointment) return;
+    setInvoiceDialogOpen(false);
     try {
-      const response = await appointmentsApi.sendInvoice(appointment.id);
-      if (response.success) {
-        toast.success('Invoice sent successfully');
+      if (option === 'email') {
+        const response = await appointmentsApi.sendInvoice(invoiceAppointment.id);
+        if (response.success) {
+          toast.success('Invoice sent to your email successfully');
+        } else {
+          toast.error(response.message || 'Failed to send invoice');
+        }
       } else {
-        toast.error(response.message || 'Failed to send invoice');
+        const blob = await appointmentsApi.downloadInvoicePdf(invoiceAppointment.id);
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `invoice-${invoiceAppointment.id}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        toast.success('Invoice downloaded');
       }
     } catch (error) {
-      toast.error('Failed to send invoice');
+      toast.error(option === 'email' ? 'Failed to send invoice' : 'Failed to download invoice');
     }
+    setInvoiceAppointment(null);
+  };
+
+  const handleSendInvoice = async (appointment: Appointment) => {
+    setInvoiceAppointment(appointment);
+    setInvoiceDialogOpen(true);
   };
 
   const handleDownloadInvoice = async (appointment: Appointment) => {
@@ -127,6 +152,35 @@ export function AppointmentList({
 
   return (
     <div className="space-y-4">
+      <Dialog open={invoiceDialogOpen} onOpenChange={setInvoiceDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Get Invoice</DialogTitle>
+            <DialogDescription>
+              How would you like to receive your invoice?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 mt-2">
+            <Button
+              variant="default"
+              className="w-full gap-2"
+              onClick={() => handleInvoiceOption('email')}
+            >
+              <Mail className="h-4 w-4" />
+              Email to Client
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full gap-2"
+              onClick={() => handleInvoiceOption('download')}
+            >
+              <Download className="h-4 w-4" />
+              Download Protected PDF
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {activeAppointments.map((appointment) => (
         <Card key={appointment.id} className="hover:shadow-md transition-shadow">
           <CardHeader className="pb-3">

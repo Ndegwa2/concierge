@@ -13,6 +13,10 @@ import {
   Loader2,
   Building,
   Check,
+  Key,
+  Eye,
+  EyeOff,
+  Lock,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
@@ -29,9 +33,18 @@ import {
   AlertDialogTitle,
   AlertDialogFooter,
 } from '@/app/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/app/components/ui/dialog';
+import { Input } from '@/app/components/ui/input';
+import { Label } from '@/app/components/ui/label';
 import { toast } from 'sonner';
 import { employeesApi } from '@/services/api';
-import { useEmployeeDocuments, useDeleteDocument } from '@/hooks/useApi';
+import { useEmployeeDocuments, useDeleteDocument, useAdminResetPassword } from '@/hooks/useApi';
 import { usePermission } from '@/hooks/usePermission';
 import type { User, EmployeeProfile, EmployeeDocument } from '@/services/api';
 import {
@@ -59,9 +72,153 @@ interface DeleteDocConfirm {
   isOpen: boolean;
 }
 
+function AdminPasswordResetModal({
+  open,
+  onClose,
+  onSubmit,
+  isSubmitting,
+  userName,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (newPassword: string, sendEmail: boolean) => Promise<void>;
+  isSubmitting: boolean;
+  userName: string;
+}) {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNew, setShowNew] = useState(false);
+  const [sendEmail, setSendEmail] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const reset = () => {
+    setNewPassword('');
+    setConfirmPassword('');
+    setError(null);
+    setShowNew(false);
+    setSendEmail(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (newPassword !== confirmPassword) {
+      setError('New password and confirmation do not match');
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setError('New password must be at least 8 characters long');
+      return;
+    }
+
+    try {
+      await onSubmit(newPassword, sendEmail);
+      reset();
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || 'Failed to reset password');
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(open) => {
+        if (!open) {
+          reset();
+          onClose();
+        }
+      }}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Key className="h-5 w-5 text-slate-700" />
+            Reset Password
+          </DialogTitle>
+          <DialogDescription>
+            Set a new password for <strong>{userName}</strong>. The user will be able to log in with the new password immediately.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          {error && (
+            <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="new-password">New Password</Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="new-password"
+                type={showNew ? 'text' : 'password'}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="pl-10 pr-10"
+                required
+                disabled={isSubmitting}
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => setShowNew(!showNew)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            <p className="text-xs text-slate-400">Must be at least 8 characters with uppercase, lowercase, and a number.</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="confirm-password">Confirm New Password</Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="confirm-password"
+                type={showNew ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="pl-10"
+                required
+                disabled={isSubmitting}
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              id="send-email"
+              type="checkbox"
+              checked={sendEmail}
+              onChange={(e) => setSendEmail(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-500"
+            />
+            <Label htmlFor="send-email" className="text-sm font-normal cursor-pointer">
+              Send notification email to user
+            </Label>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button type="submit" className="flex-1" disabled={isSubmitting}>
+              {isSubmitting ? 'Resetting...' : 'Reset Password'}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => { reset(); onClose(); }}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function EmployeeDetailView({ employee, open, onClose }: EmployeeDetailViewProps) {
   const { hasPermission } = usePermission();
   const canEditCompensation = hasPermission('employees', 'update') || hasPermission('users', 'update');
+  const canResetPassword = hasPermission('users', 'update') || hasPermission('employees', 'update');
+  const adminResetPassword = useAdminResetPassword();
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const empUser: User = employee.user || {
     id: 0,
     name: '',
@@ -165,6 +322,23 @@ export function EmployeeDetailView({ employee, open, onClose }: EmployeeDetailVi
     }
   };
 
+  const handleAdminPasswordReset = async (newPassword: string, sendEmail: boolean) => {
+    try {
+      const response = await adminResetPassword.mutateAsync({
+        userId: empUser.id,
+        newPassword,
+        sendEmail,
+      });
+      if (response.success) {
+        toast.success(`Password reset for ${empUser.name}`);
+      } else {
+        throw new Error(response.message || 'Failed to reset password');
+      }
+    } catch (error: any) {
+      throw error;
+    }
+  };
+
   return (
     <>
       <Sheet open={open} onOpenChange={(open) => !open && onClose()}>
@@ -238,6 +412,24 @@ export function EmployeeDetailView({ employee, open, onClose }: EmployeeDetailVi
                         </p>
                       </div>
                     </div>
+                    {canResetPassword && (
+                      <div className="flex items-center gap-3 pt-2">
+                        <span className="h-4 w-4" />
+                        <div>
+                          <p className="font-medium">Password</p>
+                          <p className="text-xs text-slate-400">Admin override</p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="ml-auto"
+                          onClick={() => setPasswordModalOpen(true)}
+                        >
+                          <Key className="h-4 w-4 mr-2" />
+                          Reset Password
+                        </Button>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -526,6 +718,14 @@ export function EmployeeDetailView({ employee, open, onClose }: EmployeeDetailVi
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AdminPasswordResetModal
+        open={passwordModalOpen}
+        onClose={() => setPasswordModalOpen(false)}
+        onSubmit={handleAdminPasswordReset}
+        isSubmitting={adminResetPassword.isPending}
+        userName={empUser.name}
+      />
     </>
   );
 }
