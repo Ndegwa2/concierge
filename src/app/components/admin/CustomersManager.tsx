@@ -44,21 +44,24 @@ export function CustomersManager() {
     setLoading(true);
     setError(null);
     try {
-      const response = await adminApi.getAllUsers();
-      if (response.success && response.data) {
-        const users = (response.data.users || []).filter((u: User) => u.role === 'customer');
-        const enriched = await Promise.all(
-          users.map(async (u: User) => {
-            const vehiclesRes = await vehiclesApi.getVehicles();
-            const userVehicles = vehiclesRes.success && vehiclesRes.data
-              ? vehiclesRes.data.vehicles.filter((v: Vehicle) => v.user_id === u.id)
-              : [];
-            return {
-              ...u,
-              vehicles: userVehicles,
-            };
-          })
-        );
+      const [usersRes, vehiclesRes] = await Promise.all([
+        adminApi.getAllUsers(),
+        vehiclesApi.getVehicles(),
+      ]);
+
+      if (usersRes.success && usersRes.data) {
+        const users = (usersRes.data.users || []).filter((u: User) => u.role === 'customer');
+        const allVehicles: Vehicle[] = (vehiclesRes.success && vehiclesRes.data
+          ? vehiclesRes.data.vehicles
+          : []);
+
+        const enriched = users.map((u: User) => {
+          const userVehicles = allVehicles.filter((v: Vehicle) => v.user_id === u.id);
+          return {
+            ...u,
+            vehicles: userVehicles,
+          };
+        });
         setCustomers(enriched);
       }
     } catch (err) {

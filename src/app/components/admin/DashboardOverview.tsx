@@ -7,24 +7,13 @@ import {
   ArrowDown,
   Clock,
   CheckCircle2,
-  AlertCircle,
   ArrowRight
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
-import { useAdminDashboard, useAllAppointmentsAdmin } from '@/hooks/useApi';
+import { useAdminDashboard } from '@/hooks/useApi';
 import type { Appointment } from '@/services/api';
-
-interface DashboardStats {
-  total_users: number;
-  total_services: number;
-  total_vehicles: number;
-  total_appointments: number;
-  active_appointments: number;
-  completed_appointments: number;
-  total_revenue: number;
-}
 
 interface DashboardOverviewProps {
   onNavigate?: (section: string) => void;
@@ -32,10 +21,9 @@ interface DashboardOverviewProps {
 
 export function DashboardOverview({ onNavigate }: DashboardOverviewProps) {
   const { data: dashboardData, isLoading, error, refetch } = useAdminDashboard();
-  const { data: allAppointments = [] } = useAllAppointmentsAdmin();
-  
+
   const stats = dashboardData?.statistics ?? null;
-  const recentAppointments = allAppointments
+  const recentAppointments = (dashboardData?.recent_appointments ?? [])
     .sort((a, b) => new Date(b.appointment_date).getTime() - new Date(a.appointment_date).getTime())
     .slice(0, 5);
 
@@ -213,7 +201,7 @@ export function DashboardOverview({ onNavigate }: DashboardOverviewProps) {
                 <span className="text-sm">Pending</span>
               </div>
               <span className="font-semibold">
-                {allAppointments.filter(a => a.status === 'scheduled' || a.status === 'pending').length}
+                {stats?.active_appointments ?? 0}
               </span>
             </div>
             <div className="flex items-center justify-between">
@@ -222,7 +210,7 @@ export function DashboardOverview({ onNavigate }: DashboardOverviewProps) {
                 <span className="text-sm">In Progress</span>
               </div>
               <span className="font-semibold">
-                {allAppointments.filter(a => a.status === 'in-progress' || a.status === 'confirmed').length}
+                {recentAppointments.filter(a => a.status === 'in-progress').length}
               </span>
             </div>
             <div className="flex items-center justify-between">
