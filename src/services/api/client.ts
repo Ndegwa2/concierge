@@ -28,10 +28,6 @@ class ApiClient {
       this.refreshToken = refreshToken;
       localStorage.setItem('refresh_token', refreshToken);
     }
-
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('auth:login'));
-    }
   }
 
   clearTokens() {

@@ -120,17 +120,11 @@ export function RBACProvider({ children }: RBACProviderProps) {
       }
     };
 
-    const handleLogin = () => {
-      loadPermissions();
-    };
-
     window.addEventListener('auth:logout', handleLogout);
-    window.addEventListener('auth:login', handleLogin);
 
     return () => {
       cancelled = true;
       window.removeEventListener('auth:logout', handleLogout);
-      window.removeEventListener('auth:login', handleLogin);
     };
   }, []);
 
