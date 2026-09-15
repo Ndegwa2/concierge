@@ -28,9 +28,11 @@ export function WorkRecordForm({ assignmentId, appointmentId, serviceInfo, onCom
   const [laborRate, setLaborRate] = useState<number | undefined>();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { mutate: createWorkRecord } = useCreateWorkRecord();
-  const { mutate: updateWorkRecord } = useUpdateWorkRecord();
-  const { mutate: submitWorkRecord } = useSubmitWorkRecord();
+  const [existingWorkRecordId, setExistingWorkRecordId] = useState<number | null>(null);
+
+  const { mutateAsync: createWorkRecord } = useCreateWorkRecord();
+  const { mutateAsync: updateWorkRecord } = useUpdateWorkRecord();
+  const { mutateAsync: submitWorkRecord } = useSubmitWorkRecord();
 
   useEffect(() => {
     const loadExisting = async () => {
@@ -38,6 +40,7 @@ export function WorkRecordForm({ assignmentId, appointmentId, serviceInfo, onCom
         const res = await workflowApi.getWorkRecord(assignmentId);
         if (res.success && res.data?.work_record) {
           const wr = res.data.work_record;
+          setExistingWorkRecordId(wr.id ?? null);
           setItems(wr.items.length > 0 ? wr.items : DEFAULT_ITEMS);
           setOverallNotes(wr.overall_notes || '');
           setLaborHours(wr.labor_hours);
@@ -49,6 +52,18 @@ export function WorkRecordForm({ assignmentId, appointmentId, serviceInfo, onCom
     };
     loadExisting();
   }, [assignmentId]);
+
+  const validItems = items.filter((i) => i.description.trim() !== '');
+
+  const saveWorkRecord = async () => {
+    const payload = { items: validItems, overall_notes: overallNotes, labor_hours: laborHours, labor_rate: laborRate };
+    if (existingWorkRecordId) {
+      return await updateWorkRecord({ workRecordId: existingWorkRecordId, data: payload });
+    }
+    const res = await createWorkRecord({ assignmentId, data: payload });
+    if (res?.data?.work_record?.id) setExistingWorkRecordId(res.data.work_record.id);
+    return res;
+  };
 
   const updateItem = (index: number, field: keyof WorkRecordItem, value: any) => {
     setItems(prev => {
@@ -74,33 +89,29 @@ export function WorkRecordForm({ assignmentId, appointmentId, serviceInfo, onCom
   const total = subtotal + laborTotal;
 
   const handleSaveDraft = () => {
-    const validItems = items.filter(i => i.description.trim() !== '');
     if (validItems.length === 0 && !overallNotes) {
       toast.warning('Please add at least one item or notes');
       return;
     }
-    createWorkRecord({
-      assignmentId,
-      data: { items: validItems, overall_notes: overallNotes, labor_hours: laborHours, labor_rate: laborRate },
-    });
-    toast.success('Work record saved as draft');
+    saveWorkRecord()
+      .then(() => toast.success('Work record saved as draft'))
+      .catch(() => toast.error('Failed to save work record'));
   };
 
   const handleSubmit = () => {
-    const validItems = items.filter(i => i.description.trim() !== '');
     if (validItems.length === 0 && !overallNotes) {
       toast.warning('Please add at least one item or notes');
       return;
     }
     setIsSubmitting(true);
-    submitWorkRecord(assignmentId, {
-      onSettled: () => setIsSubmitting(false),
-      onSuccess: () => {
+    saveWorkRecord()
+      .then(() => submitWorkRecord(assignmentId))
+      .then(() => {
         toast.success('Work record submitted for admin verification');
         onComplete?.();
-      },
-      onError: () => toast.error('Failed to submit work record'),
-    });
+      })
+      .catch(() => toast.error('Failed to submit work record'))
+      .finally(() => setIsSubmitting(false));
   };
 
   return (

@@ -674,12 +674,16 @@ export function AppointmentsManager() {
                     ) : (
                       activeEmployees.map((emp: any) => {
                         const profile = emp.employee || {};
-                        const name = emp.name || profile.full_name || `Employee #${profile.id ?? emp.id ?? ''}`;
-                        const email = emp.email || '';
+                        const user = emp.user || {};
+                        const name = user.name || `Employee #${profile.id ?? emp.id ?? ''}`;
+                        const email = user.email || '';
                         const empId = profile.id ?? emp.id;
                         return (
                           <SelectItem key={empId} value={String(empId)}>
-                            {name}{email ? ` — ${email}` : ''}
+                            <div className="flex items-center justify-between">
+                              <span>{name}</span>
+                              {email ? <span className="text-xs text-slate-500"> — {email}</span> : null}
+                            </div>
                           </SelectItem>
                         );
                       })

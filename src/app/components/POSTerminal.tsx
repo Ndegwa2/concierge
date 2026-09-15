@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Check, Receipt, CreditCard, Wallet, Trash2, Plus, X, Percent, Delete, Shield, Download, ArrowLeft } from 'lucide-react';
+import { Check, Receipt, Printer, CreditCard, Wallet, Trash2, Plus, X, Percent, Delete, Shield, Download, ArrowLeft } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { toast } from 'sonner';
 import { cn } from '@/app/components/ui/utils';
@@ -26,6 +26,123 @@ export interface POSTerminalProps {
     customerPhone?: string;
     initialLineItems?: Array<{ type: 'pass-through' | 'service-fee'; label: string; amount: number }>;
   };
+}
+
+interface ReceiptData {
+  invoiceNumber: string;
+  customerName: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  items: Array<{ label: string; amount: number }>;
+  subtotal: number;
+  discount: number;
+  tax: number;
+  total: number;
+  paymentMethod: 'cash' | 'mpesa' | 'card';
+  cashTendered?: number;
+  changeDue?: number;
+  notes?: string;
+  createdAt: string;
+}
+
+function formatKES(value: number) {
+  return `KES ${value.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function ReceiptView({ receipt, onDone }: { receipt: ReceiptData; onDone: () => void }) {
+  useEffect(() => {
+    window.print();
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-white text-slate-900">
+      <style>{`
+        @page { margin: 12mm; }
+        @media print {
+          body { background: #fff; -webkit-print-color-adjust: exact; color-adjust: exact; }
+          .no-print { display: none !important; }
+        }
+      `}</style>
+      <div className="max-w-md mx-auto py-8 px-4">
+        <div className="border border-slate-200 rounded-lg p-6 bg-white shadow-sm">
+          <div className="text-center mb-6">
+            <h1 className="text-xl font-bold">Auto-Concierge</h1>
+            <p className="text-xs text-slate-500">Receipt / Tax Invoice</p>
+          </div>
+
+          <div className="space-y-1 text-xs mb-4">
+            <div className="flex justify-between"><span>Receipt No.</span><span className="font-medium">{receipt.invoiceNumber}</span></div>
+            <div className="flex justify-between"><span>Date</span><span>{new Date(receipt.createdAt).toLocaleString()}</span></div>
+            <div className="flex justify-between"><span>Customer</span><span>{receipt.customerName}</span></div>
+            {receipt.customerPhone ? <div className="flex justify-between"><span>Phone</span><span>{receipt.customerPhone}</span></div> : null}
+            {receipt.customerEmail ? <div className="flex justify-between"><span>Email</span><span>{receipt.customerEmail}</span></div> : null}
+            <div className="flex justify-between"><span>Payment</span><span className="uppercase">{receipt.paymentMethod}</span></div>
+          </div>
+
+          <table className="w-full text-xs mb-4">
+            <thead>
+              <tr className="border-b border-slate-200">
+                <th className="text-left pb-1">Item</th>
+                <th className="text-right pb-1">Qty</th>
+                <th className="text-right pb-1">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {receipt.items.map((item, i) => (
+                <tr key={i}>
+                  <td className="py-1">{item.label}</td>
+                  <td className="text-right py-1">1</td>
+                  <td className="text-right py-1">{formatKES(item.amount)}</td>
+                </tr>
+              ))}
+              <tr><td colSpan={3} className="border-t border-slate-200 my-1"></td></tr>
+              <tr>
+                <td className="pt-1">Subtotal</td>
+                <td></td>
+                <td className="text-right pt-1">{formatKES(receipt.subtotal)}</td>
+              </tr>
+              <tr>
+                <td>Discount</td>
+                <td></td>
+                <td className="text-right text-red-600">-{formatKES(receipt.discount)}</td>
+              </tr>
+              <tr>
+                <td>VAT (16%)</td>
+                <td></td>
+                <td className="text-right">{formatKES(receipt.tax)}</td>
+              </tr>
+              <tr>
+                <td className="font-bold pt-2 border-t border-slate-200 text-base">TOTAL</td>
+                <td></td>
+                <td className="text-right font-bold pt-2 text-base">{formatKES(receipt.total)}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          {receipt.paymentMethod === 'cash' && (
+            <div className="text-xs space-y-1 mb-4">
+              {receipt.cashTendered !== undefined && <div className="flex justify-between"><span>Cash Tendered</span><span>{formatKES(receipt.cashTendered)}</span></div>}
+              {receipt.changeDue !== undefined && <div className="flex justify-between"><span>Change Due</span><span className="text-emerald-700">{formatKES(Math.max(0, receipt.changeDue))}</span></div>}
+            </div>
+          )}
+
+          {receipt.notes ? <p className="text-xs text-slate-500 mb-4">{receipt.notes}</p> : null}
+
+          <div className="text-center text-xs text-slate-400 pt-4 border-t border-slate-200">
+            Thank you for choosing Auto-Concierge!
+          </div>
+        </div>
+
+        <div className="mt-6 flex gap-2 justify-center no-print">
+          <Button variant="outline" size="sm" onClick={() => window.print()}>
+            <Printer className="h-4 w-4 mr-2" />
+            Print Receipt
+          </Button>
+          <Button size="sm" onClick={onDone}>Done</Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function POSTerminal({ onClose, userType, mode = 'admin', assignmentId, prefill }: POSTerminalProps) {
@@ -81,6 +198,7 @@ export function POSTerminal({ onClose, userType, mode = 'admin', assignmentId, p
   const [customerPhone, setCustomerPhone] = useState(prefill?.customerPhone ?? '');
   const [notes, setNotes] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [receipt, setReceipt] = useState<ReceiptData | null>(null);
 
   useEffect(() => {
     if (prefill) {
@@ -177,10 +295,25 @@ export function POSTerminal({ onClose, userType, mode = 'admin', assignmentId, p
       if (response.success) {
         toast.success(
           isAdmin
-            ? `Checkout completed! KES ${grandTotal.toLocaleString('en-KE', { minimumFractionDigits: 2 })}`
-            : `Invoice queued for admin verification (KES ${grandTotal.toLocaleString('en-KE', { minimumFractionDigits: 2 })})`,
+            ? `Checkout completed! ${formatKES(grandTotal)}`
+            : `Invoice queued for admin verification (${formatKES(grandTotal)})`,
         );
-        onClose?.();
+        setReceipt({
+          invoiceNumber: response.data?.invoice?.invoice_number || 'Receipt',
+          customerName: customerName || 'Walk-in Customer',
+          customerPhone: customerPhone || undefined,
+          customerEmail: customerEmail || undefined,
+          items: lineItems.map((item) => ({ label: item.label, amount: item.amount })),
+          subtotal,
+          discount: discountAmount,
+          tax: vatAmount,
+          total: grandTotal,
+          paymentMethod: activePayment,
+          cashTendered: activePayment === 'cash' ? cashTendered : undefined,
+          changeDue: activePayment === 'cash' ? changeDue : undefined,
+          notes: notes || undefined,
+          createdAt: new Date().toISOString(),
+        });
       } else {
         toast.error(response.message || 'Checkout failed');
       }
@@ -191,8 +324,9 @@ export function POSTerminal({ onClose, userType, mode = 'admin', assignmentId, p
     }
   };
 
-  const formatKES = (value: number) =>
-    `KES ${value.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (receipt) {
+    return <ReceiptView receipt={receipt} onDone={onClose ?? (() => {})} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
