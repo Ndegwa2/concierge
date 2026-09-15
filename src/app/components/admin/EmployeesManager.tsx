@@ -92,7 +92,7 @@ export function EmployeesManager() {
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState>({ id: 0, name: '', isOpen: false });
   const [deactivateConfirm, setDeactivateConfirm] = useState<DeleteConfirmState>({ id: 0, name: '', isOpen: false });
 
-  const { data: employees = [], isLoading, error, refetch } = useEmployees(undefined, undefined, undefined, departmentFilter);
+  const { data: employees = [], isLoading, error, refetch } = useEmployees(undefined, undefined, undefined, departmentFilter !== 'all' ? departmentFilter : undefined);
   const deleteEmployeeMutation = useDeleteEmployee();
   const updateStatusMutation = useUpdateEmployeeStatus();
 

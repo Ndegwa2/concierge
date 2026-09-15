@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { API_BASE_URL } from './types';
 import type {
   ApiResponse,
   EmployeeProfile,
@@ -137,7 +138,7 @@ export const employeesApi = {
     if (status) params.append('status', status);
     if (location) params.append('location', location);
     if (search) params.append('search', search);
-    if (department) params.append('department', department);
+    if (department && department !== 'all') params.append('department', department);
     const query = params.toString() ? `?${params.toString()}` : '';
     return apiClient.request(`/employees/admin/employees${query}`);
   },
@@ -210,7 +211,7 @@ export const employeesApi = {
     formData.append('document_name', docName);
     formData.append('is_verified', String(isVerified));
 
-    const response = await fetch(`${apiClient['API_BASE_URL']}/employees/admin/employees/${employeeId}/documents`, {
+    const response = await fetch(`${API_BASE_URL}/employees/admin/employees/${employeeId}/documents`, {
       method: 'POST',
       headers: {
         ...(token && { Authorization: `Bearer ${token}` }),
@@ -226,11 +227,11 @@ export const employeesApi = {
     const token = apiClient.getToken();
     const params = new URLSearchParams();
     if (status) params.append('status', status);
-    if (department) params.append('department', department);
+    if (department && department !== 'all') params.append('department', department);
     if (search) params.append('search', search);
     const qs = params.toString() ? `?${params.toString()}` : '';
 
-    const response = await fetch(`${apiClient['API_BASE_URL']}/employees/admin/employees/export/csv${qs}`, {
+    const response = await fetch(`${API_BASE_URL}/employees/admin/employees/export/csv${qs}`, {
       headers: {
         ...(token && { Authorization: `Bearer ${token}` }),
       },
@@ -246,7 +247,7 @@ export const employeesApi = {
 
   async downloadEmployeeDocument(employeeId: number, docId: number): Promise<Blob> {
     const token = apiClient.getToken();
-    const response = await fetch(`${apiClient['API_BASE_URL']}/employees/admin/employees/${employeeId}/documents/${docId}/download`, {
+    const response = await fetch(`${API_BASE_URL}/employees/admin/employees/${employeeId}/documents/${docId}/download`, {
       headers: {
         ...(token && { Authorization: `Bearer ${token}` }),
       },

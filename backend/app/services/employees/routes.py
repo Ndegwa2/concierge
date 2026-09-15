@@ -100,7 +100,7 @@ def get_all_employees():
             'data': {
                 'employees': [
                     {
-                        **emp.user.to_dict(),
+                        'user': emp.user.to_dict(),
                         'employee': emp.to_dict()
                     } for emp in employees
                 ],
