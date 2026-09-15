@@ -38,6 +38,7 @@ import { POSView } from './POSView';
 import { PendingEmployeesManager } from './PendingEmployeesManager';
 import { PendingTimeOffManager } from './PendingTimeOffManager';
 import { EmployeesManager } from './EmployeesManager';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -97,8 +98,7 @@ export function AdminDashboard({ onLogout }: AdminDashboardProps) {
     'team-users': true,
   });
 
-  const storedUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
-  const user = storedUser ? JSON.parse(storedUser) : null;
+  const { user } = useAuth();
   const displayName = user?.name || 'Admin';
   const displayEmail = user?.email || '';
 
