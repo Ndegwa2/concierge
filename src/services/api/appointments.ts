@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { API_BASE_URL } from './types';
 import type {
   Appointment,
   ApiResponse,
@@ -7,8 +8,11 @@ import type {
 
 export const appointmentsApi = {
   async getAppointments(status?: string): Promise<ApiResponse<{ appointments: Appointment[] }>> {
-    const query = status ? `?status=${status}` : '';
-    return apiClient.request(`/appointments/${query}`);
+    const params = new URLSearchParams();
+    if (status) params.set('status', status);
+    const query = params.toString();
+    const endpoint = query ? `/appointments?${query}` : '/appointments';
+    return apiClient.request(endpoint);
   },
 
   async getAllAppointmentsAdmin(status?: string): Promise<ApiResponse<{ appointments: Appointment[]; count: number }>> {
@@ -60,7 +64,7 @@ export const appointmentsApi = {
 
   async downloadInvoicePdf(appointmentId: number): Promise<Blob> {
     const token = apiClient.getToken();
-    const response = await fetch(`${apiClient['API_BASE_URL']}/appointments/${appointmentId}/invoice/pdf`, {
+      const response = await fetch(`${API_BASE_URL}/appointments/${appointmentId}/invoice/pdf`, {
       headers: {
         ...(token && { Authorization: `Bearer ${token}` }),
       },

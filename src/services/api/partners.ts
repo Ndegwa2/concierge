@@ -11,8 +11,9 @@ export const partnersApi = {
     const params = new URLSearchParams();
     if (service) params.append('service', service);
     if (location) params.append('location', location);
-    const query = params.toString() ? `?${params.toString()}` : '';
-    return apiClient.request(`/partners/${query}`);
+     const query = params.toString() ? `?${params.toString()}` : '';
+    const endpoint = query ? `/partners${query}` : '/partners';
+    return apiClient.request(endpoint);
   },
 
   async createServicePartner(data: Partial<ServicePartner>): Promise<ApiResponse<{ partner: ServicePartner }>> {
