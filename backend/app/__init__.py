@@ -21,9 +21,10 @@ csrf = CSRFProtect()
 logger = logging.getLogger(__name__)
 
 # Rate limiter using Redis in production, memory fallback for dev
+_is_dev = os.environ.get('FLASK_ENV') == 'development'
 limiter = Limiter(
     key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"],
+    default_limits=["200 per day", "50 per hour"] if not _is_dev else ["1000 per day", "1000 per hour"],
     storage_uri=os.environ.get('RATELIMIT_STORAGE_URI', os.environ.get('REDIS_URL', 'memory://'))
 )
 

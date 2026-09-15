@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Bell, CheckCheck, X } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { toast } from 'sonner';
-import { notificationsApi } from '@/services/api';
+import { notificationsApi, apiClient } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 import type { Notification } from '@/services/api';
 
 export function NotificationBell() {
@@ -10,27 +11,36 @@ export function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const { isAuthenticated } = useAuth();
 
-  const loadNotifications = async () => {
+  const loadNotifications = useCallback(async () => {
+    if (!apiClient.isAuthenticated()) {
+      return;
+    }
     setLoading(true);
     try {
       const response = await notificationsApi.getNotifications(false);
       if (response.success && response.data) {
         setNotifications(response.data.notifications);
         setUnreadCount(response.data.unread_count);
+      } else if (response.error === '401' || response.error === 'unauthorized') {
+        apiClient.clearTokens();
+        window.dispatchEvent(new CustomEvent('auth:logout'));
       }
     } catch (e) {
       // Silently fail - notifications are non-critical
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    loadNotifications();
-    const interval = setInterval(loadNotifications, 30000);
-    return () => clearInterval(interval);
-  }, []);
+    if (isAuthenticated) {
+      loadNotifications();
+      const interval = setInterval(loadNotifications, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated, loadNotifications]);
 
   const handleMarkRead = async (notificationId: number) => {
     try {

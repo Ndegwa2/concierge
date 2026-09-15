@@ -6,8 +6,11 @@ import type {
 
 export const notificationsApi = {
   async getNotifications(unreadOnly = false): Promise<ApiResponse<{ notifications: Notification[]; unread_count: number }>> {
-    const query = unreadOnly ? '?unread_only=true' : '';
-    return apiClient.request(`/notifications/${query}`);
+    const params = new URLSearchParams();
+    if (unreadOnly) params.set('unread_only', 'true');
+    const query = params.toString();
+    const endpoint = query ? `/notifications?${query}` : '/notifications';
+    return apiClient.request(endpoint);
   },
 
   async markNotificationRead(notificationId: number): Promise<ApiResponse<{ notification: Notification }>> {
