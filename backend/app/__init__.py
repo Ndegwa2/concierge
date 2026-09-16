@@ -183,6 +183,21 @@ def create_app(config_class=None):
     app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
     app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER') or os.environ.get('MAIL_USERNAME')
 
+    app.config['ONBOARDING_LEAD_NAME'] = os.environ.get('ONBOARDING_LEAD_NAME', 'AutoConcierge Operations Team')
+    app.config['ONBOARDING_LEAD_PHONE'] = os.environ.get('ONBOARDING_LEAD_PHONE', 'Please reply to this email')
+    app.config['ONBOARDING_LEAD_EMAIL'] = os.environ.get('ONBOARDING_LEAD_EMAIL') or app.config['MAIL_DEFAULT_SENDER'] or app.config['MAIL_USERNAME'] or 'AutoConcierge Support'
+    app.config['ONBOARDING_LEAD_WHATSAPP'] = os.environ.get('ONBOARDING_LEAD_WHATSAPP', '')
+    app.config['ONBOARDING_SIGNATORY_NAME'] = os.environ.get('ONBOARDING_SIGNATORY_NAME', 'AutoConcierge Team')
+    app.config['ONBOARDING_SIGNATORY_TITLE'] = os.environ.get('ONBOARDING_SIGNATORY_TITLE', 'Concierge Operations')
+    app.config['ONBOARDING_SIGNATORY_PHONE'] = os.environ.get('ONBOARDING_SIGNATORY_PHONE') or app.config['ONBOARDING_LEAD_PHONE']
+    app.config['ONBOARDING_SIGNATORY_EMAIL'] = os.environ.get('ONBOARDING_SIGNATORY_EMAIL') or app.config['ONBOARDING_LEAD_EMAIL']
+    app.config['ONBOARDING_WEBSITE'] = os.environ.get('ONBOARDING_WEBSITE', '')
+    app.config['ONBOARDING_OPERATING_HOURS'] = os.environ.get('ONBOARDING_OPERATING_HOURS', 'Please contact your dedicated concierge lead for current operating hours.')
+    app.config['ONBOARDING_EMERGENCY_CONTACT'] = os.environ.get('ONBOARDING_EMERGENCY_CONTACT', 'Contact your dedicated concierge lead or reply to this email for urgent assistance.')
+    app.config['WELCOME_PACK_DIR'] = os.environ.get('WELCOME_PACK_DIR', '/app/uploads/onboarding')
+    app.config['WELCOME_PACK_FILENAME'] = os.environ.get('WELCOME_PACK_FILENAME', '')
+    app.config['WELCOME_PACK_PATH'] = os.environ.get('WELCOME_PACK_PATH', '')
+
     # Register blueprints
     from app.services.auth import auth_bp
     from app.services.catalog import services_bp

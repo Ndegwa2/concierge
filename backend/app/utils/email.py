@@ -33,7 +33,7 @@ def send_email_with_attachment(to, subject, body, attachment_path, attachment_fi
     msg['From'] = config['default_sender']
     msg['To'] = to
     msg['Subject'] = subject
-    msg.attach(MIMEText(body, 'plain'))
+    msg.attach(MIMEText(body, 'plain', 'utf-8'))
 
     attachment_full_path = Path(attachment_path)
     if not attachment_full_path.exists():
@@ -67,7 +67,7 @@ def send_email(to, subject, body):
     msg['From'] = config['default_sender']
     msg['To'] = to
     msg['Subject'] = subject
-    msg.attach(MIMEText(body, 'plain'))
+    msg.attach(MIMEText(body, 'plain', 'utf-8'))
 
     try:
         with smtplib.SMTP(config['server'], config['port']) as server:

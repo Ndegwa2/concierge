@@ -40,6 +40,57 @@ def send_email_with_attachment(self, to, subject, body, attachment_path, attachm
         raise self.retry(exc=exc)
 
 
+@celery.task(name='app.tasks.email_tasks.send_customer_onboarding_email', bind=True, max_retries=3, default_retry_delay=60)
+def send_customer_onboarding_email(self, user_id):
+    """Send the one-time onboarding email after customer registration."""
+    from flask import current_app
+    from pathlib import Path
+    from app.services.auth.models import User
+    from app.utils.email import send_email, send_email_with_attachment
+    from app.utils.onboarding import (
+        build_onboarding_email,
+        generate_welcome_pack_pdf,
+        resolve_welcome_pack,
+    )
+
+    user = User.query.get(user_id)
+    if not user or user.role != 'customer' or not user.email:
+        logger.warning('Skipping onboarding email for user %s', user_id)
+        return
+
+    subject, body = build_onboarding_email(user, current_app.config)
+    attachment_path, generated_attachment = resolve_welcome_pack(current_app.config, user.id)
+    attachment_path = Path(attachment_path)
+    sent_with_attachment = False
+
+    try:
+        if generated_attachment:
+            generate_welcome_pack_pdf(user, current_app.config, attachment_path)
+
+        if attachment_path.is_file():
+            send_email_with_attachment(
+                to=user.email,
+                subject=subject,
+                body=body,
+                attachment_path=str(attachment_path),
+                attachment_filename=attachment_path.name,
+            )
+            sent_with_attachment = True
+        else:
+            send_email(to=user.email, subject=subject, body=body)
+
+        logger.info('Customer onboarding email sent to %s', user.email)
+    except Exception as exc:
+        logger.error('Customer onboarding email failed for %s: %s', user.email, exc)
+        raise self.retry(exc=exc)
+    finally:
+        if sent_with_attachment and generated_attachment:
+            try:
+                attachment_path.unlink()
+            except OSError:
+                pass
+
+
 @celery.task(name='app.tasks.email_tasks.send_payment_receipt', bind=True, max_retries=3, default_retry_delay=60)
 def send_payment_receipt(self, payment_id):
     """Send payment receipt email after successful M-Pesa payment."""

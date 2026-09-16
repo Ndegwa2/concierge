@@ -148,6 +148,14 @@ def register():
         db.session.commit()
         
         log_audit('REGISTER', 'User', user.id, new_values={'email': user.email, 'name': user.name, 'role': user.role}, user_id=user.id)
+
+        if role == 'customer':
+            try:
+                from app.tasks.email_tasks import send_customer_onboarding_email
+                send_customer_onboarding_email.delay(user.id)
+                logger.info('Onboarding email queued for customer %s', user.id)
+            except Exception as exc:
+                logger.warning('Failed to queue onboarding email for customer %s: %s', user.id, exc)
         
         if role == 'customer':
             access_token = create_access_token(identity=str(user.id))
