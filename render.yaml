@@ -17,6 +17,8 @@ services:
         value: /opt/render/project/backend
       - key: PORT
         value: 10000
+      - key: FLASK_ENV
+        value: production
       - key: DATABASE_URL
         fromDatabase:
           name: autoconcierge-postgres
@@ -33,10 +35,12 @@ services:
         fromAddOn:
           name: autoconcierge-redis
           property: connectionString
+      - key: ENCRYPTION_KEY
+        value: "bnszJ3TOQ3kqLbAKmBROxBOrgWCAhjhTkPe-BV1ILqI="
       - key: JWT_SECRET_KEY
-        generateValue: true
+        value: "7e347dc1c457dabf13165d72e1a82d75d55796e9ba17a7c6442ecc47db7c836f"
       - key: SECRET_KEY
-        generateValue: true
+        value: "c80834cbb348257b0a57d1c3c990f7d07564facda6b90079248018967ccf4217"
       - key: CORS_ORIGIN
         value: https://auto-concierge-frontend.onrender.com
 
