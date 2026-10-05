@@ -1,6 +1,20 @@
 # Render Blueprint Configuration
 # This file defines the services for automated deployment to Render
 # Learn more: https://render.com/docs/blueprint-spec
+#
+# SECURITY:
+#   The envVars below with hardcoded 'value:' entries are committed to git.
+#   For production, after the initial Blueprint deploy, move ALL secrets to
+#   Render's Secret Manager (or render.com dashboard > Environment > Secrets)
+#   and remove them from this file. See: https://render.com/docs/secret-manager
+#   Required secrets to add via dashboard (not in render.yaml):
+#     - COHERE_API_KEY  (used by /api/ai-chat/health and AI embeddings)
+#     - MAIL_USERNAME   (SMTP auth — your Gmail address)
+#     - MAIL_PASSWORD   (Gmail App Password, NOT your account password)
+#     - MPESA_CONSUMER_KEY, MPESA_CONSUMER_SECRET, MPESA_PASSKEY (payments)
+#     - MPESA_SHORTCODE, MPESA_CALLBACK_URL, MPESA_ENVIRONMENT
+#   Rotate these periodically: python -c "import secrets; [print(f'{k}: {secrets.token_hex(32)}') for k in ['JWT_SECRET_KEY','SECRET_KEY','PHONE_TOKEN_PEPPER']]"
+
 
 services:
   # Backend API Service (Flask + PostgreSQL)
@@ -41,8 +55,26 @@ services:
         value: "7e347dc1c457dabf13165d72e1a82d75d55796e9ba17a7c6442ecc47db7c836f"
       - key: SECRET_KEY
         value: "c80834cbb348257b0a57d1c3c990f7d07564facda6b90079248018967ccf4217"
+      # Pepper for HMAC-SHA256 phone search tokens (separate from SECRET_KEY).
+      # Without this in production, phone searches silently fall back to SECRET_KEY.
+      # Rotate this value with: python -c "import secrets; print(secrets.token_hex(32))"
+      # and re-run: flask backfill-phone-tokens
+      - key: PHONE_TOKEN_PEPPER
+        value: "c33a3a1e4ee02fa931f0e2e3e1f5e52bcb34b5399d6cb69a78c3eacd87bb7bdc"
       - key: CORS_ORIGIN
         value: https://auto-concierge-frontend.onrender.com
+      # --- Secrets that MUST be set via Render dashboard after deploy ---
+      # (Kept out of render.yaml to avoid exposing credentials in git)
+      # Set each of these in: render.com dashboard > auto-concierge-backend > Environment > Secrets
+      # - COHERE_API_KEY
+      # - MAIL_USERNAME
+      # - MAIL_PASSWORD   (Gmail App Password, not account password)
+      # - MPESA_CONSUMER_KEY
+      # - MPESA_CONSUMER_SECRET
+      # - MPESA_PASSKEY
+      # - MPESA_SHORTCODE
+      # - MPESA_CALLBACK_URL
+      # - MPESA_ENVIRONMENT  (set to 'production'
 
   # Frontend Static Site
   - type: web
