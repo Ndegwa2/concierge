@@ -22,6 +22,7 @@ services:
     name: auto-concierge-backend
     env: python
     region: oregon
+    pythonVersion: "3.12"
     buildCommand: cd backend && pip install -r requirements.txt && flask db upgrade
     startCommand: cd backend && gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --max-requests 1000 --max-requests-jitter 50 "run:app"
     envVars:
