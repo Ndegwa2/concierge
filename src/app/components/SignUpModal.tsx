@@ -3,10 +3,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
-import { Badge } from '@/app/components/ui/badge';
-import { User, Mail, Phone, MapPin, Lock, Eye, EyeOff, Loader2, CheckCircle2, XCircle, Briefcase, Users } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Lock, Eye, EyeOff, Loader2, CheckCircle2, XCircle, Briefcase, Users, Upload, FileText, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface SignUpModalProps {
@@ -39,11 +37,59 @@ export function SignUpModal({ open, onClose, onSwitchToLogin }: SignUpModalProps
     specialties: '',
   });
 
+  const [onboardingDocuments, setOnboardingDocuments] = useState<File[]>([]);
+  const [fileError, setFileError] = useState<string | null>(null);
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  const ALLOWED_DOC_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'];
+  const MAX_DOC_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+
+  const validateFiles = (files: File[]): string | null => {
+    if (files.length === 0) return null;
+
+    for (const file of files) {
+      const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+      if (!ALLOWED_DOC_EXTENSIONS.includes(ext)) {
+        return `File "${file.name}" has an unsupported type. Allowed: PDF, JPG, PNG, DOC, DOCX.`;
+      }
+      if (file.size > MAX_DOC_SIZE_BYTES) {
+        return `File "${file.name}" is too large (max 10 MB).`;
+      }
+    }
+
+    if (files.length > 10) {
+      return 'You may upload up to 10 onboarding documents.';
+    }
+
+    return null;
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newFiles = Array.from(e.target.files || []);
+    const combined = [...onboardingDocuments, ...newFiles];
+    const validationError = validateFiles(combined);
+
+    if (validationError) {
+      setFileError(validationError);
+      setOnboardingDocuments(combined);
+    } else {
+      setFileError(null);
+      setOnboardingDocuments(combined);
+    }
+
+    // Reset input value so the same file can be re-selected if removed.
+    e.target.value = '';
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setOnboardingDocuments((prev) => prev.filter((_, i) => i !== index));
+    setFileError(null);
+  };
 
   const getPasswordValidation = (password: string): PasswordValidation => ({
     length: password.length >= 8,
@@ -139,6 +185,9 @@ export function SignUpModal({ open, onClose, onSwitchToLogin }: SignUpModalProps
             ? formData.specialties.split(',').map(s => s.trim()).filter(Boolean)
             : [],
         } : {}),
+        ...(selectedRole === 'customer' && onboardingDocuments.length > 0
+          ? { documents: onboardingDocuments }
+          : {}),
       });
 
       if (result.success) {
@@ -164,6 +213,8 @@ export function SignUpModal({ open, onClose, onSwitchToLogin }: SignUpModalProps
       location: '',
       specialties: '',
     });
+    setOnboardingDocuments([]);
+    setFileError(null);
     setTouched({});
     setError(null);
     setSelectedRole('customer');
@@ -344,6 +395,61 @@ export function SignUpModal({ open, onClose, onSwitchToLogin }: SignUpModalProps
               </div>
             </div>
           )}
+
+          {selectedRole === 'customer' && (
+            <div className="space-y-2">
+              <Label htmlFor="signup-onboarding-docs">
+                Onboarding Documents (Optional)
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Upload supporting documents (PDF, JPG, PNG, DOC, DOCX — max 10 MB each)
+              </p>
+              <div className="border-2 border-dashed border-muted rounded-lg p-4 text-center hover:border-primary/50 transition-colors">
+                <Upload className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
+                <input
+                  id="signup-onboarding-docs"
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                  multiple
+                  onChange={handleFileChange}
+                  disabled={isLoading}
+                  className="hidden"
+                />
+                <Label htmlFor="signup-onboarding-docs" className="cursor-pointer text-sm font-medium text-primary hover:underline">
+                  Choose files
+                </Label>
+              </div>
+              {fileError && (
+                <p className="text-sm text-red-500">{fileError}</p>
+              )}
+              {onboardingDocuments.length > 0 && (
+                <div className="space-y-1 pt-2">
+                  {onboardingDocuments.map((file, index) => (
+                    <div key={index} className="flex items-center justify-between p-2 bg-muted/30 rounded border">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium">{file.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {(file.size / (1024 * 1024)).toFixed(2)} MB
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveFile(index)}
+                        className="text-red-500 hover:text-red-700"
+                        disabled={isLoading}
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
 
           <div className="space-y-2">
             <Label htmlFor="signup-password">

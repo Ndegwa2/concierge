@@ -14,6 +14,8 @@ const AUTH_ENDPOINTS = new Set([
 class ApiClient {
   private token: string | null = null;
   private refreshToken: string | null = null;
+  /** Shared in-flight refresh so a burst of 401s rotates the token only once. */
+  private refreshInFlight: Promise<boolean> | null = null;
 
   constructor() {
     this.token = localStorage.getItem('auth_token');
@@ -42,6 +44,11 @@ class ApiClient {
     return this.token;
   }
 
+  /** Exposed so logout can hand the refresh token back for server-side revocation. */
+  getRefreshToken(): string | null {
+    return this.refreshToken;
+  }
+
   isAuthenticated(): boolean {
     return !!this.token;
   }
@@ -61,8 +68,11 @@ class ApiClient {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
 
+    const isFormData = options.body instanceof FormData;
+
     const headers: HeadersInit = {
-      'Content-Type': 'application/json',
+      // Let the browser set the boundary for FormData (multipart/form-data).
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(this.token && { Authorization: `Bearer ${this.token}` }),
       ...options.headers,
     };
@@ -108,7 +118,7 @@ class ApiClient {
       response.status === 401 && !isAuthEndpoint && !!this.refreshToken;
 
     if (shouldRetry) {
-      const refreshed = await this.refreshAccessToken();
+      const refreshed = await this.refreshOnce();
 
       if (refreshed) {
         return this._requestWithRetry(endpoint, options, retryCount);
@@ -146,6 +156,26 @@ class ApiClient {
     }
 
     return data;
+  }
+
+  /**
+   * Renew the access token at most once per burst of 401 responses.
+   *
+   * The backend rotates the refresh token on every call and blocklists the old
+   * one, so N parallel refreshes with the same token make all but the first one
+   * fail - and a failed refresh clears the session. Sharing one promise keeps
+   * concurrent requests alive instead of force-logging the user out.
+   */
+  private async refreshOnce(): Promise<boolean> {
+    if (!this.refreshToken) return false;
+
+    if (!this.refreshInFlight) {
+      this.refreshInFlight = this.refreshAccessToken().finally(() => {
+        this.refreshInFlight = null;
+      });
+    }
+
+    return this.refreshInFlight;
   }
 
   async refreshAccessToken(): Promise<boolean> {

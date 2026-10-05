@@ -5,6 +5,7 @@ import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
+import { Checkbox } from '@/app/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
 import { Separator } from '@/app/components/ui/separator';
 import { toast } from 'sonner';
@@ -187,10 +188,217 @@ function PasswordResetModal({
   );
 }
 
+function VehicleFormModal({
+  open,
+  onClose,
+  vehicle,
+  onSubmit,
+}: {
+  open: boolean;
+  onClose: () => void;
+  vehicle?: Vehicle;
+  onSubmit: (data: Partial<Vehicle>) => Promise<void>;
+}) {
+  const [make, setMake] = useState(vehicle?.make ?? '');
+  const [model, setModel] = useState(vehicle?.model ?? '');
+  const [year, setYear] = useState(vehicle?.year ? String(vehicle.year) : '');
+  const [color, setColor] = useState(vehicle?.color ?? '');
+  const [licensePlate, setLicensePlate] = useState(vehicle?.license_plate ?? '');
+  const [vin, setVin] = useState(vehicle?.vin ?? '');
+  const [odometer, setOdometer] = useState(vehicle?.odometer ? String(vehicle.odometer) : '');
+  const [isActive, setIsActive] = useState(vehicle?.is_active ?? true);
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const isEdit = Boolean(vehicle);
+
+  const reset = () => {
+    setMake(vehicle?.make ?? '');
+    setModel(vehicle?.model ?? '');
+    setYear(vehicle?.year ? String(vehicle.year) : '');
+    setColor(vehicle?.color ?? '');
+    setLicensePlate(vehicle?.license_plate ?? '');
+    setVin(vehicle?.vin ?? '');
+    setOdometer(vehicle?.odometer ? String(vehicle.odometer) : '');
+    setIsActive(vehicle?.is_active ?? true);
+    setError(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!make.trim() || !model.trim() || !year.trim()) {
+      setError('Make, model, and year are required');
+      return;
+    }
+
+    const yearNum = Number(year);
+    if (isNaN(yearNum) || yearNum < 1900 || yearNum > new Date().getFullYear() + 1) {
+      setError('Please enter a valid year');
+      return;
+    }
+
+    const payload: Partial<Vehicle> = {
+      make: make.trim(),
+      model: model.trim(),
+      year: yearNum,
+      color: color.trim() || undefined,
+      license_plate: licensePlate.trim() || undefined,
+      vin: vin.trim() || undefined,
+      odometer: odometer.trim() ? Number(odometer) : undefined,
+      is_active: isActive,
+    };
+
+    try {
+      setIsSubmitting(true);
+      await onSubmit(payload);
+      reset();
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || `Failed to ${isEdit ? 'update' : 'add'} vehicle`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(open: boolean) => {
+        if (!open) {
+          reset();
+          onClose();
+        }
+      }}
+    >
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Car className="h-5 w-5 text-slate-700" />
+            {isEdit ? 'Edit Vehicle' : 'Add Vehicle'}
+          </DialogTitle>
+          <DialogDescription>
+            {isEdit ? 'Update your vehicle details below.' : 'Enter your vehicle details to register it.'}
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          {error && (
+            <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="vehicle-make">Make *</Label>
+              <Input
+                id="vehicle-make"
+                value={make}
+                onChange={(e) => setMake(e.target.value)}
+                placeholder="e.g. Toyota"
+                required
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="vehicle-model">Model *</Label>
+              <Input
+                id="vehicle-model"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="e.g. Camry"
+                required
+                disabled={isSubmitting}
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="vehicle-year">Year *</Label>
+            <Input
+              id="vehicle-year"
+              type="number"
+              value={year}
+              onChange={(e) => setYear(e.target.value)}
+              placeholder="e.g. 2020"
+              required
+              disabled={isSubmitting}
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="vehicle-color">Color</Label>
+              <Input
+                id="vehicle-color"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                placeholder="e.g. Midnight Black"
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="vehicle-license">License Plate</Label>
+              <Input
+                id="vehicle-license"
+                value={licensePlate}
+                onChange={(e) => setLicensePlate(e.target.value)}
+                placeholder="e.g. KBC 123A"
+                disabled={isSubmitting}
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="vehicle-vin">VIN</Label>
+            <Input
+              id="vehicle-vin"
+              value={vin}
+              onChange={(e) => setVin(e.target.value)}
+              placeholder="Vehicle Identification Number"
+              disabled={isSubmitting}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="vehicle-odometer">Odometer (km)</Label>
+            <Input
+              id="vehicle-odometer"
+              type="number"
+              value={odometer}
+              onChange={(e) => setOdometer(e.target.value)}
+              placeholder="e.g. 45000"
+              disabled={isSubmitting}
+            />
+          </div>
+          <div className="flex items-center justify-between pt-2">
+            <Label htmlFor="vehicle-active" className="text-sm text-slate-600">
+              Active vehicle
+            </Label>
+            <Checkbox
+              id="vehicle-active"
+              checked={isActive}
+              onCheckedChange={setIsActive}
+              disabled={isSubmitting}
+            />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button type="submit" className="flex-1" disabled={isSubmitting}>
+              {isSubmitting ? (isEdit ? 'Saving...' : 'Adding...') : isEdit ? 'Save Changes' : 'Add Vehicle'}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => { reset(); onClose(); }} disabled={isSubmitting}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function CustomerProfile({ onLogout }: { onLogout?: () => void } = {}) {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const { data: appointments = [], isLoading: appointmentsLoading } = useAppointments();
   const { data: vehicles = [], isLoading: vehiclesLoading, refetch: refetchVehicles } = useVehicles();
+  const createVehicle = useCreateVehicle();
+  const updateVehicle = useUpdateVehicle();
+  const deleteVehicle = useDeleteVehicle();
   const resetOwnPassword = useResetOwnPassword();
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [vehicleModalOpen, setVehicleModalOpen] = useState(false);
@@ -269,16 +477,21 @@ export function CustomerProfile({ onLogout }: { onLogout?: () => void } = {}) {
 
   const handleVehicleSubmit = async (data: Partial<Vehicle>) => {
     try {
+      let response;
       if (editingVehicle) {
-        await updateVehicle.mutateAsync({ id: editingVehicle.id, data });
-        toast.success('Vehicle updated successfully');
+        response = await updateVehicle.mutateAsync({ id: editingVehicle.id, data });
       } else {
-        await createVehicle.mutateAsync(data);
-        toast.success('Vehicle added successfully');
+        response = await createVehicle.mutateAsync(data);
       }
+
+      if (!response.success) {
+        throw new Error(response.message || `Failed to ${editingVehicle ? 'update' : 'add'} vehicle`);
+      }
+
+      toast.success(editingVehicle ? 'Vehicle updated successfully' : 'Vehicle added successfully');
       refetchVehicles();
-    } catch (error) {
-      toast.error(editingVehicle ? 'Failed to update vehicle' : 'Failed to add vehicle');
+    } catch (error: any) {
+      toast.error(error?.message || (editingVehicle ? 'Failed to update vehicle' : 'Failed to add vehicle'));
       throw error;
     }
   };

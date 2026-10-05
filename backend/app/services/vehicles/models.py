@@ -1,11 +1,12 @@
 from app import db
+from app.core.types import BigId
 from sqlalchemy import func
 
 
 class Vehicle(db.Model):
     __tablename__ = 'vehicles'
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BigId, primary_key=True, autoincrement=True)
     user_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     make = db.Column(db.String(50), nullable=False, index=True)
     model = db.Column(db.String(50), nullable=False, index=True)

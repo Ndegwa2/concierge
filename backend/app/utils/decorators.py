@@ -174,10 +174,22 @@ def owner_or_admin_required(get_resource_user_id):
     return decorator
 
 
-def get_current_user():
+def get_current_user(allow_refresh_token=False):
+    """Return the authenticated user as a dict, or None when unauthenticated.
+
+    ``allow_refresh_token`` is only for refresh-token endpoints such as
+    ``/auth/refresh`` (already guarded by ``@jwt_required(refresh=True)``).
+    Those endpoints put a *refresh* token in the request, and re-verifying it
+    with the default access-token mode raised ``WrongTokenError``; the ``except``
+    below swallowed it and returned ``None``, so every refresh answered 401 and
+    clients could never renew an expired access token.
+    """
     try:
         from app.services.auth.models import User
-        verify_jwt_in_request()
+        if allow_refresh_token:
+            verify_jwt_in_request(refresh=True)
+        else:
+            verify_jwt_in_request()
         identity = get_jwt_identity()
         claims = get_jwt()
 

@@ -5,7 +5,7 @@ from app.services.auth.models import User
 from app.services.notifications.models import Notification
 from app.utils.decorators import get_current_user
 from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_SHORT_TTL
-from .service import get_user_notifications, mark_notification_read, mark_all_notifications_read
+from .service import get_user_notifications, mark_notification_read as mark_notification_read_svc, mark_all_notifications_read as mark_all_notifications_read_svc
 
 
 import logging
@@ -67,7 +67,7 @@ def mark_notification_read(notification_id):
                 'error': 'MISSING_TOKEN'
             }), 401
 
-        notification = mark_notification_read(notification_id, current_user['id'])
+        notification = mark_notification_read_svc(notification_id, current_user['id'])
 
         cache_delete_pattern(f"notifications:{current_user['id']}:*")
         
@@ -99,7 +99,7 @@ def mark_all_notifications_read():
                 'error': 'MISSING_TOKEN'
             }), 401
 
-        count = mark_all_notifications_read(current_user['id'])
+        count = mark_all_notifications_read_svc(current_user['id'])
 
         cache_delete_pattern(f"notifications:{current_user['id']}:*")
 

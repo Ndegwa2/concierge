@@ -41,12 +41,17 @@ def send_email_with_attachment(self, to, subject, body, attachment_path, attachm
 
 
 @celery.task(name='app.tasks.email_tasks.send_customer_onboarding_email', bind=True, max_retries=3, default_retry_delay=60)
-def send_customer_onboarding_email(self, user_id):
-    """Send the one-time onboarding email after customer registration."""
+def send_customer_onboarding_email(self, user_id, document_ids=None):
+    """Send the one-time onboarding email after customer registration.
+
+    If *document_ids* is provided, the corresponding onboarding documents
+    (created during registration) are attached alongside the generated
+    welcome pack PDF.
+    """
     from flask import current_app
     from pathlib import Path
     from app.services.auth.models import User
-    from app.utils.email import send_email, send_email_with_attachment
+    from app.utils.email import send_email, send_email_with_attachments
     from app.utils.onboarding import (
         build_onboarding_email,
         generate_welcome_pack_pdf,
@@ -58,35 +63,54 @@ def send_customer_onboarding_email(self, user_id):
         logger.warning('Skipping onboarding email for user %s', user_id)
         return
 
-    subject, body = build_onboarding_email(user, current_app.config)
+    document_ids = document_ids or []
+    subject, body = build_onboarding_email(
+        user, current_app.config, document_count=len(document_ids)
+    )
     attachment_path, generated_attachment = resolve_welcome_pack(current_app.config, user.id)
     attachment_path = Path(attachment_path)
-    sent_with_attachment = False
+    attachments = []
+    generated_paths = []
 
     try:
         if generated_attachment:
             generate_welcome_pack_pdf(user, current_app.config, attachment_path)
-
         if attachment_path.is_file():
-            send_email_with_attachment(
+            attachments.append((str(attachment_path), attachment_path.name))
+            generated_paths.append(attachment_path)
+
+        # Attach uploaded onboarding documents
+        if document_ids:
+            from app.services.documents.models import Document
+            docs = Document.query.filter(Document.id.in_(document_ids)).all()
+            root = current_app.root_path
+            for doc in docs:
+                if doc.file_path:
+                    full = Path(root) / doc.file_path
+                    if full.is_file():
+                        attachments.append((str(full), doc.file_name or doc.title))
+
+        if attachments:
+            send_email_with_attachments(
                 to=user.email,
                 subject=subject,
                 body=body,
-                attachment_path=str(attachment_path),
-                attachment_filename=attachment_path.name,
+                attachments=attachments,
             )
-            sent_with_attachment = True
         else:
             send_email(to=user.email, subject=subject, body=body)
 
-        logger.info('Customer onboarding email sent to %s', user.email)
+        logger.info(
+            'Customer onboarding email sent to %s with %d attachment(s)',
+            user.email, len(attachments),
+        )
     except Exception as exc:
         logger.error('Customer onboarding email failed for %s: %s', user.email, exc)
         raise self.retry(exc=exc)
     finally:
-        if sent_with_attachment and generated_attachment:
+        for p in generated_paths:
             try:
-                attachment_path.unlink()
+                p.unlink()
             except OSError:
                 pass
 

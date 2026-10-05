@@ -1,8 +1,10 @@
 from app import db
 from sqlalchemy import func
 from sqlalchemy.orm import validates
-from app.core.types import EncryptedString
+from app.core.types import BigId, EncryptedString
 import hashlib
+import hmac
+import os
 import bcrypt
 
 
@@ -36,7 +38,7 @@ def mask_email(email: str) -> str:
 class User(db.Model):
     __tablename__ = 'users'
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BigId, primary_key=True, autoincrement=True)
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
@@ -57,6 +59,37 @@ class User(db.Model):
 
     @staticmethod
     def _compute_phone_search_token(phone):
+        """Deterministic lookup token for the encrypted ``phone`` column.
+
+        Keyed with HMAC-SHA256 (pepper = ``PHONE_TOKEN_PEPPER`` or
+        ``SECRET_KEY``): a plain unsalted digest of a phone number is reversible
+        by enumeration because the MSISDN space is tiny, which would quietly
+        undo the field encryption for anyone with database read access.
+        """
+        normalized = User._normalize_phone(phone)
+        if not normalized:
+            return None
+        pepper = os.environ.get('PHONE_TOKEN_PEPPER') or os.environ.get('SECRET_KEY')
+        if not pepper:
+            if os.environ.get('FLASK_ENV') == 'development':
+                return hashlib.sha256(normalized.encode('utf-8')).hexdigest()
+            raise RuntimeError(
+                "PHONE_TOKEN_PEPPER or SECRET_KEY must be set to compute phone "
+                "search tokens outside development."
+            )
+        return hmac.new(
+            pepper.encode('utf-8'),
+            normalized.encode('utf-8'),
+            hashlib.sha256,
+        ).hexdigest()
+
+    @staticmethod
+    def _legacy_phone_search_token(phone):
+        """Pre-pepper SHA-256 token.
+
+        Retained only so that phone searches keep matching rows that have not
+        been backfilled yet (``flask backfill-phone-tokens`` upgrades them).
+        """
         normalized = User._normalize_phone(phone)
         if not normalized:
             return None
@@ -102,7 +135,7 @@ class User(db.Model):
 class PaymentMethod(db.Model):
     __tablename__ = 'payment_methods'
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BigId, primary_key=True, autoincrement=True)
     user_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     payment_token = db.Column(db.String(255))
     card_brand = db.Column(db.String(50))

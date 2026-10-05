@@ -406,7 +406,25 @@ def assign_employee_to_appointment(appointment_id, data=None):
     ).first()
 
     if existing:
-        raise ValueError('Appointment already has an active assignment')
+        # An active assignment already exists for this appointment.
+        # When an admin reassigns the job to a different employee we release
+        # the previous (not-yet-started) assignment instead of blocking with a
+        # 409. An in-progress job, however, cannot be hijacked: the technician
+        # already on site must complete the hand-off first.
+        if existing.employee_id == employee.id:
+            # Idempotent: the requested employee already holds the assignment.
+            return existing
+
+        if existing.status == 'in-progress':
+            existing_employee = User.query.get(existing.employee.user_id) \
+                if existing.employee else None
+            who = existing_employee.name if existing_employee else \
+                f'employee #{existing.employee_id}'
+            raise ValueError(f'Cannot reassign: {who} is already working this job')
+
+        # Release the not-yet-started assignment (kept for the audit trail),
+        # then fall through to create a fresh assignment for the new employee.
+        release_active_assignment(existing, reason='Reassigned by admin')
 
     assignment = Assignment()
     assignment.appointment_id = appointment_id
@@ -422,6 +440,20 @@ def assign_employee_to_appointment(appointment_id, data=None):
     _notify_employee_assigned(assignment, employee, appointment)
     _notify_admins_assignment(assignment, employee, appointment)
     return assignment
+
+
+def release_active_assignment(assignment, reason='Reassigned by admin'):
+    """Cancel an active (assigned) assignment so its appointment can be
+    reassigned to a different employee.
+
+    The row is kept with ``status='cancelled'`` for the audit trail rather
+    than being deleted. Called by ``assign_employee_to_appointment`` when an
+    admin reassigns an appointment whose current assignment has not started.
+    """
+    assignment.status = 'cancelled'
+    existing_notes = assignment.notes or ''
+    assignment.notes = f'{existing_notes}\n{reason}'.strip()
+    db.session.add(assignment)
 
 
 def _notify_employee_assigned(assignment, employee, appointment):

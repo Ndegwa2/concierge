@@ -1,11 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { MessageSquare, X, Send, Loader2, Bot, User, ChevronDown } from 'lucide-react';
+import { MessageSquare, X, Send, Loader2, Bot, User, ChevronDown, Upload, AlertCircle } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Card } from '@/app/components/ui/card';
 import { toast } from 'sonner';
-import { api, ChatMessage } from '@/services/api';
+import { api, ChatMessage, ChatImage } from '@/services/api';
 import { aiChatApi } from '@/services/api/aiChat';
+import { ImageGallery } from '@/app/components/ui/ImageGallery';
+import { UploadedImagePreview } from '@/app/components/ui/ImageUploader';
+import { validateImageFile, generateAltText } from '@/utils/imageUtils';
 
 export function AIChatBox() {
   const [isOpen, setIsOpen] = useState(false);
@@ -19,6 +22,8 @@ export function AIChatBox() {
   const [isLoading, setIsLoading] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [hasNewMessages, setHasNewMessages] = useState(false);
+  const [selectedPreviews, setSelectedPreviews] = useState<UploadedImagePreview[]>([]);
+  const [uploadingImages, setUploadingImages] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -60,23 +65,79 @@ export function AIChatBox() {
     }
   }, [isOpen, scrollToBottom]);
 
+    const handleImageSelect = (previews: UploadedImagePreview[]) => {
+    setSelectedPreviews(previews);
+  };
+
+  const handleClearImages = () => {
+    setSelectedPreviews([]);
+  };
+
+  /**
+   * Upload each selected image to the backend (POST /ai-chat/images) and
+   * return the server-issued ChatImage objects with proper signed URLs.
+   * Images that fail server-side validation are reported inline.
+   */
+  const uploadSelectedImages = useCallback(async (): Promise<ChatImage[]> => {
+    const validPreviews = selectedPreviews.filter(p => p.valid);
+    if (validPreviews.length === 0) return [];
+
+    setUploadingImages(true);
+    const uploaded: ChatImage[] = [];
+
+    try {
+      for (const preview of validPreviews) {
+        try {
+          const res = await aiChatApi.uploadImage(preview.file);
+          if (res.success && res.data?.image) {
+            uploaded.push(res.data.image);
+          } else {
+            toast.error(`Failed to upload "${preview.file.name}": ${res.message || 'unknown error'}`);
+          }
+        } catch (e: any) {
+          toast.error(`Failed to upload "${preview.file.name}": ${e?.message || 'network error'}`);
+        }
+      }
+    } finally {
+      setUploadingImages(false);
+    }
+
+    return uploaded;
+  }, [selectedPreviews]);
+
   const handleSend = async () => {
     const trimmedInput = input.trim();
-    if (!trimmedInput || isLoading) return;
 
-    const userMessage: ChatMessage = { role: 'user', content: trimmedInput };
+    // Need at least text or images to send.
+    if ((!trimmedInput && selectedPreviews.length === 0) || isLoading) return;
+
+    // --- Upload images first ---
+    let uploadedImages: ChatImage[] = [];
+    if (selectedPreviews.length > 0) {
+      uploadedImages = await uploadSelectedImages();
+    }
+
+    const imageUrls = uploadedImages.map(img => img.url);
+    const userMessage: ChatMessage = {
+      role: 'user',
+      content: trimmedInput,
+      images: uploadedImages,
+    };
     const updatedMessages = [...messages, userMessage];
-    
+
     setMessages(updatedMessages);
     setInput('');
+    setSelectedPreviews([]);
     setIsLoading(true);
     setIsAtBottom(true);
     setHasNewMessages(false);
 
+    // --- Send the chat request (text + image URLs) ---
     try {
-      const response = await aiChatApi.chatWithAI({
+      const response = await aiChatApi.chatAndWait({
         message: trimmedInput,
-        conversation_history: updatedMessages.filter(m => m.role !== 'system')
+        conversation_history: updatedMessages.filter(m => m.role !== 'system'),
+        image_urls: imageUrls,
       });
 
       if (response.success && response.data?.response) {
@@ -84,8 +145,12 @@ export function AIChatBox() {
       } else {
         toast.error(response.message || 'Failed to get response');
       }
-    } catch (error) {
-      toast.error('Network error. Please try again.');
+    } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        toast.error('Request timed out. Please try again.');
+      } else {
+        toast.error('Network error. Please check your connection and try again.');
+      }
     } finally {
       setIsLoading(false);
       setTimeout(() => inputRef.current?.focus(), 100);
@@ -153,6 +218,13 @@ export function AIChatBox() {
                       }`}
                     >
                       {message.content}
+                      {message.images && message.images.length > 0 && (
+                        <ImageGallery
+                          images={message.images}
+                          columns={message.images.length === 1 ? 1 : 2}
+                          compact={true}
+                        />
+                      )}
                     </div>
                     {message.role === 'user' && (
                       <div className="flex-shrink-0 w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center">
@@ -197,21 +269,96 @@ export function AIChatBox() {
                 onKeyPress={handleKeyPress}
                 placeholder="Ask about our services..."
                 className="flex-1 text-sm"
-                disabled={isLoading}
+                disabled={isLoading || uploadingImages}
               />
               <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10"
+                onClick={() => {
+                  const el = document.getElementById('chat-image-input');
+                  el?.click();
+                }}
+                disabled={isLoading || uploadingImages}
+                title="Attach an image"
+              >
+                <Upload className="h-4 w-4 text-slate-600" />
+              </Button>
+              <Button
                 onClick={handleSend}
-                disabled={!input.trim() || isLoading}
+                disabled={(!input.trim() && selectedPreviews.length === 0) || isLoading || uploadingImages}
                 size="icon"
                 className="h-10 w-10 bg-slate-900 hover:bg-slate-800"
               >
-                {isLoading ? (
+                {isLoading || uploadingImages ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Send className="h-4 w-4" />
                 )}
               </Button>
             </div>
+
+                        {/* Image previews */}
+            {selectedPreviews.length > 0 && (
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {selectedPreviews.map((p) => (
+                  <div
+                    key={p.id}
+                    className="relative aspect-square rounded-md overflow-hidden border bg-slate-100"
+                  >
+                    <img
+                      src={p.preview}
+                      alt={p.alt}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                    {!p.valid && p.errors.length > 0 && (
+                      <div className="absolute inset-0 bg-red-500/20 flex items-start p-1">
+                        <AlertCircle className="h-3 w-3 text-red-600 mt-0.5 ml-auto" />
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleImageSelect(
+                        selectedPreviews.filter(x => x.id !== p.id)
+                      )}
+                      className="absolute top-0.5 right-0.5 h-5 w-5 p-0 rounded-full bg-white/80 hover:bg-white"
+                      title="Remove"
+                    >
+                      <X className="h-3 w-3 text-slate-700" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Hidden native file input */}
+            <input
+              id="chat-image-input"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
+              multiple
+              className="sr-only"
+              onChange={(e) => {
+                if (e.target.files && e.target.files.length > 0) {
+                  const fileArray = Array.from(e.target.files);
+                  const newPreviews: UploadedImagePreview[] = fileArray.map(file => {
+                    const result = validateImageFile(file);
+                    return {
+                      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                      file,
+                      preview: URL.createObjectURL(file),
+                      alt: generateAltText(file.name),
+                      size: file.size,
+                      valid: result.valid,
+                      errors: result.errors,
+                    };
+                  });
+                  handleImageSelect([...selectedPreviews, ...newPreviews].slice(0, 3));
+                  e.target.value = '';
+                }
+              }}
+            />
           </div>
         </Card>
       )}

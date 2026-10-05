@@ -9,6 +9,7 @@ from app.celery import celery
 
 logger = logging.getLogger(__name__)
 
+
 SYSTEM_PROMPT = """You are AutoConcierge AI, a knowledgeable and professional assistant for AutoConcierge — a premium door-to-door vehicle care concierge service.
 
 Your expertise covers:
@@ -30,10 +31,16 @@ Guidelines:
 - For booking or appointment inquiries, guide users to use the AutoConcierge platform"""
 
 
-@celery.task(name='app.tasks.ai_tasks.generate_ai_response', bind=True, max_retries=2, default_retry_delay=10, soft_time_limit=60)
-def generate_ai_response(self, user_message, conversation_history=None):
-    """Generate AI chat response asynchronously using Cohere."""
+@celery.task(name='app.tasks.ai_tasks.generate_ai_response', bind=True, max_retries=2, default_retry_delay=10, soft_time_limit=120)
+def generate_ai_response(self, user_message, conversation_history=None, image_urls=None):
+    """Generate AI chat response asynchronously using Cohere.
+    
+    ``image_urls`` is an optional list of signed URLs to image attachments.
+    When the model has vision support these are forwarded; otherwise they are
+    available to the front-end for inline rendering.
+    """
     import cohere
+    from cohere.types.message import UserMessage, ChatbotMessage
 
     api_key = os.environ.get('COHERE_API_KEY')
     if not api_key:
@@ -42,27 +49,24 @@ def generate_ai_response(self, user_message, conversation_history=None):
     conversation_history = conversation_history or []
 
     try:
-        client = cohere.Client(api_key=api_key)
+        client = cohere.Client(api_key=api_key, timeout=100)
 
         chat_history = []
-        chat_history.append({
-            "role": "SYSTEM",
-            "message": SYSTEM_PROMPT
-        })
 
         for msg in conversation_history[-10:]:
             if isinstance(msg, dict) and 'role' in msg and 'content' in msg:
                 role = msg['role']
                 content = msg['content']
                 if role == 'user':
-                    chat_history.append({"role": "USER", "message": content})
+                    chat_history.append(UserMessage(message=content))
                 elif role == 'assistant':
-                    chat_history.append({"role": "CHATBOT", "message": content})
+                    chat_history.append(ChatbotMessage(message=content))
 
         response = client.chat(
-            model='command-r-plus',
+            model='command-a-03-2025',
             message=user_message,
             chat_history=chat_history,
+            preamble=SYSTEM_PROMPT,
             max_tokens=1024,
             temperature=0.7,
             p=0.9,
@@ -72,4 +76,6 @@ def generate_ai_response(self, user_message, conversation_history=None):
 
     except Exception as exc:
         logger.error('AI generation failed: %s', exc)
+        if self.request.retries >= self.max_retries:
+            raise
         raise self.retry(exc=exc)

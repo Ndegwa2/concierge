@@ -82,6 +82,58 @@ def send_email(to, subject, body):
     logger.info('Email sent to %s', to)
 
 
+def send_email_with_attachments(to, subject, body, attachments):
+    """Send an email with multiple file attachments.
+
+    Parameters
+    ----------
+    to : str
+        Recipient email address.
+    subject : str
+        Email subject line.
+    body : str
+        Plain-text email body.
+    attachments : list[tuple[str, str]]
+        Each element is a ``(attachment_path, attachment_filename)`` tuple
+        where ``attachment_path`` is the absolute (or cwd-relative) path to
+        the file on disk and ``attachment_filename`` is the name the recipient
+        will see.
+    """
+    config = get_mail_config()
+
+    if not config['username'] or not config['password']:
+        raise RuntimeError('Email credentials are not configured')
+
+    msg = MIMEMultipart()
+    msg['From'] = config['default_sender']
+    msg['To'] = to
+    msg['Subject'] = subject
+    msg.attach(MIMEText(body, 'plain', 'utf-8'))
+
+    for attachment_path, attachment_filename in attachments:
+        attachment_full_path = Path(attachment_path)
+        if not attachment_full_path.exists():
+            logger.warning('Attachment not found, skipping: %s', attachment_path)
+            continue
+
+        with open(attachment_full_path, 'rb') as file:
+            part = MIMEApplication(file.read(), Name=attachment_filename)
+        part['Content-Disposition'] = f'attachment; filename="{attachment_filename}"'
+        msg.attach(part)
+
+    try:
+        with smtplib.SMTP(config['server'], config['port']) as server:
+            if config['use_tls']:
+                server.starttls()
+            server.login(config['username'], config['password'])
+            server.sendmail(config['default_sender'], [to], msg.as_string())
+    except smtplib.SMTPException as exc:
+        logger.error('Failed to send email to %s: %s', to, exc)
+        raise
+
+    logger.info('Email sent to %s with %d attachments', to, len(attachments))
+
+
 def send_fleet_invoice_email(to, contact_name, invoice_number, total_amount, currency, due_date, attachment_path, attachment_filename):
     subject = f'Fleet Invoice {invoice_number} - AutoConcierge'
     due = due_date.strftime('%Y-%m-%d') if hasattr(due_date, 'strftime') else str(due_date)

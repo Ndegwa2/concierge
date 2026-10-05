@@ -4,6 +4,7 @@ import type {
   RegisterData,
   LoginResponse,
   ApiResponse,
+  ProfileUpdate,
 } from './types';
 
 export const authApi = {
@@ -36,6 +37,38 @@ export const authApi = {
   },
 
   async register(userData: RegisterData): Promise<LoginResponse> {
+    const hasDocuments = userData.documents && userData.documents.length > 0;
+
+    if (hasDocuments) {
+      // Send multipart/form-data so file uploads are included.
+      const formData = new FormData();
+      formData.append('name', userData.name);
+      formData.append('email', userData.email);
+      formData.append('password', userData.password);
+      formData.append('role', userData.role);
+      if (userData.phone) formData.append('phone', userData.phone);
+      if (userData.address) formData.append('address', userData.address);
+      if (userData.location) formData.append('location', userData.location);
+      if (userData.specialties && userData.specialties.length) {
+        formData.append('specialties', userData.specialties.join(','));
+      }
+      (userData.documents || []).forEach((file) => {
+        formData.append('onboarding_documents', file);
+      });
+
+      const response = await apiClient.request<LoginResponse['data']>('/auth/register', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.success && response.data && response.data.access_token) {
+        apiClient.setTokens(response.data.access_token, response.data.refresh_token);
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+      }
+
+      return response as LoginResponse;
+    }
+
     const response = await apiClient.request<LoginResponse['data']>('/auth/register', {
       method: 'POST',
       body: JSON.stringify(userData),
@@ -65,7 +98,12 @@ export const authApi = {
 
   async logout(): Promise<void> {
     try {
-      await apiClient.request('/auth/logout', { method: 'POST' });
+      // Send the refresh token so the server can revoke *this* session rather
+      // than only the short-lived access token.
+      await apiClient.request('/auth/logout', {
+        method: 'POST',
+        body: JSON.stringify({ refresh_token: apiClient.getRefreshToken() }),
+      });
     } catch (error) {
       console.error('Logout error:', error);
     }
@@ -76,7 +114,28 @@ export const authApi = {
     return apiClient.request('/auth/profile');
   },
 
-  async updateProfile(data: Partial<User>): Promise<ApiResponse<{ user: User }>> {
+  /**
+   * Profile updates accept display fields only. Credential changes must carry
+   * the current password and go through the dedicated helpers below - the API
+   * rejects `email`/`password` in a profile update without it.
+   */
+  async updateProfile(data: ProfileUpdate): Promise<ApiResponse<{ user: User }>> {
+    return apiClient.request('/auth/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Change the account email or password. Requires the current password; the
+   * server revokes all existing sessions on success, so the caller must sign in
+   * again.
+   */
+  async updateCredentials(data: {
+    current_password: string;
+    email?: string;
+    password?: string;
+  }): Promise<ApiResponse<{ user: User; reauthenticate: boolean }>> {
     return apiClient.request('/auth/profile', {
       method: 'PUT',
       body: JSON.stringify(data),

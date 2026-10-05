@@ -16,7 +16,7 @@ def _contact_line(label, value):
     return f'{label} {value}' if value else ''
 
 
-def build_onboarding_email(user, config):
+def build_onboarding_email(user, config, document_count=0):
     client_name = str(user.name or 'there').strip() or 'there'
     lead_name = _config_value(config, 'ONBOARDING_LEAD_NAME', 'AutoConcierge Operations Team')
     lead_phone = _config_value(config, 'ONBOARDING_LEAD_PHONE', 'Please reply to this email')
@@ -92,6 +92,16 @@ Thank you for choosing AutoConcierge. We look forward to taking care of the deta
 Warm regards,
 
 {signoff}"""
+    if document_count:
+        _docs_note = (
+            "\nYour Onboarding Documents\n"
+            f"You also uploaded {document_count} onboarding document(s) during "
+            f"registration. These are attached to this email alongside your "
+            f"Welcome Pack. Our team will review them and reach out if any "
+            f"additional information is needed.\n"
+        )
+        marker = "\nWe\u2019re Here to Help\n"
+        body = body.replace(marker, _docs_note + marker, 1)
     return subject, body
 
 
@@ -205,6 +215,6 @@ def resolve_welcome_pack(config, user_id):
         configured.parent.mkdir(parents=True, exist_ok=True)
         return configured, True
 
-    directory = Path(_config_value(config, 'WELCOME_PACK_DIR', '/app/uploads/onboarding'))
+    directory = Path(_config_value(config, 'WELCOME_PACK_DIR', 'uploads/onboarding'))
     filename = _config_value(config, 'WELCOME_PACK_FILENAME') or f'AutoConcierge-Welcome-Pack-{user_id}.pdf'
     return directory / filename, True

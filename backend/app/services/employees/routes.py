@@ -530,9 +530,14 @@ def assign_employee_to_appointment(appointment_id):
         elif message == 'employee_id is required':
             status = 400
             message = 'Missing required fields'
+        elif message == 'Employee is not available for assignment':
+            status = 422
+        elif message.startswith('Cannot reassign'):
+            # In-progress job: cannot be hijacked by another employee.
+            status = 409
         else:
             status = 409
-            message = 'An unexpected error occurred during assignment'
+            message = str(e) or 'An unexpected error occurred during assignment'
         return jsonify({
             'success': False,
             'message': message,

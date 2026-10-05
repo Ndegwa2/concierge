@@ -1,0 +1,32 @@
+]633;E;echo "=== redis ping ===";af3fc367-b290-4827-9e96-b7f34d626d85]633;C=== redis ping ===
+PONG
+]633;E;echo "=== celery processes ===";af3fc367-b290-4827-9e96-b7f34d626d85]633;C=== celery processes ===
+  23508      14 /home/ndegwa/mboka/Auto_concierge/concierge/venv/bin/python -m celery -A app.celery.celery worker --loglevel=info --concurrency=4 -Q default,emails,ai,payments,pdf,notifications
+  24282      10 /home/ndegwa/mboka/Auto_concierge/concierge/venv/bin/python -m celery -A app.celery.celery beat --loglevel=info --scheduler celery.beat.PersistentScheduler
+  24893       6 /home/ndegwa/mboka/Auto_concierge/concierge/venv/bin/python -m celery -A app.celery.celery worker --loglevel=info --concurrency=4 -Q default,emails,ai,payments,pdf,notifications
+  24894       6 /home/ndegwa/mboka/Auto_concierge/concierge/venv/bin/python -m celery -A app.celery.celery worker --loglevel=info --concurrency=4 -Q default,emails,ai,payments,pdf,notifications
+  24895       5 /home/ndegwa/mboka/Auto_concierge/concierge/venv/bin/python -m celery -A app.celery.celery worker --loglevel=info --concurrency=4 -Q default,emails,ai,payments,pdf,notifications
+  24896       5 /home/ndegwa/mboka/Auto_concierge/concierge/venv/bin/python -m celery -A app.celery.celery worker --loglevel=info --concurrency=4 -Q default,emails,ai,payments,pdf,notifications
+=== worker log head ===
+ 
+ -------------- celery@ALTITUDE v5.4.0 (opalescent)
+--- ***** ----- 
+-- ******* ---- Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43 2026-10-01 10:02:50
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         autoconcierge:0x760d114c7290
+- ** ---------- .> transport:   redis://127.0.0.1:6379/0
+- ** ---------- .> results:     redis://127.0.0.1:6379/0
+- *** --- * --- .> concurrency: 4 (prefork)
+-- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+--- ***** ----- 
+=== worker log tail ===
+[2026-10-01 10:02:52,921: INFO/MainProcess] mingle: all alone
+[2026-10-01 10:02:53,012: INFO/MainProcess] celery@ALTITUDE ready.
+[2026-10-01 10:02:53,024: INFO/MainProcess] Task app.tasks.appointment_tasks.check_upcoming_appointments[b8e4d0b5-2599-4142-87ae-a77eef282402] received
+[2026-10-01 10:02:53,141: INFO/ForkPoolWorker-4] Redis connected successfully
+[2026-10-01 10:02:54,458: INFO/ForkPoolWorker-4] Notification scheduling handled by Celery beat (every 5 minutes)
+[2026-10-01 10:02:55,351: INFO/ForkPoolWorker-4] Task app.tasks.appointment_tasks.check_upcoming_appointments[b8e4d0b5-2599-4142-87ae-a77eef282402] succeeded in 2.3217717379999385s: None
+=== beat log tail ===
+[2026-10-01 10:02:51,601: INFO/MainProcess] beat: Starting...
+[2026-10-01 10:02:51,774: INFO/MainProcess] Scheduler: Sending due task check-upcoming-appointments (app.tasks.appointment_tasks.check_upcoming_appointments)

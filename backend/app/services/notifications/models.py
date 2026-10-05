@@ -1,11 +1,12 @@
 from app import db
+from app.core.types import BigId
 from sqlalchemy import func
 
 
 class Notification(db.Model):
     __tablename__ = 'notifications'
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BigId, primary_key=True, autoincrement=True)
     user_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     title = db.Column(db.String(100), nullable=False)
     message = db.Column(db.Text)

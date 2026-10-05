@@ -9,6 +9,10 @@ interface SignUpData {
   password: string;
   phone?: string;
   address?: string;
+  role: 'customer' | 'employee';
+  location?: string;
+  specialties?: string[];
+  documents?: File[];
 }
 
 interface AuthContextType {
@@ -46,7 +50,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
             apiClient.clearTokens();
           }
         } catch (error) {
-          console.error('Failed to fetch profile:', error);
+          // Only log if it's not an expected 401 during auth initialization
+          const isAuthError = error instanceof Response && error.status === 401;
+          if (!isAuthError) {
+            console.error('Failed to fetch profile:', error);
+          }
           apiClient.clearTokens();
         }
       }
@@ -106,7 +114,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       if (response.success && response.data) {
         setUser(response.data.user);
-        return { success: true, message: response.message };
+        return { success: true, message: response.message || 'Login successful' };
       }
       
       return { success: false, message: response.message || 'Login failed' };

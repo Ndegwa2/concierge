@@ -88,21 +88,17 @@ export function RBACProvider({ children }: RBACProviderProps) {
         }
       } catch (error) {
         if (!cancelled) {
-          console.error('Failed to load permissions from backend:', error);
-          const storedUser = localStorage.getItem('user');
-          if (storedUser) {
-            try {
-              const userData = JSON.parse(storedUser);
-              const permissions = mapRoleToPermissions(userData.role);
-              setUserPermissions({
-                user_id: String(userData.id || ''),
-                role: userData.role || '',
-                permissions,
-              });
-            } catch (e) {
-              console.error('Failed to parse stored user:', e);
-            }
+          // Only log if it's not an expected 401 during auth initialization
+          const isAuthError = error instanceof Response && error.status === 401;
+          if (!isAuthError) {
+            console.error('Failed to load permissions from backend:', error);
           }
+          // Fail closed. Previously this branch rebuilt permissions from
+          // `localStorage.user`, which the user (or any XSS) can edit - so a
+          // failed API call silently promoted the caller to whatever role the
+          // stored blob claimed. Authorization state now comes only from the
+          // server; a failure means "no permissions".
+          setUserPermissions(null);
         }
       } finally {
         if (!cancelled) {
@@ -147,7 +143,11 @@ export function RBACProvider({ children }: RBACProviderProps) {
         });
       }
     } catch (error) {
-      console.error('Failed to refresh permissions:', error);
+      // Only log if it's not an expected 401
+      const isAuthError = error instanceof Response && error.status === 401;
+      if (!isAuthError) {
+        console.error('Failed to refresh permissions:', error);
+      }
     } finally {
       setIsLoading(false);
     }

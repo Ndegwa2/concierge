@@ -1,4 +1,5 @@
 from app import db
+from app.core.types import BigId
 from sqlalchemy import func, CheckConstraint
 from datetime import datetime, timezone
 
@@ -12,7 +13,7 @@ class Payment(db.Model):
         db.Index('ix_payments_user_status', 'user_id', 'status'),
     )
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BigId, primary_key=True, autoincrement=True)
     payment_reference = db.Column(db.String(50), unique=True, nullable=False, index=True)
     invoice_id = db.Column(db.BigInteger, db.ForeignKey('invoices.id', ondelete='CASCADE'), nullable=False, index=True)
     appointment_id = db.Column(db.BigInteger, db.ForeignKey('appointments.id', ondelete='CASCADE'), nullable=False, index=True)
@@ -82,7 +83,7 @@ class WebhookEvent(db.Model):
         db.UniqueConstraint('source', 'external_event_id', name='uq_webhook_events_source_event'),
     )
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BigId, primary_key=True, autoincrement=True)
     source = db.Column(db.String(30), nullable=False, index=True)
     external_event_id = db.Column(db.String(200), nullable=False, index=True)
     payload = db.Column(db.JSON, nullable=False)

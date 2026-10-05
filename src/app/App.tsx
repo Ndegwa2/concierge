@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import {
   ArrowRight,
   Clock,
@@ -13,13 +13,6 @@ import { HowItWorks } from '@/app/components/HowItWorks';
 import { Header } from '@/app/components/Header';
 import { LoginModal } from '@/app/components/LoginModal';
 import { SignUpModal } from '@/app/components/SignUpModal';
-import { AdminDashboard } from '@/app/components/admin/AdminDashboard';
-import { EmployeeDashboard } from '@/app/components/employee/EmployeeDashboard';
-import { CustomerProfile } from '@/app/components/customer/CustomerProfile';
-import { CustomerDashboard } from '@/app/components/customer/CustomerDashboard';
-import { CustomerAppointments } from '@/app/components/CustomerAppointments';
-import { VehicleReturnConfirmation, ConfirmationData } from '@/app/components/VehicleReturnConfirmation';
-import { ConfirmationSuccessModal } from '@/app/components/ConfirmationSuccessModal';
 import { AIChatBox } from '@/app/components/AIChatBox';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
@@ -30,11 +23,56 @@ import { appointmentsApi } from '@/services/api/appointments';
 import type { Appointment } from '@/services/api/types';
 import { useAuth } from '@/contexts/AuthContext';
 
-import { PricingPage } from '@/app/components/PricingPage';
-import { POSTerminal } from '@/app/components/POSTerminal';
+// Role-specific and rarely-visited views are code-split: they used to be part
+// of the single 1.2 MB entry bundle, so every marketing visitor downloaded the
+// admin console, POS terminal and signature pad before seeing the home page.
+const AdminDashboard = lazy(() =>
+  import('@/app/components/admin/AdminDashboard').then((m) => ({ default: m.AdminDashboard }))
+);
+const EmployeeDashboard = lazy(() =>
+  import('@/app/components/employee/EmployeeDashboard').then((m) => ({ default: m.EmployeeDashboard }))
+);
+const DocumentManager = lazy(() => import('@/app/components/documents/DocumentManager'));
+const CustomerProfile = lazy(() =>
+  import('@/app/components/customer/CustomerProfile').then((m) => ({ default: m.CustomerProfile }))
+);
+const CustomerDashboard = lazy(() =>
+  import('@/app/components/customer/CustomerDashboard').then((m) => ({ default: m.CustomerDashboard }))
+);
+const CustomerAppointments = lazy(() =>
+  import('@/app/components/CustomerAppointments').then((m) => ({ default: m.CustomerAppointments }))
+);
+const PricingPage = lazy(() =>
+  import('@/app/components/PricingPage').then((m) => ({ default: m.PricingPage }))
+);
+const POSTerminal = lazy(() =>
+  import('@/app/components/POSTerminal').then((m) => ({ default: m.POSTerminal }))
+);
+const VehicleReturnConfirmation = lazy(() =>
+  import('@/app/components/VehicleReturnConfirmation').then((m) => ({ default: m.VehicleReturnConfirmation }))
+);
+const ConfirmationSuccessModal = lazy(() =>
+  import('@/app/components/ConfirmationSuccessModal').then((m) => ({ default: m.ConfirmationSuccessModal }))
+);
+
+// Type-only import: erased at build time, so it does not pull the component
+// into the entry chunk.
+import type { ConfirmationData } from '@/app/components/VehicleReturnConfirmation';
+
+function ViewLoader() {
+  return (
+    <div className="flex-1 flex items-center justify-center py-24 text-slate-500">
+      Loading…
+    </div>
+  );
+}
+
+function DeferredView({ children }: { children: React.ReactNode }) {
+  return <Suspense fallback={<ViewLoader />}>{children}</Suspense>;
+}
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<'home' | 'booking' | 'appointments' | 'dashboard' | 'profile' | 'gallery' | 'pricing' | 'pos'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'booking' | 'appointments' | 'dashboard' | 'profile' | 'gallery' | 'pricing' | 'pos' | 'documents'>('home');
   const [selectedService, setSelectedService] = useState<string>();
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [signupModalOpen, setSignupModalOpen] = useState(false);
@@ -44,7 +82,7 @@ export default function App() {
   const [lastSubmittedRating, setLastSubmittedRating] = useState(0);
 
   const { user, userType, logout } = useAuth();
-  const { data: appointments = [], refetch: refetchAppointments } = useAppointments();
+  const { refetch: refetchAppointments } = useAppointments();
 
   const handleCloseBooking = () => {
     setCurrentView('home');
@@ -173,23 +211,24 @@ export default function App() {
 
   if (userType === 'admin' || userType === 'super_admin') {
     return (
-      <>
+      <DeferredView>
         <AdminDashboard onLogout={handleLogout} />
         <Toaster position="top-right" />
-      </>
+      </DeferredView>
     );
   }
 
   if (userType === 'employee') {
     return (
-      <>
+      <DeferredView>
         <EmployeeDashboard onLogout={handleLogout} />
         <Toaster position="top-right" />
-      </>
+      </DeferredView>
     );
   }
 
   return (
+    <DeferredView>
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <Toaster position="top-right" />
       <Header 
@@ -417,7 +456,7 @@ export default function App() {
             <ConfirmationSuccessModal
               open={successModalOpen}
               onClose={handleSuccessClose}
-              appointmentId={selectedAppointment.id}
+              appointmentId={String(selectedAppointment.id)}
               serviceRating={lastSubmittedRating}
             />
           )}
@@ -458,7 +497,15 @@ export default function App() {
         />
       )}
 
+      {/* Documents View */}
+      {currentView === 'documents' && (
+        <main className="flex-1 container mx-auto py-8">
+          <DocumentManager />
+        </main>
+      )}
+
       <AIChatBox />
     </div>
+    </DeferredView>
   );
 }

@@ -1,4 +1,5 @@
 from app import db
+from app.core.types import BigId
 from sqlalchemy import func, CheckConstraint
 from app.services.auth.models import mask_phone, mask_email
 
@@ -13,7 +14,7 @@ class Appointment(db.Model):
         db.Index('ix_appointments_status_date', 'status', 'appointment_date'),
     )
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BigId, primary_key=True, autoincrement=True)
     user_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     vehicle_id = db.Column(db.BigInteger, db.ForeignKey('vehicles.id', ondelete='CASCADE'), nullable=False, index=True)
     service_id = db.Column(db.BigInteger, db.ForeignKey('services.id', ondelete='CASCADE'), nullable=False, index=True)
@@ -72,6 +73,21 @@ class Appointment(db.Model):
                     'email': self.customer.email,
                 }
 
+        # Attach the related invoice (if any) so list views can render an inline
+        # "Download receipt" button. Only look it up for completed appointments
+        # so the common 'scheduled/confirmed' lists don't trigger an N+1 query
+        # per row. The Invoice model lives in the fleets package; import lazily
+        # to avoid a circular import at module load time.
+        if self.status == 'completed' and self.appointment_date is not None:
+            try:
+                from app.services.fleets.models import Invoice
+                invoice = Invoice.query.filter_by(appointment_id=self.id).first()
+                if invoice:
+                    result['invoice'] = invoice.to_dict()
+            except Exception:
+                # Never let a missing/inaccessible invoice break the list.
+                result['invoice'] = None
+
         return result
 
 
@@ -79,7 +95,7 @@ class ServiceHistory(db.Model):
     __tablename__ = 'service_history'
     __table_args__ = (CheckConstraint("rating >= 0 AND rating <= 5"),)
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BigId, primary_key=True, autoincrement=True)
     user_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     vehicle_id = db.Column(db.BigInteger, db.ForeignKey('vehicles.id', ondelete='CASCADE'), nullable=False, index=True)
     service_id = db.Column(db.BigInteger, db.ForeignKey('services.id', ondelete='CASCADE'), nullable=False, index=True)
@@ -111,7 +127,7 @@ class Assignment(db.Model):
     __tablename__ = 'assignments'
     __table_args__ = (CheckConstraint("status IN ('assigned', 'in-progress', 'checklist_pending', 'work_pending', 'submitted', 'verified', 'completed', 'cancelled')"),)
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BigId, primary_key=True, autoincrement=True)
     appointment_id = db.Column(db.BigInteger, db.ForeignKey('appointments.id', ondelete='CASCADE'), nullable=False, index=True)
     appointment = db.relationship('Appointment', backref='assignments', lazy='joined')
     employee_id = db.Column(db.BigInteger, db.ForeignKey('employees.id', ondelete='CASCADE'), nullable=False, index=True)

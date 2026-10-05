@@ -7,6 +7,7 @@ from flask_compress import Compress
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from sqlalchemy.pool import Pool
 import os
 import logging
 import uuid
@@ -38,6 +39,18 @@ class TokenBlocklist(db.Model):
 
 def create_app(config_class=None):
     app = Flask(__name__)
+
+    # Match both "/api/x" and "/api/x/" instead of answering a 308 redirect.
+    # Endpoints declared as route('/') (e.g. /api/notifications/) redirect any
+    # client that omits the trailing slash, and the redirect Location is built
+    # from the Host this process sees - behind a dev proxy that rewrites Host
+    # (Vite changeOrigin) that is the backend origin, so the browser treats the
+    # redirect as cross-origin and drops the Authorization header. The retried
+    # request then arrives unauthenticated and answers 401, which the SPA reads
+    # as "session expired" and uses to sign the user out immediately after
+    # login. Must be set before blueprints are registered because Werkzeug
+    # binds this flag into each rule when it is added to the map.
+    app.url_map.strict_slashes = False
     
     # Configuration
     if config_class is None:
@@ -48,6 +61,7 @@ def create_app(config_class=None):
                 JWT_SECRET_KEY=os.environ.get('JWT_SECRET_KEY'),
                 MAX_CONTENT_LENGTH=int(os.environ.get('MAX_CONTENT_LENGTH', str(100 * 1024 * 1024))),
                 PROOF_OF_WORK_UPLOAD_FOLDER=os.environ.get('PROOF_OF_WORK_UPLOAD_FOLDER') or os.path.join(os.getcwd(), 'uploads', 'proof_of_work'),
+                CHAT_IMAGE_UPLOAD_FOLDER=os.environ.get('CHAT_IMAGE_UPLOAD_FOLDER') or os.path.join(os.getcwd(), 'uploads', 'chat_images'),
                 JWT_TOKEN_LOCATION=['headers', 'json'],
                 JWT_REFRESH_JSON_KEY='refresh_token',
                 # Access tokens expire after 30 minutes (short-lived)
@@ -77,19 +91,38 @@ def create_app(config_class=None):
     app.config['ENFORCE_HTTPS'] = os.environ.get('ENFORCE_HTTPS', 'False').lower() == 'true'
     app.config['ENVIRONMENT'] = os.environ.get('FLASK_ENV', 'development')
     app.config['BEHIND_PROXY'] = os.environ.get('BEHIND_PROXY', 'True').lower() == 'true'
+    # Row-Level Security context propagation is opt-in: it is only correct when
+    # the app connects as a NON-superuser role with RLS policies installed
+    # (see backend/postgresql_setup.sql). Connecting as a table owner or
+    # superuser silently bypasses every policy, so claiming RLS without these
+    # prerequisites is worse than not claiming it at all.
+    app.config['ENABLE_RLS'] = os.environ.get('ENABLE_RLS', 'False').lower() == 'true'
 
     if app.config.get('BEHIND_PROXY'):
         from werkzeug.middleware.proxy_fix import ProxyFix
         # Trust X-Forwarded-Proto/For/Host from the upstream proxy (e.g. Render)
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-    # Connection pooling options
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        'pool_size': 20,
-        'max_overflow': 0,
-        'pool_timeout': 30,
-        'pool_recycle': 1800,
-    }
+    # Connection pooling options.
+    # Size this against *total* connections, not per worker:
+    #     workers * (pool_size + max_overflow) <= database connection cap
+    # Render's smallest Postgres plans allow ~20-25 connections in total, so
+    # the defaults below are deliberately conservative. Raising them without
+    # raising the plan (or fronting the DB with PgBouncer) will manifest as
+    # "too many clients already" under load.
+    # SQLite (tests) uses a pool class that rejects these options, so only apply
+    # them to real server-backed databases.
+    database_uri = app.config.get('SQLALCHEMY_DATABASE_URI') or ''
+    if database_uri.startswith('sqlite'):
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True}
+    else:
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+            'pool_size': int(os.environ.get('DB_POOL_SIZE', 5)),
+            'max_overflow': int(os.environ.get('DB_MAX_OVERFLOW', 2)),
+            'pool_timeout': int(os.environ.get('DB_POOL_TIMEOUT', 30)),
+            'pool_recycle': int(os.environ.get('DB_POOL_RECYCLE', 1800)),
+            'pool_pre_ping': True,
+        }
 
     # Read replica configuration
     read_replica_url = os.environ.get('DATABASE_READ_URL')
@@ -168,12 +201,18 @@ def create_app(config_class=None):
     # Rate limiting setup
     limiter.init_app(app)
     
-    # JWT configuration with token blocklist callback (Redis-backed)
-    from app.utils.cache import is_jti_revoked
+    # JWT configuration with token blocklist callback (Redis-backed).
+    # Checks the per-token blocklist *and* the per-user revocation marker, so a
+    # password/email change or "log out everywhere" also kills refresh tokens
+    # that this server never saw (a per-jti blocklist alone cannot).
+    from app.utils.cache import is_token_revoked
     @jwt.token_in_blocklist_loader
     def check_if_token_revoked(jwt_header, jwt_payload):
-        jti = jwt_payload["jti"]
-        return is_jti_revoked(jti)
+        return is_token_revoked(
+            jwt_payload.get('jti'),
+            user_id=jwt_payload.get('sub'),
+            issued_at=jwt_payload.get('iat'),
+        )
     
     # Email configuration
     app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
@@ -194,7 +233,7 @@ def create_app(config_class=None):
     app.config['ONBOARDING_WEBSITE'] = os.environ.get('ONBOARDING_WEBSITE', '')
     app.config['ONBOARDING_OPERATING_HOURS'] = os.environ.get('ONBOARDING_OPERATING_HOURS', 'Please contact your dedicated concierge lead for current operating hours.')
     app.config['ONBOARDING_EMERGENCY_CONTACT'] = os.environ.get('ONBOARDING_EMERGENCY_CONTACT', 'Contact your dedicated concierge lead or reply to this email for urgent assistance.')
-    app.config['WELCOME_PACK_DIR'] = os.environ.get('WELCOME_PACK_DIR', '/app/uploads/onboarding')
+    app.config['WELCOME_PACK_DIR'] = os.environ.get('WELCOME_PACK_DIR') or os.path.join(app.root_path, 'uploads', 'onboarding')
     app.config['WELCOME_PACK_FILENAME'] = os.environ.get('WELCOME_PACK_FILENAME', '')
     app.config['WELCOME_PACK_PATH'] = os.environ.get('WELCOME_PACK_PATH', '')
 
@@ -214,6 +253,8 @@ def create_app(config_class=None):
     from app.services.payments import payments_bp
     from app.services.workflow import workflow_bp
     from app.services.proof_of_work import proof_of_work_bp
+    from app.services.documents import documents_bp
+    from app.services.pdf import pdf_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(services_bp, url_prefix='/api/services')
@@ -230,6 +271,8 @@ def create_app(config_class=None):
     app.register_blueprint(payments_bp, url_prefix='/api/payments')
     app.register_blueprint(workflow_bp, url_prefix='/api/workflow')
     app.register_blueprint(proof_of_work_bp, url_prefix='/api')
+    app.register_blueprint(documents_bp, url_prefix='/api/documents')
+    app.register_blueprint(pdf_bp, url_prefix='/api/pdf')
 
     # CSRF protection strategy:
     # All API endpoints use JWT Bearer tokens sent via the Authorization header.
@@ -251,16 +294,29 @@ def create_app(config_class=None):
     csrf.exempt(payments_bp)
     csrf.exempt(workflow_bp)
     csrf.exempt(proof_of_work_bp)
+    csrf.exempt(pdf_bp)
+    # Documents are a pure JWT Bearer API (no cookies), so CSRF does not apply;
+    # the blueprint was previously missing from the exempt list and every
+    # POST/PUT returned a blank 400 "CSRF token missing" before authz ran.
+    csrf.exempt(documents_bp)
 
     from app.services.notifications.scheduler import start_scheduler
     start_scheduler(app)
-    
-    # Create database tables if they don't exist
-    with app.app_context():
-        db.create_all()
-        from app.utils.db_initializer import initialize_database
-        initialize_database()
-    
+
+    # Database schema is owned by Alembic (`flask db upgrade`, already run by
+    # docker-entrypoint.sh and by the Render build command). The factory used to
+    # call db.create_all() + initialize_database() on every process start, which
+    # masked migration drift, issued DDL from web/celery/beat workers and could
+    # seed demo accounts into an empty production database. Explicit CLI
+    # commands now own that work (`flask init-db`, `flask seed-demo-data`).
+    # AUTO_INIT_DB=true restores the permissive behaviour for throwaway runs.
+    from app.cli import register_cli
+    register_cli(app)
+    if os.environ.get('AUTO_INIT_DB', 'false').lower() == 'true':
+        with app.app_context():
+            from app.cli import init_db_impl
+            init_db_impl(seed_demo=os.environ.get('AUTO_SEED_DEMO', 'false').lower() == 'true')
+
     @app.before_request
     def before_request():
         """Generate request ID for tracking"""
@@ -275,7 +331,14 @@ def create_app(config_class=None):
 
     @app.before_request
     def set_rls_context():
-        """Set PostgreSQL session variables for Row-Level Security policies."""
+        """Publish request identity for PostgreSQL Row-Level Security policies.
+
+        Only runs when ``ENABLE_RLS=true``. Failures are logged instead of being
+        swallowed: a silent failure here looks identical to "RLS is protecting
+        me" while every policy is in fact a no-op.
+        """
+        if not app.config.get('ENABLE_RLS'):
+            return None
         if request.method == 'OPTIONS':
             return None
 
@@ -306,8 +369,11 @@ def create_app(config_class=None):
                     db.text("SET LOCAL request.user_agent = :ua"),
                     {'ua': request.headers.get('User-Agent', '')[:255]}
                 )
-        except Exception:
-            pass
+        except Exception as exc:
+            # Most likely causes: the connection has autocommit semantics that
+            # drop SET LOCAL, or the DB role cannot set custom GUCs. Either way
+            # RLS is NOT active for this request - say so loudly.
+            logger.warning('RLS context could not be set for %s: %s', request.path, exc)
 
     @app.after_request
     def after_request(response):
@@ -316,11 +382,20 @@ def create_app(config_class=None):
         # Security headers
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['X-Frame-Options'] = 'DENY'
-        response.headers['X-XSS-Protection'] = '1; mode=block'
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
-        # Never cache authenticated responses by default
-        response.headers['Cache-Control'] = 'no-store' if request.path.startswith('/api') and \
-            any(h.startswith('Bearer') for h in request.headers.get('Authorization', '').split()) else response.headers.get('Cache-Control', '')
+        response.headers['Permissions-Policy'] = 'geolocation=(), camera=(), microphone=()'
+        # HSTS: only meaningful when the browser actually reached us over TLS
+        # (directly or through a proxy that terminates it).
+        if request.is_secure or app.config.get('ENFORCE_HTTPS') or app.config.get('BEHIND_PROXY'):
+            response.headers.setdefault(
+                'Strict-Transport-Security',
+                'max-age=63072000; includeSubDomains; preload'
+            )
+        # Authenticated API responses must never be stored by intermediaries.
+        if request.path.startswith('/api') and request.headers.get('Authorization'):
+            response.headers['Cache-Control'] = 'no-store'
+        elif request.path.startswith('/api'):
+            response.headers.setdefault('Cache-Control', 'no-store')
         return response
     
     # Health check endpoint
@@ -335,39 +410,63 @@ def create_app(config_class=None):
     
     @app.route('/api/health/db', methods=['GET'])
     def db_health_check():
-        pool_info = {}
+        """Liveness/readiness probe.
+
+        Pool internals (size, checked-out, overflow) are operational details;
+        they are only returned to an authenticated administrator so the endpoint
+        cannot be used for reconnaissance.
+        """
         try:
             db.session.execute(db.text('SELECT 1'))
-            pool_info['status'] = 'healthy'
-            pool_info['latency'] = 'ok'
         except Exception as e:
             logger.error(str(e), exc_info=True)
-            pool_info['status'] = 'unhealthy'
-            pool_info['latency'] = 'failed'
             return jsonify({
                 'success': False,
                 'status': 'unhealthy',
                 'timestamp': datetime.now(timezone.utc).isoformat(),
-                'database': pool_info,
                 'request_id': g.get('request_id', 'unknown')
             }), 503
-        
-        try:
-            engine = db.engine
-            pool = engine.pool
-            pool_info['pool_size'] = pool.size() if hasattr(pool, 'size') else 'unknown'
-            pool_info['checkedin'] = pool.checkedin() if hasattr(pool, 'checkedin') else 'unknown'
-            pool_info['checkedout'] = pool.checkedout() if hasattr(pool, 'checkedout') else 'unknown'
-            pool_info['overflow'] = pool.overflow() if hasattr(pool, 'overflow') else 'unknown'
-        except Exception:
-            pool_info['pool_details'] = 'unavailable'
-        
-        return jsonify({
+
+        payload = {
             'success': True,
             'status': 'healthy',
             'timestamp': datetime.now(timezone.utc).isoformat(),
-            'database': pool_info,
             'request_id': g.get('request_id', 'unknown')
-        }), 200
-    
+        }
+
+        if _is_admin_request():
+            pool_info = {}
+            try:
+                pool = db.engine.pool
+                # ``QueuePool`` (and its bases) expose size/checkedin/
+                # checkedout/overflow, but the *stubs* only declare these on
+                # the ``QueuePool`` subclass -- ``db.engine.pool`` is typed as
+                # the generic ``Pool`` base, whose stubs do not list them, so a
+                # direct attribute access is a static type error and pyright
+                # cannot narrow on a ``hasattr`` guard. Route the lookup through
+                # ``getattr`` and only invoke the value when it is callable so
+                # the runtime safety of the original hasattr checks is kept.
+                def _pool_stat(name: str) -> object:
+                    fn = getattr(pool, name, None)
+                    return fn() if callable(fn) else 'unknown'
+                pool_info['pool_size'] = _pool_stat('size')
+                pool_info['checkedin'] = _pool_stat('checkedin')
+                pool_info['checkedout'] = _pool_stat('checkedout')
+                pool_info['overflow'] = _pool_stat('overflow')
+            except Exception:
+                pool_info['pool_details'] = 'unavailable'
+            payload['database'] = pool_info
+
+        return jsonify(payload), 200
+
     return app
+
+
+def _is_admin_request() -> bool:
+    """True when the current request carries an admin JWT (never raises)."""
+    try:
+        from flask_jwt_extended import verify_jwt_in_request, get_jwt
+        verify_jwt_in_request()
+        return get_jwt().get('role') in ('admin', 'super_admin')
+    except Exception:
+        return False

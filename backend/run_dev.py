@@ -10,11 +10,14 @@ for env_name in ('.env', '../.env'):
         load_dotenv(env_path)
         break
 
+log_dir = Path('/tmp/backend-logs')
+log_dir.mkdir(parents=True, exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s %(name)s: %(message)s',
     handlers=[
-        logging.FileHandler('/tmp/backend-logs/trace.log'),
+        logging.FileHandler(log_dir / 'trace.log'),
         logging.StreamHandler(sys.stderr),
     ],
 )

@@ -5,9 +5,12 @@ from app.services.auth.models import User
 from app.services.employees.models import Employee
 from app.services.admin.models import AuditLog
 from app.utils.decorators import admin_required, role_required, get_current_user, get_current_user_id, is_admin
-from app.utils.cache import cache_get, cache_set, cache_delete_pattern, REDIS_SHORT_TTL, add_jti_to_blocklist
+from app.utils.cache import (
+    cache_get, cache_set, cache_delete_pattern, REDIS_SHORT_TTL,
+    add_jti_to_blocklist, revoke_all_user_tokens,
+)
+from app.utils.validation import validate_email, validate_password, validate_phone, validate_name
 from datetime import datetime, timedelta, timezone
-import re
 import logging
 from functools import wraps
 
@@ -15,34 +18,49 @@ logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint('auth', __name__)
 
+# Roles that `POST /auth/admin/create` is allowed to mint. Anything else a
+# caller sends is rejected rather than persisted (previously `role` was written
+# straight from the request body, which let an ordinary admin mint a
+# super_admin - and any other arbitrary role string).
+ADMIN_CREATABLE_ROLES = ('admin', 'super_admin')
 
-def validate_password(password):
-    if len(password) < 8:
-        return False, "Password must be at least 8 characters long"
-    if not re.search(r"[A-Z]", password):
-        return False, "Password must contain at least one uppercase letter"
-    if not re.search(r"[a-z]", password):
-        return False, "Password must contain at least one lowercase letter"
-    if not re.search(r"\d", password):
-        return False, "Password must contain at least one number"
-    return True, "Password is valid"
-
-
-def validate_email(email):
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    if not re.match(pattern, email):
-        return False, "Invalid email format"
-    return True, "Email is valid"
+# Fields a user may change about themselves through `PUT /auth/profile`.
+# Credentials are handled separately and require the current password.
+PROFILE_WRITABLE_FIELDS = ('name', 'phone', 'address')
+PROFILE_CREDENTIAL_FIELDS = ('email', 'password')
 
 
-def validate_phone(phone):
-    if not phone:
-        return True, "Phone is optional"
-    phone = phone.replace(" ", "").replace("-", "")
-    pattern = r'^(\+254|254|0)[17]\d{8}$'
-    if not re.match(pattern, phone):
-        return False, "Invalid Kenyan phone number format"
-    return True, "Phone is valid"
+def _blocklist_refresh_token(refresh_token):
+    """Add a refresh token's jti to the blocklist (best effort).
+
+    Called from /auth/logout so that logging out also destroys the refresh
+    token of *that* session - previously it stayed valid for its full 7 days.
+    """
+    if not refresh_token:
+        return False
+    try:
+        from flask_jwt_extended import decode_token
+        decoded = decode_token(refresh_token, allow_expired=True)
+        jti = decoded.get('jti')
+        exp = decoded.get('exp')
+        now_ts = datetime.now(timezone.utc).timestamp()
+        ttl_seconds = max(int(exp - now_ts), 60) if exp else 604800
+        return add_jti_to_blocklist(jti, ttl_seconds)
+    except Exception as exc:
+        logger.warning('Could not blocklist refresh token on logout: %s', exc)
+        return False
+
+
+def _revoke_sessions(user_id, reason):
+    """Invalidate every token already issued to ``user_id``.
+
+    A per-token blocklist can only kill tokens the server has seen; after a
+    password/email change we must also kill refresh tokens stolen earlier, which
+    is what this marker does (see ``app.utils.cache.revoke_all_user_tokens``).
+    """
+    revoked = revoke_all_user_tokens(user_id)
+    logger.info('Revoked existing sessions for user %s (%s)', user_id, reason)
+    return revoked
 
 
 def log_audit(action, entity_type, entity_id, old_values=None, new_values=None, status='success', error_message=None, user_id=None, admin_id=None):
@@ -71,8 +89,31 @@ def log_audit(action, entity_type, entity_id, old_values=None, new_values=None, 
 def register():
     request_id = g.get('request_id', 'unknown')
     try:
-        data = request.get_json()
-        
+        # Support both JSON and multipart/form-data (for onboarding doc uploads)
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            data = {
+                'name': request.form.get('name', ''),
+                'email': request.form.get('email', ''),
+                'password': request.form.get('password', ''),
+                'role': request.form.get('role', 'customer'),
+            }
+            phone = (request.form.get('phone') or '').strip()
+            if phone:
+                data['phone'] = phone
+            address = (request.form.get('address') or '').strip()
+            if address:
+                data['address'] = address
+            location = (request.form.get('location') or '').strip()
+            if location:
+                data['location'] = location
+            specialties_raw = request.form.get('specialties', '')
+            if specialties_raw:
+                data['specialties'] = [s.strip() for s in specialties_raw.split(',') if s.strip()]
+        else:
+            data = request.get_json()
+            if not isinstance(data, dict):
+                data = {}
+
         required_fields = ['name', 'email', 'password', 'role']
         missing_fields = [f for f in required_fields if f not in data or not data[f]]
         if missing_fields:
@@ -150,13 +191,36 @@ def register():
         log_audit('REGISTER', 'User', user.id, new_values={'email': user.email, 'name': user.name, 'role': user.role}, user_id=user.id)
 
         if role == 'customer':
+            document_ids = []
+            # Process any onboarding documents uploaded alongside the
+            # registration request (multipart/form-data).
+            if request.content_type and 'multipart/form-data' in request.content_type:
+                from app.services.documents.service import save_onboarding_document
+                uploaded_files = request.files.getlist('onboarding_documents')
+                for f in uploaded_files:
+                    if f and f.filename:
+                        doc_title = f"Onboarding Document: {f.filename}"
+                        try:
+                            doc, _full_path = save_onboarding_document(
+                                f, user.id, doc_title, 'onboarding'
+                            )
+                            document_ids.append(doc.id)
+                        except ValueError as exc:
+                            logger.warning(
+                                'Skipping invalid onboarding document '
+                                'for user %s: %s', user.id, exc
+                            )
+                db.session.commit()
+
             try:
                 from app.tasks.email_tasks import send_customer_onboarding_email
-                send_customer_onboarding_email.delay(user.id)
+                send_customer_onboarding_email.delay(
+                    user.id, document_ids=document_ids if document_ids else None
+                )
                 logger.info('Onboarding email queued for customer %s', user.id)
             except Exception as exc:
                 logger.warning('Failed to queue onboarding email for customer %s: %s', user.id, exc)
-        
+
         if role == 'customer':
             access_token = create_access_token(identity=str(user.id))
             refresh_token = create_refresh_token(identity=str(user.id))
@@ -393,7 +457,9 @@ def admin_login():
 @limiter.limit("10 per minute")
 def refresh():
     try:
-        current_user = get_current_user()
+        # Refresh tokens are validated by @jwt_required(refresh=True) above, so
+        # tell the helper to expect a refresh token instead of an access token.
+        current_user = get_current_user(allow_refresh_token=True)
         
         if not current_user:
             return jsonify({
@@ -456,9 +522,16 @@ def logout():
         
         add_jti_to_blocklist(jti, ttl_seconds)
         
+        # Also kill this session's refresh token: blocking only the access token
+        # left a 7-day refresh token alive after "logout".
+        data = request.get_json(silent=True) or {}
+        refresh_blocked = _blocklist_refresh_token(data.get('refresh_token'))
+
         user_id = current_user['id'] if current_user.get('role') != 'admin' else None
         admin_id = current_user['id'] if current_user.get('role') == 'admin' else None
-        log_audit('LOGOUT', 'User', current_user['id'], user_id=user_id, admin_id=admin_id)
+        log_audit('LOGOUT', 'User', current_user['id'],
+                  new_values={'refresh_token_revoked': bool(refresh_blocked)},
+                  user_id=user_id, admin_id=admin_id)
         
         return jsonify({
             'success': True,
@@ -520,11 +593,18 @@ def change_password():
         user.set_password(data['new_password'])
         db.session.commit()
 
-        log_audit('CHANGE_PASSWORD', 'User', user.id, user_id=user.id, admin_id=user.id if user.is_admin else None)
-        
+        # Changing a password must invalidate sessions that were established
+        # with the old one - including refresh tokens already in an attacker's
+        # hands. The caller is expected to re-authenticate.
+        _revoke_sessions(user.id, 'password change')
+
+        log_audit('CHANGE_PASSWORD', 'User', user.id, new_values={'sessions_revoked': True},
+                  user_id=user.id, admin_id=user.id if user.is_admin else None)
+
         return jsonify({
             'success': True,
-            'message': 'Password changed successfully'
+            'message': 'Password changed successfully. Please sign in again on your other devices.',
+            'data': {'reauthenticate': True}
         }), 200
         
     except Exception as e:
@@ -599,47 +679,119 @@ def get_profile():
 
 @auth_bp.route('/profile', methods=['PUT'])
 @jwt_required()
+@limiter.limit("20 per minute")
 def update_profile():
+    """Update the caller's own profile.
+
+    Credential changes (``email``/``password``) are only accepted together with
+    the **current password**, use the same password policy as registration, and
+    revoke every previously issued token. Before this, any request carrying a
+    valid access token could silently rewrite the account password - a stolen
+    token was enough for permanent account takeover - and could swap the email
+    address without re-verification.
+    """
+    request_id = g.get('request_id', 'unknown')
     try:
         current_user = get_current_user()
-        data = request.get_json()
-        
-        user = User.query.get(current_user['id'])
+        if not current_user:
+            return jsonify({
+                'success': False,
+                'message': 'Authentication required',
+                'error': 'MISSING_TOKEN'
+            }), 401
 
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({'success': False, 'message': 'Request body must be a JSON object'}), 400
+
+        allowed_fields = set(PROFILE_WRITABLE_FIELDS) | set(PROFILE_CREDENTIAL_FIELDS) | {'current_password'}
+        rejected = sorted(set(data) - allowed_fields)
+        if rejected:
+            return jsonify({
+                'success': False,
+                'message': f"These fields cannot be updated here: {', '.join(rejected)}"
+            }), 400
+
+        user = User.query.get(current_user['id'])
         if not user:
             return jsonify({
                 'success': False,
                 'message': 'User not found'
             }), 404
-        
+
+        wants_email = 'email' in data
+        wants_password = 'password' in data
+        credentials_changed = wants_email or wants_password
+
+        if credentials_changed:
+            current_password = data.get('current_password') or ''
+            if not current_password or not user.check_password(current_password):
+                log_audit('UPDATE_PROFILE', 'User', user.id, status='failed',
+                          error_message='Credential change without valid current password',
+                          user_id=user.id)
+                return jsonify({
+                    'success': False,
+                    'message': 'Your current password is required to change your email or password',
+                    'error': 'CURRENT_PASSWORD_REQUIRED'
+                }), 401
+
         if 'name' in data:
-            user.name = data['name']
-        
-        if 'email' in data:
-            user.email = data['email']
-        
+            valid, message = validate_name(data['name'])
+            if not valid:
+                return jsonify({'success': False, 'message': message}), 400
+            user.name = data['name'].strip()
+
         if 'phone' in data:
-            user.phone = data['phone']
-        
+            valid, message = validate_phone(data['phone'])
+            if not valid:
+                return jsonify({'success': False, 'message': message}), 400
+            user.phone = data['phone'] or None
+
         if 'address' in data:
-            user.address = data['address']
-        
-        if 'password' in data:
+            user.address = data['address'] or None
+
+        if wants_email:
+            new_email = str(data['email'] or '').lower().strip()
+            valid, message = validate_email(new_email)
+            if not valid:
+                return jsonify({'success': False, 'message': message}), 400
+            if User.query.filter(User.email == new_email, User.id != user.id).first():
+                return jsonify({
+                    'success': False,
+                    'message': 'That email address is already in use'
+                }), 409
+            user.email = new_email
+
+        if wants_password:
+            valid, message = validate_password(data['password'])
+            if not valid:
+                return jsonify({'success': False, 'message': message}), 400
             user.set_password(data['password'])
-        
+
         db.session.commit()
-        
+
+        if credentials_changed:
+            # Kill every token (including refresh tokens we have never seen) so
+            # a hijacked session dies with the credential change.
+            _revoke_sessions(user.id, 'profile credential change')
+            log_audit('UPDATE_PROFILE', 'User', user.id,
+                      new_values={'credentials_changed': True,
+                                  'email_changed': wants_email,
+                                  'password_changed': wants_password},
+                      user_id=user.id)
+
         return jsonify({
             'success': True,
             'message': 'Profile updated successfully',
             'data': {
-                'user': user.to_dict(mask_sensitive=False)
+                'user': user.to_dict(mask_sensitive=False),
+                'reauthenticate': credentials_changed
             }
         }), 200
-        
+
     except Exception as e:
         db.session.rollback()
-        logger.error(str(e), exc_info=True)
+        logger.error(f"[{request_id}] Update profile error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to update profile',
@@ -649,18 +801,28 @@ def update_profile():
 
 @auth_bp.route('/admin/create', methods=['POST'])
 @jwt_required()
+@role_required('super_admin')
+@limiter.limit("5 per hour")
 def create_admin():
+    """Create another administrator account.
+
+    Restricted to ``super_admin`` and to an explicit allow-list of roles. The
+    previous implementation accepted any admin and wrote ``role`` straight from
+    the request body, so an ordinary admin could mint a ``super_admin`` (or an
+    arbitrary role string) and escalate privileges.
+    """
+    request_id = g.get('request_id', 'unknown')
     try:
         current_user = get_current_user()
-        
-        if current_user['role'] not in ['admin', 'super_admin']:
+        if not current_user:
             return jsonify({
                 'success': False,
-                'message': 'Only Super Admin can create new admin accounts'
-            }), 403
-        
-        data = request.get_json()
-        
+                'message': 'Authentication required',
+                'error': 'MISSING_TOKEN'
+            }), 401
+
+        data = request.get_json(silent=True) or {}
+
         required_fields = ['name', 'email', 'password']
         missing_fields = [f for f in required_fields if f not in data or not data[f]]
         if missing_fields:
@@ -668,41 +830,54 @@ def create_admin():
                 'success': False,
                 'message': f'Missing required fields: {", ".join(missing_fields)}'
             }), 400
-        
+
         email_valid, email_msg = validate_email(data['email'])
         if not email_valid:
             return jsonify({
                 'success': False,
                 'message': email_msg
             }), 400
-        
+
         pwd_valid, pwd_msg = validate_password(data['password'])
         if not pwd_valid:
             return jsonify({
                 'success': False,
                 'message': pwd_msg
             }), 400
-        
-        if User.query.filter_by(email=data['email'].lower(), is_admin=True).first():
+
+        role = str(data.get('role', 'admin')).lower().strip()
+        if role not in ADMIN_CREATABLE_ROLES:
+            log_audit('CREATE_ADMIN', 'User', None, status='failed',
+                      error_message=f'Rejected role={role!r}',
+                      admin_id=current_user['id'])
             return jsonify({
                 'success': False,
-                'message': 'Admin with this email already exists'
+                'message': f"Invalid role. Allowed roles: {', '.join(ADMIN_CREATABLE_ROLES)}"
+            }), 400
+
+        email = data['email'].lower().strip()
+        if User.query.filter_by(email=email).first():
+            return jsonify({
+                'success': False,
+                'message': 'A user with this email already exists'
             }), 409
 
         user = User()
         user.name = data['name'].strip()
-        user.email = data['email'].lower().strip()
+        user.email = email
         user.set_password(data['password'])
-        user.role = data.get('role', 'admin')
+        user.role = role
         user.is_admin = True
 
         db.session.add(user)
         db.session.commit()
 
         cache_delete_pattern("employees:*")
-        cache_delete_pattern("admin:users")
+        cache_delete_pattern("admin:users*")
 
-        log_audit('CREATE_ADMIN', 'User', user.id, new_values={'email': user.email, 'name': user.name, 'role': user.role}, user_id=user.id, admin_id=user.id)
+        log_audit('CREATE_ADMIN', 'User', user.id,
+                  new_values={'email': user.email, 'name': user.name, 'role': user.role},
+                  user_id=user.id, admin_id=current_user['id'])
 
         return jsonify({
             'success': True,
@@ -711,10 +886,10 @@ def create_admin():
                 'admin': user.to_dict()
             }
         }), 201
-        
+
     except Exception as e:
         db.session.rollback()
-        logger.error(str(e), exc_info=True)
+        logger.error(f"[{request_id}] Create admin error: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
             'message': 'Failed to create admin account',
@@ -850,12 +1025,18 @@ def approve_employee(user_id):
 
 
 def _reset_user_password(user, new_password):
-    """Validate and apply a new password to a User record."""
+    """Validate and apply a new password to a User record.
+
+    Also revokes every token already issued to the account: a password reset is
+    the canonical "someone may have had access" signal, so every existing
+    session (access *and* refresh) must stop working.
+    """
     pwd_valid, pwd_msg = validate_password(new_password)
     if not pwd_valid:
         return None, pwd_msg
     user.set_password(new_password)
     db.session.commit()
+    _revoke_sessions(user.id, 'password reset')
     return True, None
 
 

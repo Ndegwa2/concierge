@@ -1,19 +1,17 @@
 from app import db
 from sqlalchemy import func, CheckConstraint
-from sqlalchemy.dialects.postgresql import JSONB
-
-
+from app.core.types import BigId, JSONType
 class ServicePartner(db.Model):
     __tablename__ = 'service_partners'
     __table_args__ = (CheckConstraint("rating >= 0.00 AND rating <= 5.00"),)
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BigId, primary_key=True, autoincrement=True)
     name = db.Column(db.String(100), nullable=False, index=True)
     contact_name = db.Column(db.String(100))
     email = db.Column(db.String(120), index=True)
     phone = db.Column(db.String(20))
-    address = db.Column(JSONB)
-    services_offered = db.Column(JSONB)
+    address = db.Column(JSONType)
+    services_offered = db.Column(JSONType)
     rating = db.Column(db.Numeric(3, 2), default=0.0)
     total_services = db.Column(db.Integer, default=0)
     is_active = db.Column(db.Boolean, default=True, index=True)

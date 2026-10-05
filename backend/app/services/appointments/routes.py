@@ -28,6 +28,25 @@ logger = logging.getLogger(__name__)
 appointments_bp = Blueprint('appointments', __name__)
 
 
+def _appointment_value_error_response(err):
+    # Map a service-layer ValueError to the correct HTTP status + message.
+    # Previously every non-'not found' error became a 403, which turned
+    # input-validation failures (e.g. a date less than 1h in the future)
+    # into a misleading 'Forbidden'. Now:
+    #   'not found'    -> 404  (missing resource)
+    #   'unauthorized' -> 403  (access denied)
+    #   otherwise      -> 400  (validation / business-rule error)
+    message = str(err)
+    lowered = message.lower()
+    if 'not found' in lowered:
+        status = 404
+    elif 'unauthorized' in lowered:
+        status = 403
+    else:
+        status = 400
+    return jsonify({'success': False, 'message': message}), status
+
+
 @appointments_bp.route('/', methods=['GET'])
 @jwt_required()
 @role_required('admin', 'customer', 'employee')
@@ -35,6 +54,12 @@ def get_appointments():
     try:
         current_user = get_current_user()
         
+        if not current_user:
+            return jsonify({
+                'success': False,
+                'message': 'Authentication required',
+                'error': 'MISSING_TOKEN',
+            }), 401
         cache_key = f"appointments:{current_user['id']}:{current_user['role']}"
         cached = cache_get(cache_key)
         if cached is not None:
@@ -80,10 +105,7 @@ def get_appointment(appointment_id):
         
     except ValueError as e:
         logger.error(str(e), exc_info=True)
-        return jsonify({
-            'success': False,
-            'message': 'Resource not found'
-        }), 404 if 'not found' in str(e).lower() else 403
+        return _appointment_value_error_response(e)
     except Exception as e:
         logger.error(str(e), exc_info=True)
         return jsonify({
@@ -134,10 +156,7 @@ def create_appointment():
     except ValueError as e:
         db.session.rollback()
         logger.warning(f"[{request_id}] Validation error: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'Invalid input data'
-        }), 400
+        return _appointment_value_error_response(e)
     except Exception as e:
         db.session.rollback()
         logger.error(f"[{request_id}] Unexpected error creating appointment: {str(e)}", exc_info=True)
@@ -178,10 +197,7 @@ def update_appointment(appointment_id):
         
     except ValueError as e:
         logger.error(str(e), exc_info=True)
-        return jsonify({
-            'success': False,
-            'message': 'Resource not found'
-        }), 404 if 'not found' in str(e).lower() else 403
+        return _appointment_value_error_response(e)
     except Exception as e:
         db.session.rollback()
         logger.error(str(e), exc_info=True)
@@ -215,10 +231,7 @@ def cancel_appointment(appointment_id):
         
     except ValueError as e:
         logger.error(str(e), exc_info=True)
-        return jsonify({
-            'success': False,
-            'message': 'Resource not found'
-        }), 404 if 'not found' in str(e).lower() else 403
+        return _appointment_value_error_response(e)
     except Exception as e:
         db.session.rollback()
         logger.error(str(e), exc_info=True)
@@ -263,10 +276,7 @@ def confirm_vehicle_return(appointment_id):
         
     except ValueError as e:
         logger.error(str(e), exc_info=True)
-        return jsonify({
-            'success': False,
-            'message': 'Resource not found'
-        }), 404 if 'not found' in str(e).lower() else 403
+        return _appointment_value_error_response(e)
     except Exception as e:
         db.session.rollback()
         logger.error(f"[{request_id}] Error confirming vehicle return: {str(e)}", exc_info=True)

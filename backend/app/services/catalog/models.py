@@ -1,11 +1,12 @@
 from app import db
+from app.core.types import BigId
 from sqlalchemy import func
 
 
 class Service(db.Model):
     __tablename__ = 'services'
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BigId, primary_key=True, autoincrement=True)
     name = db.Column(db.String(100), nullable=False, index=True)
     description = db.Column(db.Text)
     price = db.Column(db.Numeric(10, 2))
@@ -32,7 +33,7 @@ class Service(db.Model):
 class DiscountCode(db.Model):
     __tablename__ = 'discount_codes'
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BigId, primary_key=True, autoincrement=True)
     code = db.Column(db.String(20), unique=True, nullable=False, index=True)
     discount_type = db.Column(db.String(20), default='percentage')
     value = db.Column(db.Numeric(10, 2), nullable=False)

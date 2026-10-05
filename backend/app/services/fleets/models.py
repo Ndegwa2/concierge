@@ -1,17 +1,15 @@
 from app import db
 from sqlalchemy import func, CheckConstraint
-from sqlalchemy.dialects.postgresql import JSONB
-
-
+from app.core.types import BigId, JSONType
 class Company(db.Model):
     __tablename__ = 'companies'
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BigId, primary_key=True, autoincrement=True)
     name = db.Column(db.String(255), nullable=False, index=True)
     contact_name = db.Column(db.String(255))
     email = db.Column(db.String(255))
     phone = db.Column(db.String(50))
-    address = db.Column(JSONB)
-    billing_address = db.Column(JSONB)
+    address = db.Column(JSONType)
+    billing_address = db.Column(JSONType)
     payment_terms = db.Column(db.String(100), default='Net 30')
     is_active = db.Column(db.Boolean, default=True, index=True)
     notes = db.Column(db.Text)
@@ -37,7 +35,7 @@ class Company(db.Model):
 
 class FleetVehicle(db.Model):
     __tablename__ = 'fleet_vehicles'
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BigId, primary_key=True, autoincrement=True)
     company_id = db.Column(db.BigInteger, db.ForeignKey('companies.id', ondelete='CASCADE'), nullable=False, index=True)
     make = db.Column(db.String(100), nullable=False)
     model = db.Column(db.String(100), nullable=False)
@@ -81,7 +79,7 @@ class FleetVehicle(db.Model):
 
 class FleetExpense(db.Model):
     __tablename__ = 'fleet_expenses'
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BigId, primary_key=True, autoincrement=True)
     company_id = db.Column(db.BigInteger, db.ForeignKey('companies.id', ondelete='CASCADE'), nullable=False, index=True)
     vehicle_id = db.Column(db.BigInteger, db.ForeignKey('fleet_vehicles.id', ondelete='SET NULL'), index=True)
     expense_type = db.Column(db.String(50), nullable=False, index=True)
@@ -106,7 +104,7 @@ class FleetExpense(db.Model):
 
 class InvoiceLineItem(db.Model):
     __tablename__ = 'invoice_line_items'
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BigId, primary_key=True, autoincrement=True)
     invoice_id = db.Column(db.BigInteger, db.ForeignKey('invoices.id', ondelete='CASCADE'), nullable=False, index=True)
     description = db.Column(db.String(255), nullable=False)
     quantity = db.Column(db.Integer, default=1)
@@ -136,7 +134,7 @@ class Invoice(db.Model):
         db.Index('ix_invoices_status_created', 'status', 'created_at'),
     )
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BigId, primary_key=True, autoincrement=True)
     invoice_number = db.Column(db.String(50), unique=True, nullable=False, index=True)
     appointment_id = db.Column(db.BigInteger, db.ForeignKey('appointments.id', ondelete='CASCADE'), nullable=True, index=True)
     user_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=True, index=True)

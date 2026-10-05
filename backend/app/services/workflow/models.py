@@ -1,22 +1,20 @@
 from app import db
 from sqlalchemy import func, CheckConstraint
-from sqlalchemy.dialects.postgresql import JSONB
-
-
+from app.core.types import BigId, JSONType
 class VehicleChecklist(db.Model):
     __tablename__ = 'vehicle_checklists'
     __table_args__ = (
         CheckConstraint("overall_condition IN ('excellent', 'good', 'fair', 'poor')"),
     )
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BigId, primary_key=True, autoincrement=True)
     assignment_id = db.Column(db.BigInteger, db.ForeignKey('assignments.id', ondelete='CASCADE'), nullable=False, unique=True, index=True)
     appointment_id = db.Column(db.BigInteger, db.ForeignKey('appointments.id', ondelete='CASCADE'), nullable=False, index=True)
     employee_id = db.Column(db.BigInteger, db.ForeignKey('employees.id', ondelete='CASCADE'), nullable=False, index=True)
-    items = db.Column(JSONB, nullable=False, default=lambda: [])
+    items = db.Column(JSONType, nullable=False, default=lambda: [])
     overall_condition = db.Column(db.String(20), nullable=False, index=True)
     notes = db.Column(db.Text)
-    photos = db.Column(JSONB, default=lambda: [])
+    photos = db.Column(JSONType, default=lambda: [])
     submitted_at = db.Column(db.DateTime(timezone=True), index=True)
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -47,12 +45,12 @@ class WorkRecord(db.Model):
         CheckConstraint("status IN ('draft', 'submitted', 'verified', 'invoiced')"),
     )
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BigId, primary_key=True, autoincrement=True)
     assignment_id = db.Column(db.BigInteger, db.ForeignKey('assignments.id', ondelete='CASCADE'), nullable=False, unique=True, index=True)
     appointment_id = db.Column(db.BigInteger, db.ForeignKey('appointments.id', ondelete='CASCADE'), nullable=False, index=True)
     employee_id = db.Column(db.BigInteger, db.ForeignKey('employees.id', ondelete='CASCADE'), nullable=False, index=True)
     customer_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
-    items = db.Column(JSONB, nullable=False, default=lambda: [])
+    items = db.Column(JSONType, nullable=False, default=lambda: [])
     overall_notes = db.Column(db.Text)
     labor_hours = db.Column(db.Numeric(5, 2))
     labor_rate = db.Column(db.Numeric(10, 2))

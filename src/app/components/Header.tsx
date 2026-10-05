@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Menu, X, Car, User, Calendar, LayoutDashboard, LogOut, Settings, Shield } from 'lucide-react';
+import { Menu, X, Car, User, Calendar, LayoutDashboard, FileText, LogOut, Settings, Shield } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/app/components/ui/avatar';
 import {
@@ -87,6 +87,14 @@ export function Header({ currentView, onNavigate, onLoginClick, onProfileClick, 
                   }`}
                 >
                   My Appointments
+                </button>
+                <button
+                  onClick={() => onNavigate('documents')}
+                  className={`hover:text-slate-900 transition-colors ${
+                    currentView === 'documents' ? 'text-slate-900 font-medium' : 'text-slate-600'
+                  }`}
+                >
+                  Documents
                 </button>
               </>
             )}
@@ -209,6 +217,15 @@ export function Header({ currentView, onNavigate, onLoginClick, onProfileClick, 
                     className="text-left px-2 py-1 hover:text-slate-900"
                   >
                     My Appointments
+                  </button>
+                  <button
+                    onClick={() => {
+                      onNavigate('documents');
+                      setMobileMenuOpen(false);
+                    }}
+                    className="text-left px-2 py-1 hover:text-slate-900"
+                  >
+                    Documents
                   </button>
                 </>
               )}

@@ -24,6 +24,7 @@ def make_celery(app=None):
         include=[
             'app.tasks.email_tasks',
             'app.tasks.ai_tasks',
+            'app.tasks.chat_tasks',
             'app.tasks.payment_tasks',
             'app.tasks.pdf_tasks',
             'app.tasks.appointment_tasks',
@@ -65,6 +66,10 @@ def make_celery(app=None):
                 'task': 'app.tasks.appointment_tasks.check_upcoming_appointments',
                 'schedule': crontab(minute='*/5'),
             },
+            'cleanup-expired-chat-images': {
+                'task': 'app.tasks.chat_tasks.cleanup_expired_chat_images',
+                'schedule': crontab(hour=3, minute=0),
+            },
         },
     )
 
@@ -105,7 +110,11 @@ class ContextTask(celery.Task):
                 if env_path.exists():
                     load_dotenv(env_path)
                     break
-            from app import create_app
+            # Relative import: ``app`` is this very package, so importing it by
+            # its top-level name is ambiguous for static analysers (another
+            # ``app`` package, e.g. ``src/app``, can win name resolution) and
+            # can break when ``backend`` is not on the import root.
+            from . import create_app
             ContextTask._flask_app = create_app()
         with ContextTask._flask_app.app_context():
             return self.run(*args, **kwargs)

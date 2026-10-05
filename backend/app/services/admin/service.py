@@ -44,17 +44,21 @@ def get_dashboard_stats():
 
 def get_all_users_query(search=None):
     query = User.query
-    
+
     if search:
-        search_token = User._compute_phone_search_token(search)
+        # Match either the current peppered token or the legacy plain digest so
+        # searches keep working until `flask backfill-phone-tokens` has run.
+        pepper_tokens = [User._compute_phone_search_token(search),
+                         User._legacy_phone_search_token(search)]
+        phone_filters = [User.phone_search_token == t for t in pepper_tokens if t]
         query = query.filter(
             db.or_(
                 User.name.ilike(f'%{search}%'),
                 User.email.ilike(f'%{search}%'),
-                User.phone_search_token == search_token
+                *phone_filters,
             )
         )
-    
+
     return query.all()
 
 
@@ -281,3 +285,137 @@ def get_current_user():
         return _get_current_user()
     except RuntimeError:
         return None
+
+
+def update_user_status(user_id, is_active, admin_id):
+    """Activate or deactivate a user account."""
+    user = User.query.get(user_id)
+    if not user:
+        raise ValueError('User not found')
+    
+    # Prevent self-deactivation
+    if admin_id == user_id:
+        raise ValueError('You cannot deactivate your own account')
+    
+    # Only allow modifying customers
+    if user.role != 'customer':
+        raise ValueError('Can only modify customer accounts')
+    
+    old_status = user.is_active
+    user.is_active = is_active
+    db.session.commit()
+    
+    # Audit log
+    from app.utils.cache import add_jti_to_blocklist
+    from app.services.admin.models import AuditLog
+    from flask import request
+    audit = AuditLog(
+        user_id=user_id,
+        admin_id=admin_id,
+        action='USER_STATUS_CHANGE',
+        entity_type='User',
+        entity_id=user_id,
+        old_values={'is_active': old_status},
+        new_values={'is_active': is_active},
+        ip_address=request.remote_addr if request else None,
+        user_agent=request.headers.get('User-Agent', '')[:255] if request else None,
+        status='success'
+    )
+    db.session.add(audit)
+    db.session.commit()
+    
+    # Invalidate cache
+    from app.utils.cache import cache_delete_pattern
+    cache_delete_pattern("admin:users*")
+    
+    return user
+
+
+def resend_onboarding_email(user_id, admin_id):
+    """Re-send onboarding/welcome pack email to a customer."""
+    user = User.query.get(user_id)
+    if not user:
+        raise ValueError('User not found')
+    
+    if user.role != 'customer':
+        raise ValueError('Onboarding email only available for customers')
+    
+    # Queue the onboarding email task
+    from app.tasks.email_tasks import send_customer_onboarding_email
+    send_customer_onboarding_email.delay(user_id)
+    
+    # Audit log
+    from app.services.admin.models import AuditLog
+    from flask import request
+    audit = AuditLog(
+        user_id=user_id,
+        admin_id=admin_id,
+        action='RESEND_ONBOARDING_EMAIL',
+        entity_type='User',
+        entity_id=user_id,
+        new_values={'email': user.email},
+        ip_address=request.remote_addr if request else None,
+        user_agent=request.headers.get('User-Agent', '')[:255] if request else None,
+        status='success'
+    )
+    db.session.add(audit)
+    db.session.commit()
+    
+    return {'success': True, 'message': 'Onboarding email queued for delivery'}
+
+
+def delete_user(user_id, admin_id):
+    """Permanently delete a customer account with safety checks."""
+    user = User.query.get(user_id)
+    if not user:
+        raise ValueError('User not found')
+    
+    # Prevent self-deletion
+    if admin_id == user_id:
+        raise ValueError('You cannot delete your own account')
+    
+    # Only allow deleting customers
+    if user.role != 'customer':
+        raise ValueError('Can only delete customer accounts')
+    
+    # Safety check: active appointments
+    active_appt = Appointment.query.filter(
+        Appointment.user_id == user_id,
+        Appointment.status.in_(['scheduled', 'confirmed', 'in-progress'])
+    ).first()
+    if active_appt:
+        raise ValueError('Cannot delete user with active appointments. Cancel or complete them first.')
+    
+    # Safety check: vehicles
+    vehicle_count = Vehicle.query.filter_by(user_id=user_id).count()
+    if vehicle_count > 0:
+        raise ValueError(f'Cannot delete user with {vehicle_count} registered vehicle(s). Remove vehicles first.')
+    
+    # Store user info for audit
+    user_info = {'id': user.id, 'email': user.email, 'name': user.name}
+    
+    # Delete user (cascade will handle related records per FK constraints)
+    db.session.delete(user)
+    db.session.commit()
+    
+    # Audit log
+    from app.services.admin.models import AuditLog
+    from flask import request
+    audit = AuditLog(
+        admin_id=admin_id,
+        action='DELETE_CUSTOMER',
+        entity_type='User',
+        entity_id=user_id,
+        old_values=user_info,
+        ip_address=request.remote_addr if request else None,
+        user_agent=request.headers.get('User-Agent', '')[:255] if request else None,
+        status='success'
+    )
+    db.session.add(audit)
+    db.session.commit()
+    
+    # Invalidate cache
+    from app.utils.cache import cache_delete_pattern
+    cache_delete_pattern("admin:users*")
+    
+    return {'success': True, 'message': 'Customer deleted successfully'}

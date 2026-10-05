@@ -44,6 +44,25 @@ export const adminApi = {
     return apiClient.request(`/admin/users/${id}`);
   },
 
+  async updateUserStatus(id: number, isActive: boolean): Promise<ApiResponse<{ user: User }>> {
+    return apiClient.request(`/admin/users/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ is_active: isActive }),
+    });
+  },
+
+  async resendOnboardingEmail(id: number): Promise<ApiResponse<{ message: string }>> {
+    return apiClient.request(`/admin/users/${id}/onboarding`, {
+      method: 'POST',
+    });
+  },
+
+  async deleteUser(id: number): Promise<ApiResponse<{ message: string }>> {
+    return apiClient.request(`/admin/users/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
   async getServiceHistory(): Promise<ApiResponse<{ service_history: any[] }>> {
     return apiClient.request('/admin/service-history');
   },

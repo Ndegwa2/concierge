@@ -1,5 +1,45 @@
 export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
+export interface ChatImage {
+  id: number;
+  original_filename: string;
+  file_size?: number;
+  mime_type: string;
+  width?: number;
+  height?: number;
+  alt_text?: string;
+  url: string;
+  created_at: string;
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  /** Optional image attachments on a user message (displayed inline). */
+  images?: ChatImage[];
+}
+
+export interface ApiResponse<T = any> {
+  success: boolean;
+  message?: string;
+  data?: T;
+  error?: string;
+}
+
+/**
+ * The `data` payload returned by login / register endpoints.
+ * For regular customers the response contains tokens; for employee
+ * registrations `requires_approval` is set instead (no tokens issued).
+ */
+export interface LoginData {
+  user: User;
+  access_token: string;
+  refresh_token?: string;
+  requires_approval?: boolean;
+}
+
+export type LoginResponse = ApiResponse<LoginData>;
+
 export interface User {
   id: number;
   name: string;
@@ -11,6 +51,17 @@ export interface User {
   created_at: string;
   updated_at: string;
   employee?: EmployeeProfile;
+}
+
+/**
+ * Fields a user may change about themselves through `PUT /auth/profile`.
+ * Credentials (`email`, `password`) are deliberately excluded: they require the
+ * current password and are sent through `authApi.updateCredentials`.
+ */
+export interface ProfileUpdate {
+  name?: string;
+  phone?: string;
+  address?: string;
 }
 
 export interface EmployeeProfile {
@@ -66,6 +117,8 @@ export interface RegisterData {
   address?: string;
   location?: string;
   specialties?: string[];
+  /** Onboarding documents uploaded during registration (sent as FormData). */
+  documents?: File[];
 }
 
 export interface Service {
@@ -291,3 +344,63 @@ export interface ProofOfWorkMedia {
   thumbnail_url: string;
   original_url: string;
 }
+
+export interface Document {
+  id: number;
+  title: string;
+  doc_type: 'work_order' | 'service_agreement' | 'invoice' | 'other';
+  description: string | null;
+  reference_id: number | null;
+  reference_type: string | null;
+  file_path: string | null;
+  file_name: string | null;
+  file_size: number | null;
+  mime_type: string | null;
+  status: 'pending' | 'sent' | 'signed' | 'declined' | 'cancelled' | 'expired';
+  expires_at: string | null;
+  created_by: number;
+  signed_by: number | null;
+  signed_at: string | null;
+  declined_at: string | null;
+  decline_reason: string | null;
+  sent_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DocumentSignature {
+  id: number;
+  document_id: number;
+  signer_name: string;
+  signer_email: string;
+  signer_id: number | null;
+  signature_image_path: string | null;
+  signature_image_name: string | null;
+  signature_hash: string | null;
+  signature_data: string | null;
+  signer_ip: string | null;
+  signer_user_agent: string | null;
+  signer_location: string | null;
+  status: 'pending' | 'captured' | 'verified' | 'rejected';
+  verified_at: string | null;
+  verified_by: number | null;
+  rejection_reason: string | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SignatureAuditEvent {
+  id: number;
+  document_id: number;
+  event_type: string;
+  actor_id: number | null;
+  actor_type: string;
+  actor_name: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  details: Record<string, unknown> | null;
+  document_hash: string | null;
+  created_at: string;
+}
+

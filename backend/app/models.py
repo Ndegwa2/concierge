@@ -12,7 +12,7 @@ New code should import directly from domain modules:
     from app.services.partners.models import ServicePartner
     from app.services.admin.models import AuditLog
     from app.services.fleets.models import Company, FleetVehicle, FleetExpense, Invoice
-    from app.services.payments.models import Payment
+)
 """
 
 from app.core.types import EncryptedString, EncryptedDate
@@ -31,6 +31,7 @@ from app.services.fleets.models import (
     Company, FleetVehicle, FleetExpense, InvoiceLineItem, Invoice
 )
 from app.services.payments.models import Payment
+from app.services.documents.models import Document, Signature, SignatureAuditLog
 
 __all__ = [
     'EncryptedString',
@@ -59,4 +60,7 @@ __all__ = [
     'InvoiceLineItem',
     'Invoice',
     'Payment',
+    'Document',
+    'Signature',
+    'SignatureAuditLog',
 ]

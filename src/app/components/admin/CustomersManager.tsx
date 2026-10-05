@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Eye, Mail, Phone, Car, Loader2 } from 'lucide-react';
+import { Search, Eye, Mail, Phone, Car, Loader2, Send, UserCheck, UserX, Trash2, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
@@ -88,6 +88,70 @@ export function CustomersManager() {
       toast.error(err?.message || 'Failed to load customer details');
     } finally {
       setLoadingDetails(false);
+    }
+  };
+
+  // New state for action dialogs
+  const [actionLoading, setActionLoading] = useState<Record<number, boolean>>({});
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [customerToDelete, setCustomerToDelete] = useState<CustomerRow | null>(null);
+
+  const handleAction = async (
+    customerId: number,
+    action: 'activate' | 'deactivate' | 'onboarding' | 'delete'
+  ) => {
+    setActionLoading(prev => ({ ...prev, [customerId]: true }));
+    try {
+      if (action === 'activate' || action === 'deactivate') {
+        const isActive = action === 'activate';
+        const response = await adminApi.updateUserStatus(customerId, isActive);
+        if (response.success) {
+          toast.success(`Customer ${isActive ? 'activated' : 'deactivated'} successfully`);
+          fetchCustomers();
+        } else {
+          throw new Error(response.message || 'Failed to update status');
+        }
+      } else if (action === 'onboarding') {
+        const response = await adminApi.resendOnboardingEmail(customerId);
+        if (response.success) {
+          toast.success('Onboarding email queued for delivery');
+        } else {
+          throw new Error(response.message || 'Failed to send onboarding email');
+        }
+      } else if (action === 'delete') {
+        // Open confirmation dialog instead of direct delete
+        const customer = customers.find(c => c.id === customerId);
+        if (customer) {
+          setCustomerToDelete(customer);
+          setDeleteDialogOpen(true);
+        }
+      }
+    } catch (err: any) {
+      toast.error(err?.message || `Failed to ${action} customer`);
+    } finally {
+      setActionLoading(prev => ({ ...prev, [customerId]: false }));
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!customerToDelete) return;
+    setActionLoading(prev => ({ ...prev, [customerToDelete.id]: true }));
+    try {
+      const response = await adminApi.deleteUser(customerToDelete.id);
+      if (response.success) {
+        toast.success('Customer deleted successfully');
+        fetchCustomers();
+        setDeleteDialogOpen(false);
+        setCustomerToDelete(null);
+      } else {
+        throw new Error(response.message || 'Failed to delete customer');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to delete customer');
+    } finally {
+      if (customerToDelete) {
+        setActionLoading(prev => ({ ...prev, [customerToDelete.id]: false }));
+      }
     }
   };
 
@@ -268,9 +332,53 @@ export function CustomersManager() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" onClick={() => handleView(customer)}>
-                          <Eye className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleAction(customer.id, 'onboarding')}
+                            disabled={actionLoading[customer.id]}
+                            title="Send onboarding documents"
+                          >
+                            <Send className="h-4 w-4" />
+                          </Button>
+                          {customer.is_active ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleAction(customer.id, 'deactivate')}
+                              disabled={actionLoading[customer.id]}
+                              title="Deactivate account"
+                              className="text-amber-600 hover:bg-amber-50"
+                            >
+                              <UserX className="h-4 w-4" />
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleAction(customer.id, 'activate')}
+                              disabled={actionLoading[customer.id]}
+                              title="Activate account"
+                              className="text-green-600 hover:bg-green-50"
+                            >
+                              <UserCheck className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleAction(customer.id, 'delete')}
+                            disabled={actionLoading[customer.id]}
+                            title="Remove customer"
+                            className="text-red-600 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleView(customer)}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -340,6 +448,54 @@ export function CustomersManager() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setViewDialogOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertCircle className="h-5 w-5" />
+              Remove Customer
+            </DialogTitle>
+            <DialogDescription>
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          {customerToDelete && (
+            <div className="space-y-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <p className="text-sm text-red-800">
+                  <strong>Customer:</strong> {customerToDelete.name} ({customerToDelete.email})
+                </p>
+                <p className="text-sm text-red-800 mt-1">
+                  <strong>ID:</strong> {customerToDelete.id}
+                </p>
+              </div>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <p className="text-sm text-amber-800">
+                  <strong>Warning:</strong> This will permanently delete the customer and all their data.
+                  This action cannot be undone.
+                </p>
+                <p className="text-sm text-amber-800 mt-1">
+                  Safety checks will prevent deletion if the customer has active appointments or registered vehicles.
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDeleteDialogOpen(false); setCustomerToDelete(null); }}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+              disabled={customerToDelete ? actionLoading[customerToDelete.id] : true}
+            >
+              Remove Permanently
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

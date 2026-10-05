@@ -7,7 +7,9 @@
     "build": "vite build",
     "dev": "vite",
     "preview": "vite preview",
-    "build:prod": "vite build --mode production"
+    "build:prod": "vite build --mode production",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck:baseline": "node scripts/typecheck-baseline.mjs"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -73,8 +75,10 @@
     "@vitejs/plugin-react": "4.7.0",
     "rollup-plugin-visualizer": "^7.0.1",
     "tailwindcss": "4.1.12",
+    "typescript": "^5.6.3",
     "vite": "^6.4.3",
-    "vite-plugin-compression": "^0.5.1"
+    "vite-plugin-compression": "^0.5.1",
+    "vitest": "^5.0.2"
   },
   "peerDependencies": {
     "react": "18.3.1",

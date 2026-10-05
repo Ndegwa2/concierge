@@ -20,6 +20,9 @@ from .service import (
     create_pos_checkout as svc_create_pos_checkout,
     get_pending_verification_invoices as svc_get_pending_invoices,
     verify_invoice_and_email as svc_verify_invoice,
+    update_user_status,
+    resend_onboarding_email,
+    delete_user,
 )
 from datetime import datetime, timezone
 
@@ -325,4 +328,80 @@ def verify_invoice(invoice_id):
         return jsonify({
             'success': False,
             'message': 'Failed to verify invoice',
+        }), 500
+
+
+@admin_bp.route('/users/<int:user_id>/status', methods=['PUT'])
+@jwt_required()
+@admin_required
+def update_user_status_route(user_id):
+    try:
+        current_user = get_current_user()
+        data = request.get_json(silent=True) or {}
+        
+        if 'is_active' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'Missing required field: is_active'
+            }), 400
+        
+        is_active = bool(data['is_active'])
+        user = update_user_status(user_id, is_active, current_user['id'])
+        
+        return jsonify({
+            'success': True,
+            'message': f'User {"activated" if is_active else "deactivated"} successfully',
+            'data': {'user': user.to_dict()}
+        }), 200
+        
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        logger.error('Update user status failed: %s', e, exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to update user status',
+        }), 500
+
+
+@admin_bp.route('/users/<int:user_id>/onboarding', methods=['POST'])
+@jwt_required()
+@admin_required
+def resend_onboarding_email_route(user_id):
+    try:
+        current_user = get_current_user()
+        result = resend_onboarding_email(user_id, current_user['id'])
+        
+        return jsonify(result), 200
+        
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        logger.error('Resend onboarding email failed: %s', e, exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to resend onboarding email',
+        }), 500
+
+
+@admin_bp.route('/users/<int:user_id>', methods=['DELETE'])
+@jwt_required()
+@admin_required
+def delete_user_route(user_id):
+    try:
+        current_user = get_current_user()
+        result = delete_user(user_id, current_user['id'])
+        
+        return jsonify(result), 200
+        
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        logger.error('Delete user failed: %s', e, exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to delete user',
         }), 500

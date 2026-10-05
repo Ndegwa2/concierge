@@ -64,15 +64,55 @@ export const appointmentsApi = {
 
   async downloadInvoicePdf(appointmentId: number): Promise<Blob> {
     const token = apiClient.getToken();
-      const response = await fetch(`${API_BASE_URL}/appointments/${appointmentId}/invoice/pdf`, {
-      headers: {
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-    });
+
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/appointments/${appointmentId}/invoice/pdf`, {
+        // Send cookies so the dev-proxy (localhost:5173 -> :5000) can carry the
+        // session, and attach the JWT explicitly for the API.
+        credentials: 'include',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+    } catch (networkError: any) {
+      // DNS/CORS/proxy-down/etc. -> surface something the UI can show.
+      throw new Error(networkError?.message || 'Network error. Please check your connection.');
+    }
 
     if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.message || 'Failed to download invoice');
+      // The error body may be JSON (Flask error) or HTML (gateway/proxy), so
+      // parse defensively instead of assuming response.json().
+      const contentType = response.headers.get('content-type') || '';
+      let message: string | undefined;
+
+      if (contentType.includes('application/json')) {
+        try {
+          const data = await response.json();
+          message = data?.message;
+        } catch {
+          /* leave message undefined -> fall back to generic text below */
+        }
+      }
+
+      // A 401 means the token is expired/revoked. apiClient owns token refresh
+      // + logout, so delegate to it: clear the stale session so the app-level
+      // auth listener redirects to login (otherwise the button looks
+      // permanently broken until a hard refresh).
+      if (response.status === 401) {
+        apiClient.clearTokens();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth:logout'));
+        }
+        throw new Error(message || 'Session expired. Please log in again.');
+      }
+
+      throw new Error(
+        message ||
+          (response.status === 404
+            ? 'Invoice not found for this appointment.'
+            : 'Failed to download invoice. Please try again.')
+      );
     }
 
     return response.blob();

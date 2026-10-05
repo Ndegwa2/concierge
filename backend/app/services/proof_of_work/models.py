@@ -1,4 +1,5 @@
 from app import db
+from app.core.types import BigId
 from sqlalchemy import func, CheckConstraint, Index
 
 
@@ -26,7 +27,7 @@ class ProofOfWorkMedia(db.Model):
         Index('ix_pofw_public', 'is_public'),
     )
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(BigId, primary_key=True, autoincrement=True)
     assignment_id = db.Column(
         db.BigInteger, db.ForeignKey('assignments.id', ondelete='CASCADE'),
         nullable=False, index=True,
